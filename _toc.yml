@@ -1,0 +1,17 @@
+format: jb-book
+root: README
+
+parts:
+  - caption: Getting started
+    chapters:
+    - file: docs/quickstart.md
+  - caption: Examples
+    chapters:
+    - file: demos/simple_ode.py
+  - caption: Verification
+    chapters:
+    - file: tests/README
+  - caption: API documentation
+    chapters:
+    - file: CONTRIBUTING
+    - file: "docs/api.rst"
