@@ -216,14 +216,14 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
 
     def to_dolfin(self) -> None:
         """Assign values from numpy array to dolfin function"""
-        arr = self.v_ode.vector().get_local().copy()
+        arr = self.v_ode.x.array.copy()
         for marker in self._marker_values:
             arr[self._inds[marker]] = self._values[marker][self.v_index[marker], :]
-        self.v_ode.vector().set_local(arr)
+        self.v_ode.x[:] = arr
 
     def from_dolfin(self) -> None:
         """Assign values from dolifn function to numpy array"""
-        arr = self.v_ode.vector().get_local()
+        arr = self.v_ode.x.array
         for marker in self._marker_values:
             self._values[marker][self.v_index[marker], :] = arr[self._inds[marker]]
 
@@ -253,7 +253,7 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
             raise RuntimeError(msg)
 
         for marker in self._marker_values:
-            where = self.markers.vector().get_local() == marker
+            where = self.markers.x.array == marker
             self._full_values[:, where] = self._values[marker]
 
         return self._full_values

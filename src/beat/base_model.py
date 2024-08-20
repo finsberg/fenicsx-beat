@@ -171,7 +171,7 @@ class BaseModel:
         self._update_rhs()
         # Solve linear system and update ghost values in the solution
 
-        self._solver.solver.solve(self._solver.b, self.state.vector)
+        self._solver.solver.solve(self._solver.b, self.state.x.petsc_vec)
         self.state.x.scatter_forward()
 
     def solve(
