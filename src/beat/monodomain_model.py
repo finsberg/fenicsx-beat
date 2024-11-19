@@ -61,13 +61,13 @@ class MonodomainModel(BaseModel):
         params["use_custom_preconditioner"] = True
         return params
 
-    def variational_forms(self, k_n: Expr | float) -> tuple[ufl.Form, ufl.Form]:
+    def variational_forms(self, dt: Expr | float) -> tuple[ufl.Form, ufl.Form]:
         """Create the variational forms corresponding to the given
         discretization of the given system of equations.
 
         Parameters
         ----------
-        k_n : float
+        dt : float
             Time step size
 
         Returns
@@ -82,24 +82,15 @@ class MonodomainModel(BaseModel):
         v = ufl.TrialFunction(self.V)
         w = ufl.TestFunction(self.V)
 
-        # Set-up variational problem
-        Dt_v_k_n = v - self.v_
+        # # Set-up variational problem
+        Dt_v_dt = v - self.v_
         v_mid = theta * v + (1.0 - theta) * self.v_
 
+        dx = ufl.dx(domain=self._mesh)
+
         theta_parabolic = ufl.inner(self._M * ufl.grad(v_mid), ufl.grad(w))
-        # breakpoint()
         G_stim = self._I_s.expr * w * self._I_s.dz
+        G = (Dt_v_dt * w + dt * theta_parabolic) * dx - dt * G_stim
+        a, L = ufl.system(G)
 
-        G = (Dt_v_k_n * w + k_n * theta_parabolic) * ufl.dx(
-            domain=self._mesh
-        ) - k_n * G_stim
-
-        # Define preconditioner based on educated(?) guess by Marie
-        if self.parameters["use_custom_preconditioner"]:
-            prec = (
-                v * w + k_n / 2.0 * ufl.inner(self._M * ufl.grad(v), ufl.grad(w))
-            ) * ufl.dx(domain=self._mesh)
-        else:
-            prec = None
-
-        return (G, prec)
+        return a, L

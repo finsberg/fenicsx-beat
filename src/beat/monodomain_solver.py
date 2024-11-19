@@ -29,9 +29,10 @@ class ODESolver(Protocol):
 class MonodomainSplittingSolver:
     pde: MonodomainModel
     ode: ODESolver
-    theta: float = 0.5
+    theta: float = 1.0
 
     def __post_init__(self) -> None:
+        assert np.isclose(self.theta, 1.0), "Only first order splitting is implemented"
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
         self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
         self.pde.assign_previous()

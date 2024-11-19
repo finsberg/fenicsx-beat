@@ -9,24 +9,6 @@ import dolfinx
 logger = logging.getLogger(__name__)
 
 
-def spaces_equal(V: dolfinx.fem.FunctionSpace, W: dolfinx.fem.FunctionSpace) -> bool:
-    """Check if two function spaces are equal
-
-    Parameters
-    ----------
-    V : dolfinx.fem.FunctionSpace
-        First function space
-    W : dolfinx.fem.FunctionSpace
-        Second function space
-
-    Returns
-    -------
-    bool
-        True if the function spaces are equal, False otherwise
-    """
-    return V.element.signature() == W.element.signature()
-
-
 def local_project(
     v: dolfinx.fem.Function,
     V: dolfinx.fem.FunctionSpace,
@@ -48,21 +30,18 @@ def local_project(
     dolfinx.fem.Function | None
         The projected function
     """
-    if spaces_equal(v.function_space, V):
-        if u is not None:
-            u.x.array[:] = v.x.array[:]
-            return u
-        else:
-            return v.copy()
-
     if u is None:
         U = dolfinx.fem.Function(V)
     else:
         U = u
 
+    if v.x.array.size == U.x.array.size:
+        U.x.array[:] = v.x.array[:]
+        return U
+
     expr = dolfinx.fem.Expression(v, V.element.interpolation_points())
     U.interpolate(expr)
-    return u
+    return U
 
 
 def parse_element(
@@ -101,18 +80,18 @@ def space_from_string(
     space_string: str, mesh: dolfinx.mesh.Mesh, dim: int = 1
 ) -> dolfinx.fem.functionspace:
     """
-    Constructed a finite elements space from a string
-    representation of the space
-
-    Arguments
-    ---------
-    space_string : str
-        A string on the form {family}_{degree} which
-        determines the space. Example 'Lagrange_1'.
-    mesh : df.Mesh
-        The mesh
-    dim : int
-        1 for scalar space, 3 for vector space.
+        Constructed a finite elements space from a string
+        representation of the space
+    x
+        Arguments
+        ---------
+        space_string : str
+            A string on the form {family}_{degree} which
+            determines the space. Example 'Lagrange_1'.
+        mesh : df.Mesh
+            The mesh
+        dim : int
+            1 for scalar space, 3 for vector space.
     """
     el = parse_element(space_string, mesh, dim)
     return dolfinx.fem.functionspace(mesh, el)

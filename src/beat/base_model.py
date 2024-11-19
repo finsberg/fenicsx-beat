@@ -57,9 +57,8 @@ class BaseModel:
         self._setup_state_space()
 
         self._timestep = dolfinx.fem.Constant(mesh, self.parameters["default_timestep"])
-        (self._G, self._prec) = self.variational_forms(self._timestep)
+        a, L = self.variational_forms(self._timestep)
 
-        a, L = ufl.system(self._G)
         self._solver = dolfinx.fem.petsc.LinearProblem(
             a,
             L,
