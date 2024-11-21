@@ -14,6 +14,7 @@ dependencies = [
     "numpy",
     "scipy",
     "scifem>0.2.14",
+    "pint",
 ]
 
 [project.urls]
@@ -108,7 +109,6 @@ max-complexity = 10
 
 
 [tool.ruff.lint.isort]
-known-first-party = ["cardiac_geometries"]
 known-third-party = [
     "basix",
     "dolfinx",
