@@ -28,10 +28,13 @@ class MonodomainModel(BaseModel):
         M: ufl.Coefficient | float,
         I_s: Stimulus | ufl.Coefficient | None = None,
         params=None,
+        C_m: float = 1.0,
+        dx: ufl.Measure | None = None,
+        **kwargs,
     ) -> None:
         self._M = M
-
-        super().__init__(mesh=mesh, time=time, params=params, I_s=I_s)
+        self.C_m = dolfinx.fem.Constant(mesh, C_m)
+        super().__init__(mesh=mesh, time=time, params=params, I_s=I_s, dx=dx, **kwargs)
 
     def _setup_state_space(self) -> None:
         # Set-up function spaces
@@ -86,11 +89,11 @@ class MonodomainModel(BaseModel):
         Dt_v_dt = v - self.v_
         v_mid = theta * v + (1.0 - theta) * self.v_
 
-        dx = ufl.dx(domain=self._mesh)
-
         theta_parabolic = ufl.inner(self._M * ufl.grad(v_mid), ufl.grad(w))
-        G_stim = self._I_s.expr * w * self._I_s.dz
-        G = (Dt_v_dt * w + dt * theta_parabolic) * dx - dt * G_stim
+
+        G = (
+            self.C_m * Dt_v_dt * w + dt * theta_parabolic
+        ) * self.dx - dt * self.G_stim(w)
         a, L = ufl.system(G)
 
         return a, L

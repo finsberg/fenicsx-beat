@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Sequence
 import abc
 import logging
 from enum import Enum, auto
@@ -11,6 +11,7 @@ import dolfinx.fem.petsc
 import ufl
 from ufl.core.expr import Expr
 
+from .stimulation import Stimulus
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +26,18 @@ class Results(NamedTuple):
     status: Status
 
 
-class Stimulus(NamedTuple):
-    dz: ufl.Measure
-    expr: dolfinx.fem.Expression
+def _transform_I_s(
+    I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None,
+    dZ: ufl.Measure,
+) -> list[Stimulus]:
+    if I_s is None:
+        return [Stimulus(expr=ufl.zero(), dZ=dZ)]
+    if isinstance(I_s, Stimulus):
+        return [I_s]
+    if isinstance(I_s, ufl.Coefficient):
+        return [Stimulus(expr=I_s, dZ=dZ)]
+
+    return list(I_s)
 
 
 class BaseModel:
@@ -35,30 +45,27 @@ class BaseModel:
         self,
         time: dolfinx.fem.Constant,
         mesh: dolfinx.mesh.Mesh,
+        dx: ufl.Measure | None = None,
         params: dict[str, Any] | None = None,
-        I_s: Stimulus | ufl.Coefficient | None = None,
+        I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
         jit_options: dict[str, Any] | None = None,
         form_compiler_options: dict[str, Any] | None = None,
         petsc_options: dict[str, Any] | None = None,
     ) -> None:
         self._mesh = mesh
         self.time = time
+        self.dx = dx or ufl.dx(domain=mesh)
 
         self.parameters = type(self).default_parameters()
         if params is not None:
             self.parameters.update(params)
 
-        if I_s is None:
-            I_s = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
-        if not isinstance(I_s, Stimulus):
-            I_s = Stimulus(expr=I_s, dz=ufl.dx)
-        self._I_s = I_s
+        self._I_s = _transform_I_s(I_s, dZ=self.dx)
 
         self._setup_state_space()
 
         self._timestep = dolfinx.fem.Constant(mesh, self.parameters["default_timestep"])
         a, L = self.variational_forms(self._timestep)
-
         self._solver = dolfinx.fem.petsc.LinearProblem(
             a,
             L,
@@ -71,17 +78,14 @@ class BaseModel:
         self._solver.A.assemble()
 
     @abc.abstractmethod
-    def _setup_state_space(self) -> None:
-        ...
+    def _setup_state_space(self) -> None: ...
 
     @property
     @abc.abstractmethod
-    def state(self) -> dolfinx.fem.Function:
-        ...
+    def state(self) -> dolfinx.fem.Function: ...
 
     @abc.abstractmethod
-    def assign_previous(self) -> None:
-        ...
+    def assign_previous(self) -> None: ...
 
     @staticmethod
     def default_parameters():
@@ -158,7 +162,6 @@ class BaseModel:
         dt = t1 - t0
         theta = self.parameters["theta"]
         t = t0 + theta * dt
-        # breakpoint()
         self.time.value = t
 
         # Update matrix and linear solvers etc as needed
@@ -172,6 +175,9 @@ class BaseModel:
 
         self._solver.solver.solve(self._solver.b, self.state.x.petsc_vec)
         self.state.x.scatter_forward()
+
+    def G_stim(self, w):
+        return sum([i.expr * w * i.dz for i in self._I_s])
 
     def solve(
         self,

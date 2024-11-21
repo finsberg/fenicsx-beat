@@ -4,6 +4,9 @@ from . import (
     base_model,
     odesolver,
     utils,
+    conductivities,
+    stimulation,
+    geometry,
 )
 
 from .monodomain_model import MonodomainModel
@@ -18,4 +21,7 @@ __all__ = [
     "monodomain_solver",
     "MonodomainSplittingSolver",
     "utils",
+    "conductivities",
+    "stimulation",
+    "geometry",
 ]
