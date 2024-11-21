@@ -1,8 +1,10 @@
-import pytest
-import numpy as np
-import dolfinx
-import ufl
 from mpi4py import MPI
+
+import dolfinx
+import numpy as np
+import pytest
+import ufl
+
 import beat
 
 
@@ -11,12 +13,8 @@ import beat
     (
         (
             0.0,
-            lambda x, t: ufl.cos(2 * ufl.pi * x[0])
-            * ufl.cos(2 * ufl.pi * x[1])
-            * ufl.cos(t),
-            lambda x, t: ufl.cos(2 * ufl.pi * x[0])
-            * ufl.cos(2 * ufl.pi * x[1])
-            * ufl.sin(t),
+            lambda x, t: ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.cos(t),
+            lambda x, t: ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.sin(t),
             1e-4,
         ),
         (
@@ -24,9 +22,7 @@ import beat
             lambda x, t: ufl.cos(2 * ufl.pi * x[0])
             * ufl.cos(2 * ufl.pi * x[1])
             * (ufl.cos(t) + 8 * pow(ufl.pi, 2) * ufl.sin(t)),
-            lambda x, t: ufl.cos(2 * ufl.pi * x[0])
-            * ufl.cos(2 * ufl.pi * x[1])
-            * ufl.sin(t),
+            lambda x, t: ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.sin(t),
             2e-4,
         ),
         (
@@ -34,14 +30,12 @@ import beat
             lambda x, t: ufl.cos(2 * ufl.pi * x[0])
             * ufl.cos(2 * ufl.pi * x[1])
             * (ufl.cos(t) + 16 * pow(ufl.pi, 2) * ufl.sin(t)),
-            lambda x, t: ufl.cos(2 * ufl.pi * x[0])
-            * ufl.cos(2 * ufl.pi * x[1])
-            * ufl.sin(t),
+            lambda x, t: ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.sin(t),
             2e-4,
         ),
     ),
 )
-def test_monodomain_analtyic(M, ac_str, exact, err):
+def test_monodomain_analytic(M, ac_str, exact, err):
     N = 15
 
     theta = 0.5
@@ -50,9 +44,7 @@ def test_monodomain_analtyic(M, ac_str, exact, err):
 
     params = dict(theta=theta, linear_solver_type="direct")
     comm = MPI.COMM_WORLD
-    mesh = dolfinx.mesh.create_unit_square(
-        comm, N, N, dolfinx.cpp.mesh.CellType.triangle
-    )
+    mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
     x = ufl.SpatialCoordinate(mesh)
     t_var = ufl.variable(time)
@@ -67,9 +59,7 @@ def test_monodomain_analtyic(M, ac_str, exact, err):
     error = dolfinx.fem.form(
         ufl.inner(diff, diff) * ufl.dx(domain=mesh, metadata=metadata),
     )
-    v_error = np.sqrt(
-        mesh.comm.allreduce(dolfinx.fem.assemble_scalar(error), op=MPI.SUM)
-    )
+    v_error = np.sqrt(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(error), op=MPI.SUM))
 
     assert v_error < err
 
@@ -85,10 +75,7 @@ def test_monodomain_spatial_convergence():
     metadata = {"quadrature_degree": 8}
     params = dict(theta=theta, linear_solver_type="direct")  # , default_timestep=dt)
     for N in Ns:
-
-        mesh = dolfinx.mesh.create_unit_square(
-            comm, N, N, dolfinx.cpp.mesh.CellType.triangle
-        )
+        mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
         time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
         x = ufl.SpatialCoordinate(mesh)
         t = ufl.variable(time)
@@ -97,9 +84,7 @@ def test_monodomain_spatial_convergence():
             * ufl.cos(2 * ufl.pi * x[1])
             * (ufl.cos(t) + 8 * pow(ufl.pi, 2) * ufl.sin(t))
         )
-        model = beat.MonodomainModel(
-            time=time, mesh=mesh, M=1.0, I_s=I_s, params=params
-        )
+        model = beat.MonodomainModel(time=time, mesh=mesh, M=1.0, I_s=I_s, params=params)
 
         v_exact = ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.sin(t)
         v_exact = ufl.replace(v_exact, {t: T})
@@ -121,7 +106,6 @@ def test_monodomain_spatial_convergence():
 
 @pytest.mark.skip_in_parallel
 def test_monodomain_temporal_convergence():
-
     errors = []
     comm = MPI.COMM_WORLD
     theta = 0.5
@@ -130,9 +114,7 @@ def test_monodomain_temporal_convergence():
 
     metadata = {"quadrature_degree": 8}
     params = dict(theta=theta, linear_solver_type="direct")  # , default_timestep=dt)
-    mesh = dolfinx.mesh.create_unit_square(
-        comm, N, N, dolfinx.cpp.mesh.CellType.triangle
-    )
+    mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
     x = ufl.SpatialCoordinate(mesh)
 
     v_exact = ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.sin(T)
@@ -148,9 +130,7 @@ def test_monodomain_temporal_convergence():
             * ufl.cos(2 * ufl.pi * x[1])
             * (ufl.cos(t) + 8 * pow(ufl.pi, 2) * ufl.sin(t))
         )
-        model = beat.MonodomainModel(
-            time=time, mesh=mesh, M=1.0, I_s=I_s, params=params
-        )
+        model = beat.MonodomainModel(time=time, mesh=mesh, M=1.0, I_s=I_s, params=params)
 
         res = model.solve((0, T), dt=dt)
 

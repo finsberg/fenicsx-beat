@@ -1,6 +1,7 @@
 from typing import NamedTuple
-import numpy as np
+
 import dolfinx
+import numpy as np
 
 
 class Geometry(NamedTuple):
@@ -43,7 +44,12 @@ def get_3D_slab_microstructure(
 
 
 def get_2D_slab_mesh(
-    comm, dx, Lx, Ly, cell_type=dolfinx.cpp.mesh.CellType.triangle, dtype=np.float64
+    comm,
+    dx,
+    Lx,
+    Ly,
+    cell_type=dolfinx.cpp.mesh.CellType.triangle,
+    dtype=np.float64,
 ):
     nx = int(np.rint((Lx / dx)))
     ny = int(np.rint((Ly / dx)))

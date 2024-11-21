@@ -1,11 +1,12 @@
 from __future__ import annotations
-from typing import Any, NamedTuple, Sequence
+
 import abc
 import logging
 from enum import Enum, auto
-
+from typing import Any, NamedTuple, Sequence
 
 from petsc4py import PETSc
+
 import dolfinx
 import dolfinx.fem.petsc
 import ufl
@@ -89,7 +90,6 @@ class BaseModel:
 
     @staticmethod
     def default_parameters():
-
         return {
             "theta": 0.5,
             "degree": 1,

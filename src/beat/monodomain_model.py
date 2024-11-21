@@ -1,9 +1,10 @@
 from __future__ import annotations
+
 import logging
 
+import basix
 import dolfinx
 import ufl
-import basix
 from ufl.core.expr import Expr
 
 from .base_model import BaseModel, Stimulus
@@ -41,9 +42,7 @@ class MonodomainModel(BaseModel):
         k = self.parameters["degree"]
         family = self.parameters["family"]
 
-        element = basix.ufl.element(
-            family=family, cell=self._mesh.basix_cell(), degree=k
-        )
+        element = basix.ufl.element(family=family, cell=self._mesh.basix_cell(), degree=k)
 
         self.V = dolfinx.fem.functionspace(self._mesh, element)
 
@@ -91,9 +90,7 @@ class MonodomainModel(BaseModel):
 
         theta_parabolic = ufl.inner(self._M * ufl.grad(v_mid), ufl.grad(w))
 
-        G = (
-            self.C_m * Dt_v_dt * w + dt * theta_parabolic
-        ) * self.dx - dt * self.G_stim(w)
+        G = (self.C_m * Dt_v_dt * w + dt * theta_parabolic) * self.dx - dt * self.G_stim(w)
         a, L = ufl.system(G)
 
         return a, L

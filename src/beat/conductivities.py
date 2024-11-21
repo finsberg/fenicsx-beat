@@ -1,16 +1,16 @@
 import logging
 from typing import NamedTuple
+
 import dolfinx
 import pint
 import ufl
 
-
-from .units import ureg, to_quantity
+from .units import to_quantity, ureg
 
 logger = logging.getLogger(__name__)
 
 
-def get_dimesion(u):
+def get_dimension(u):
     # TODO : Check argument
     try:
         dim = ufl.domain.find_geometric_dimension(u)
@@ -90,7 +90,7 @@ def get_harmonic_mean_conductivity(
         f"Harmonic mean conductivities {sigma_l=} {sigma_t=}",
     )
 
-    # Scale conducitivites by 1/(chi)
+    # Scale conductivities by 1/(chi)
     s_l = (sigma_l / chi).to("uA/mV").magnitude
     s_t = (sigma_t / chi).to("uA/mV").magnitude
 
@@ -100,10 +100,8 @@ def get_harmonic_mean_conductivity(
     return Conductivities(s_l, s_t)
 
 
-def conductivity_tensor(
-    s_l: float, s_t: float, f0: dolfinx.fem.Constant | dolfinx.fem.Function
-):
-    dim = get_dimesion(f0)
+def conductivity_tensor(s_l: float, s_t: float, f0: dolfinx.fem.Constant | dolfinx.fem.Function):
+    dim = get_dimension(f0)
     logger.info(f"Define conductivity tensor {s_l=} {s_t=} {dim=}")
     return s_l * ufl.outer(f0, f0) + s_t * (ufl.Identity(dim) - ufl.outer(f0, f0))
 

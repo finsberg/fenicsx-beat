@@ -1,7 +1,9 @@
 import logging
-import numpy as np
-from typing import Protocol
 from dataclasses import dataclass
+from typing import Protocol
+
+import numpy as np
+
 from .monodomain_model import MonodomainModel
 
 logger = logging.getLogger(__name__)
@@ -9,20 +11,15 @@ EPS = 1e-12
 
 
 class ODESolver(Protocol):
-    def to_dolfin(self) -> None:
-        ...
+    def to_dolfin(self) -> None: ...
 
-    def from_dolfin(self) -> None:
-        ...
+    def from_dolfin(self) -> None: ...
 
-    def ode_to_pde(self) -> None:
-        ...
+    def ode_to_pde(self) -> None: ...
 
-    def pde_to_ode(self) -> None:
-        ...
+    def pde_to_ode(self) -> None: ...
 
-    def step(self, t0: float, t1: float) -> None:
-        ...
+    def step(self, t0: float, t1: float) -> None: ...
 
 
 @dataclass
@@ -85,9 +82,7 @@ class MonodomainSplittingSolver:
             return
 
         # Otherwise, we do another ode_step:
-        logger.info(
-            f"Corrective ODE step with t0={t:5f} and dt={(1.0 - theta) * dt:.5f}"
-        )
+        logger.info(f"Corrective ODE step with t0={t:5f} and dt={(1.0 - theta) * dt:.5f}")
 
         # To the correction step
         self.ode.step(t, (1.0 - theta) * dt)

@@ -45,7 +45,7 @@ def main():
     Ns = [2**level for level in range(3, 8)]
     dts = [2 ** (-i) for i in range(3, 9)]
     fig, ax = plt.subplots(
-        2, len(odespaces), figsize=(10, 8), sharey="row", sharex="row"
+        2, len(odespaces), figsize=(10, 8), sharey="row", sharex="row",
     )
     for k, odespace in enumerate(odespaces):
         errors = defaultdict(list)
@@ -56,7 +56,7 @@ def main():
                 for N in Ns:
                     print(f"Running for N={N}")
                     mesh = dolfinx.mesh.create_unit_square(
-                        comm, N, N, dolfinx.cpp.mesh.CellType.triangle
+                        comm, N, N, dolfinx.cpp.mesh.CellType.triangle,
                     )
                     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
                     x = ufl.SpatialCoordinate(mesh)
@@ -74,8 +74,8 @@ def main():
                     s = dolfinx.fem.Function(V_ode)
                     s.interpolate(
                         dolfinx.fem.Expression(
-                            s_exact, V_ode.element.interpolation_points()
-                        )
+                            s_exact, V_ode.element.interpolation_points(),
+                        ),
                     )
 
                     s_arr = s.x.array
@@ -98,7 +98,7 @@ def main():
 
                     error = dolfinx.fem.form((pde.state - v_exact) ** 2 * ufl.dx)
                     E = np.sqrt(
-                        comm.allreduce(dolfinx.fem.assemble_scalar(error), MPI.SUM)
+                        comm.allreduce(dolfinx.fem.assemble_scalar(error), MPI.SUM),
                     )
                     errors[str(dt)].append(E)
             error_fname.write_text(json.dumps(errors))

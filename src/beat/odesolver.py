@@ -1,11 +1,12 @@
 from __future__ import annotations
-from dataclasses import dataclass
-import abc
-from typing import NamedTuple, Callable, Any
 
+import abc
+from dataclasses import dataclass
+from typing import Any, Callable, NamedTuple
+
+import dolfinx
 import numpy as np
 import numpy.typing as npt
-import dolfinx
 
 from .utils import local_project
 
@@ -54,9 +55,7 @@ class ODESystemSolver:
         return self.states.shape[0]
 
     def step(self, t0: float, dt: float) -> None:
-        self.states[:] = self.fun(
-            states=self.states, t=t0, parameters=self.parameters, dt=dt
-        )
+        self.states[:] = self.fun(states=self.states, t=t0, parameters=self.parameters, dt=dt)
 
 
 class BaseDolfinODESolver(abc.ABC):
@@ -174,9 +173,7 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
 
     def __post_init__(self):
         if self.v_ode.x.array.size != self.markers.x.array.size:
-            raise RuntimeError(
-                "Marker and voltage need to be in the same function space"
-            )
+            raise RuntimeError("Marker and voltage need to be in the same function space")
 
         self._marker_values = tuple(self.init_states.keys())
         self._num_points = {}
@@ -206,23 +203,22 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
 
     def _initialize_full_values(self):
         self._all_states_equal_size = (
-            np.array(tuple(self.num_states.values()))
-            == tuple(self.num_states.values())[0]
+            np.array(tuple(self.num_states.values())) == tuple(self.num_states.values())[0]
         ).all()
         if self._all_states_equal_size:
             self._full_values = np.zeros(
-                (next(iter(self.num_states.values())), self.markers.x.array.size)
+                (next(iter(self.num_states.values())), self.markers.x.array.size),
             )
 
     def to_dolfin(self) -> None:
-        """Assign values from numpy array to dolfin function"""
+        """Assign values from numpy array to dolfinx function"""
         arr = self.v_ode.x.array.copy()
         for marker in self._marker_values:
             arr[self._inds[marker]] = self._values[marker][self.v_index[marker], :]
         self.v_ode.x[:] = arr
 
     def from_dolfin(self) -> None:
-        """Assign values from dolifn function to numpy array"""
+        """Assign values from dolfinx function to numpy array"""
         arr = self.v_ode.x.array
         for marker in self._marker_values:
             self._values[marker][self.v_index[marker], :] = arr[self._inds[marker]]

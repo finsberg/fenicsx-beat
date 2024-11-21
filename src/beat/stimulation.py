@@ -1,7 +1,7 @@
 from typing import NamedTuple
+
 import dolfinx
 import ufl
-
 
 from .units import ureg
 
@@ -50,9 +50,7 @@ def define_stimulus(
         unit = f"uA/{mesh_unit}**{dim - 1}"
 
     amp = (A / chi).to(unit).magnitude
-    I_s = ufl.conditional(
-        ufl.And(ufl.ge(time, start), ufl.le(time, start + duration)), amp, 0.0
-    )
+    I_s = ufl.conditional(ufl.And(ufl.ge(time, start), ufl.le(time, start + duration)), amp, 0.0)
     # I_s = dolfin.Expression(
     #     "std::fmod(time,PCL) >= start "
     #     "? (std::fmod(time,PCL) <= (duration + start) ? amplitude : 0.0)"

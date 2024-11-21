@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 # import beat.conductivities
 import dolfinx
-import ufl
+import scifem
 import numpy as np
 import numpy.typing as npt
 
@@ -62,10 +62,10 @@ if not model_path.is_file():
         / ".."
         / "odes"
         / "tentusscher_panfilov_2006"
-        / "tentusscher_panfilov_2006_epi_cell.ode"
+        / "tentusscher_panfilov_2006_epi_cell.ode",
     )
     code = gotranx.cli.gotran2py.get_code(
-        ode, scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen]
+        ode, scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen],
     )
     model_path.write_text(code)
 
@@ -122,7 +122,7 @@ tol = 1.0e-10
 
 def S1_subdomain(x):
     return np.logical_and(
-        np.logical_and(x[0] <= L + tol, x[1] <= L + tol), x[2] <= L + tol
+        np.logical_and(x[0] <= L + tol, x[1] <= L + tol), x[2] <= L + tol,
     )
 
 
@@ -180,7 +180,7 @@ filename.unlink(missing_ok=True)
 filename.with_suffix(".h5").unlink(missing_ok=True)
 
 vtx = dolfinx.io.VTXWriter(
-    comm, "niederer_benchmark.bp", [solver.pde.state], engine="BP4"
+    comm, "niederer_benchmark.bp", [solver.pde.state], engine="BP4",
 )
 
 points = {
@@ -220,7 +220,7 @@ t = 0.0
 while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
     v = solver.pde.state.x.array
     if i % save_freq == 0:
-        print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() = }")
+        print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
         print(activation_times)
         vtx.write(t)
         grid.point_data["V"] = solver.pde.state.vector().get_local()
@@ -228,7 +228,7 @@ while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
     solver.step((t, t + dt))
 
     for p in points:
-        value = beat.utils.evaluate_function(solver.pde.state, [points[p]]).squeeze()
+        value = scifem.evaluate_function(solver.pde.state, [points[p]]).squeeze()
         if value > 0.0 and activation_times[p] < 0.0:
             activation_times[p] = t
     i += 1

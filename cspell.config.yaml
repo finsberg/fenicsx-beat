@@ -1,0 +1,21 @@
+dictionaryDefinitions:
+  - name: fenicsx_beat
+    path: .cspell_dict.txt
+    addWords: true
+dictionaries:
+  - fenicsx_beat
+ignoreWords: [
+    quickstart,
+    toctree,
+    maxdepth,
+    genindex,
+    modindex,
+    mathbf,
+    mathrm,
+    mathbb,
+    mathcal,
+    operatorname,
+    docname,
+    docnames,
+    automodule
+  ]
