@@ -13,7 +13,7 @@ keywords = ["cardiac", "electrophysiology"]
 dependencies = [
     "numpy",
     "scipy",
-    "scifem>0.2.14",
+    "scifem>=0.2.14",
     "pint",
 ]
 
