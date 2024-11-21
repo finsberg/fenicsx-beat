@@ -154,18 +154,23 @@ def space_from_string(
     space_string: str, mesh: dolfinx.mesh.Mesh, dim: int = 1
 ) -> dolfinx.fem.functionspace:
     """
-        Constructed a finite elements space from a string
-        representation of the space
-    x
-        Arguments
-        ---------
-        space_string : str
-            A string on the form {family}_{degree} which
-            determines the space. Example 'Lagrange_1'.
-        mesh : df.Mesh
-            The mesh
-        dim : int
-            1 for scalar space, 3 for vector space.
+    Constructed a finite elements space from a string
+    representation of the space
+
+    Arguments
+    ---------
+    space_string : str
+        A string on the form {family}_{degree} which
+        determines the space. Example 'Lagrange_1'.
+    mesh : df.Mesh
+        The mesh
+    dim : int
+        1 for scalar space, 3 for vector space.
+
+    Returns
+    -------
+    df.FunctionSpace
+        The function space
     """
     el = parse_element(space_string, mesh, dim)
     return dolfinx.fem.functionspace(mesh, el)
