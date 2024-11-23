@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
+from typing import Sequence
 
 import basix
 import dolfinx
 import ufl
 from ufl.core.expr import Expr
 
-from .base_model import BaseModel, Stimulus
+from .base_model import BaseModel
+from .stimulation import Stimulus
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,7 @@ class MonodomainModel(BaseModel):
         time: dolfinx.fem.Constant,
         mesh: dolfinx.mesh.Mesh,
         M: ufl.Coefficient | float,
-        I_s: Stimulus | ufl.Coefficient | None = None,
+        I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
         params=None,
         C_m: float = 1.0,
         dx: ufl.Measure | None = None,

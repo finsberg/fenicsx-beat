@@ -35,9 +35,10 @@ def _transform_I_s(
         return [Stimulus(expr=ufl.zero(), dZ=dZ)]
     if isinstance(I_s, Stimulus):
         return [I_s]
-    if isinstance(I_s, ufl.Coefficient):
+    if isinstance(I_s, ufl.core.expr.Expr):
         return [Stimulus(expr=I_s, dZ=dZ)]
 
+    # FIXME: Might need more checks here
     return list(I_s)
 
 
