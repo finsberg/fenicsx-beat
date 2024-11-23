@@ -8,6 +8,8 @@ parts:
   - caption: Examples
     chapters:
     - file: demos/simple_ode.py
+    - file: demos/diffusion.py
+    - file: demos/niederer_benchmark.py
   - caption: Verification
     chapters:
     - file: tests/README

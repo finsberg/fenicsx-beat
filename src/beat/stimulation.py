@@ -9,13 +9,10 @@ from .units import ureg
 class Stimulus(NamedTuple):
     expr: ufl.core.expr.Expr
     dZ: ufl.Measure
-    marker: int = -1
+    marker: int | None = None
 
     @property
     def dz(self):
-        if self.marker == -1:
-            # -1 represents unset so we return the default measure
-            return self.dZ
         return self.dZ(self.marker)
 
     def assign(self, amp: float):
