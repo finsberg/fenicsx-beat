@@ -29,6 +29,7 @@ jobs:
 
       - name: Install dependencies for pyvista
         run: apt-get update && apt-get install -y libgl1-mesa-dev xvfb
+        # Might need: Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 
       - name: Install dependencies
         run: |
@@ -36,7 +37,7 @@ jobs:
           python3 -m pip install ".[docs]"
 
       - name: Build docs
-        run: jupyter book build -W .
+        run: jupyter book build -W --keep-going .
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

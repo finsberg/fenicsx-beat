@@ -38,11 +38,15 @@ pypi = [
 demos = [
    "cardiac-geometriesx",
    "fenicsx-ldrb",
+   "gotranx"
 ]
 docs = [
    "jupyter-book",
    "jupytext",
-   "fenicsx-beat[demos]"
+   "fenicsx-beat[demos]",
+   "ipywidgets",
+   "imageio",
+   "pyvista[jupyter]",
 ]
 all = [
    "fenicsx-beat[test]",

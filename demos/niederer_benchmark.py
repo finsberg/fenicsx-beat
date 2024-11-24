@@ -65,7 +65,8 @@ if not model_path.is_file():
         / "tentusscher_panfilov_2006_epi_cell.ode",
     )
     code = gotranx.cli.gotran2py.get_code(
-        ode, scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen],
+        ode,
+        scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen],
     )
     model_path.write_text(code)
 
@@ -122,7 +123,8 @@ tol = 1.0e-10
 
 def S1_subdomain(x):
     return np.logical_and(
-        np.logical_and(x[0] <= L + tol, x[1] <= L + tol), x[2] <= L + tol,
+        np.logical_and(x[0] <= L + tol, x[1] <= L + tol),
+        x[2] <= L + tol,
     )
 
 
@@ -180,7 +182,10 @@ filename.unlink(missing_ok=True)
 filename.with_suffix(".h5").unlink(missing_ok=True)
 
 vtx = dolfinx.io.VTXWriter(
-    comm, "niederer_benchmark.bp", [solver.pde.state], engine="BP4",
+    comm,
+    "niederer_benchmark.bp",
+    [solver.pde.state],
+    engine="BP4",
 )
 
 points = {
@@ -201,7 +206,7 @@ save_freq = int(1.0 / dt)
 i = 0
 plotter_voltage = pyvista.Plotter()
 viridis = plt.get_cmap("viridis")
-grid.point_data["V"] = solver.pde.state.vector().get_local()
+grid.point_data["V"] = solver.pde.state.x.array
 grid.set_active_scalars("V")
 renderer = plotter_voltage.add_mesh(
     grid,
@@ -223,7 +228,7 @@ while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
         print(activation_times)
         vtx.write(t)
-        grid.point_data["V"] = solver.pde.state.vector().get_local()
+        grid.point_data["V"] = solver.pde.state.x.array
         plotter_voltage.write_frame()
     solver.step((t, t + dt))
 
