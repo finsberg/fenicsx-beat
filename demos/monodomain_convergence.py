@@ -1,3 +1,6 @@
+# # Monodomain convergence test
+# In this example, we will demonstrate how to perform a convergence test for the monodomain model using the forward Euler method for the ODE solver. We will use the same test case as in the tests/test_monodomain.py file. We will compare the error in the solution for different spatial and temporal resolutions. We will use the L2 norm of the error as the error measure.
+
 from collections import defaultdict
 import ufl
 import json
@@ -45,7 +48,11 @@ def main():
     Ns = [2**level for level in range(3, 8)]
     dts = [2 ** (-i) for i in range(3, 9)]
     fig, ax = plt.subplots(
-        2, len(odespaces), figsize=(10, 8), sharey="row", sharex="row",
+        2,
+        len(odespaces),
+        figsize=(10, 8),
+        sharey="row",
+        sharex="row",
     )
     for k, odespace in enumerate(odespaces):
         errors = defaultdict(list)
@@ -56,7 +63,10 @@ def main():
                 for N in Ns:
                     print(f"Running for N={N}")
                     mesh = dolfinx.mesh.create_unit_square(
-                        comm, N, N, dolfinx.cpp.mesh.CellType.triangle,
+                        comm,
+                        N,
+                        N,
+                        dolfinx.cpp.mesh.CellType.triangle,
                     )
                     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
                     x = ufl.SpatialCoordinate(mesh)
@@ -74,7 +84,8 @@ def main():
                     s = dolfinx.fem.Function(V_ode)
                     s.interpolate(
                         dolfinx.fem.Expression(
-                            s_exact, V_ode.element.interpolation_points(),
+                            s_exact,
+                            V_ode.element.interpolation_points(),
                         ),
                     )
 
