@@ -66,7 +66,7 @@ if not model_path.is_file():
     )
     code = gotranx.cli.gotran2py.get_code(
         ode,
-        scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
 
