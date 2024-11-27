@@ -1,5 +1,7 @@
 from typing import NamedTuple
 
+from mpi4py import MPI
+
 import dolfinx
 import numpy as np
 
@@ -17,6 +19,21 @@ def get_2D_slab_microstructure(
     mesh: dolfinx.mesh.Mesh,
     transverse: bool = False,
 ) -> tuple[dolfinx.fem.Constant, dolfinx.fem.Constant]:
+    """
+    Get the microstructure of a 2D slab
+
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        The mesh object
+    transverse : bool, optional
+        Whether the fiber in the slab is transverse, by default False
+
+    Returns
+    -------
+    tuple[dolfinx.fem.Constant, dolfinx.fem.Constant]
+        The fiber and sheet directions
+    """
     if transverse:
         f0 = dolfinx.fem.Constant(mesh, (0.0, 1.0))
         s0 = dolfinx.fem.Constant(mesh, (1.0, 0.0))
@@ -31,6 +48,21 @@ def get_3D_slab_microstructure(
     mesh: dolfinx.mesh.Mesh,
     transverse: bool = False,
 ) -> tuple[dolfinx.fem.Constant, dolfinx.fem.Constant, dolfinx.fem.Constant]:
+    """
+    Get the microstructure of a 3D slab
+
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        The mesh object
+    transverse : bool, optional
+        Whether the fiber in the slab is transverse, by default False
+
+    Returns
+    -------
+    tuple[dolfinx.fem.Constant, dolfinx.fem.Constant, dolfinx.fem.Constant]
+        The fiber, sheet, and normal directions
+    """
     if transverse:
         f0 = dolfinx.fem.Constant(mesh, (0.0, 0.0, 1.0))
         s0 = dolfinx.fem.Constant(mesh, (1.0, 0.0, 0.0))
@@ -44,13 +76,37 @@ def get_3D_slab_microstructure(
 
 
 def get_2D_slab_mesh(
-    comm,
-    dx,
-    Lx,
-    Ly,
-    cell_type=dolfinx.cpp.mesh.CellType.triangle,
-    dtype=np.float64,
+    comm: MPI.Intracomm,
+    dx: float,
+    Lx: float,
+    Ly: float,
+    cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellType.triangle,
+    dtype: type = np.float64,
 ):
+    """
+    Generate a 2D slab mesh
+
+    Parameters
+    ----------
+    comm : MPI.Intracomm
+        The MPI communicator
+    dx : float
+        The mesh resolution
+    Lx : float
+        The length of the slab in the x-direction
+    Ly : float
+        The length of the slab in the y-direction
+    cell_type : dolfinx.mesh.CellType, optional
+        The celltype, by default dolfinx.mesh.CellType.triangle
+    dtype : type, optional
+        Data type, by default np.float64
+
+    Returns
+    -------
+    dolfinx.mesh.Mesh
+        The mesh object
+
+    """
     nx = int(np.rint((Lx / dx)))
     ny = int(np.rint((Ly / dx)))
     return dolfinx.mesh.create_rectangle(
@@ -63,13 +119,13 @@ def get_2D_slab_mesh(
 
 
 def get_3D_slab_mesh(
-    comm,
-    dx,
-    Lx,
-    Ly,
-    Lz,
-    cell_type=dolfinx.cpp.mesh.CellType.tetrahedron,
-    dtype=np.float64,
+    comm: MPI.Intracomm,
+    dx: float,
+    Lx: float,
+    Ly: float,
+    Lz: float,
+    cell_type: dolfinx.mesh.CellType = dolfinx.cpp.mesh.CellType.tetrahedron,
+    dtype: type = np.float64,
 ):
     nx = int(np.rint((Lx / dx)))
     ny = int(np.rint((Ly / dx)))
@@ -84,30 +140,79 @@ def get_3D_slab_mesh(
 
 
 def get_3D_slab_geometry(
-    comm,
-    dx,
-    Lx,
-    Ly,
-    Lz,
-    cell_type=dolfinx.cpp.mesh.CellType.tetrahedron,
-    dtype=np.float64,
-    transverse=False,
+    comm: MPI.Intracomm,
+    dx: float,
+    Lx: float,
+    Ly: float,
+    Lz: float,
+    cell_type: dolfinx.mesh.CellType = dolfinx.cpp.mesh.CellType.tetrahedron,
+    dtype: type = np.float64,
+    transverse: bool = False,
 ) -> Geometry:
+    """Generate a 3D slab geometry
+
+    Parameters
+    ----------
+    comm : MPI.Intracomm
+        The MPI communicator
+    dx : float
+        The mesh resolution
+    Lx : float
+        The length of the slab in the x-direction
+    Ly : float
+        The length of the slab in the y-direction
+    Lz : float
+        The length of the slab in the z-direction
+    cell_type : dolfinx.mesh.CellType, optional
+        The celltype, by default dolfinx.mesh.CellType.tetrahedron
+    dtype : type, optional
+        Data type, by default np.float64
+    transverse : bool, optional
+        Whether the fiber in the slab is transverse, by default False
+
+    Returns
+    -------
+    Geometry
+        The geometry object
+    """
     mesh = get_3D_slab_mesh(comm, dx, Lx, Ly, Lz, cell_type, dtype)
     f0, s0, n0 = get_3D_slab_microstructure(mesh, transverse)
     return Geometry(mesh=mesh, f0=f0, s0=s0, n0=n0)
 
 
 def get_2D_slab_geometry(
-    comm,
-    dx,
-    Lx,
-    Ly,
-    Lz,
-    cell_type=dolfinx.cpp.mesh.CellType.triangle,
-    dtype=np.float64,
-    transverse=False,
+    comm: MPI.Intracomm,
+    dx: float,
+    Lx: float,
+    Ly: float,
+    cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellType.triangle,
+    dtype: type = np.float64,
+    transverse: bool = False,
 ) -> Geometry:
+    """Generate a 2D slab geometry
+
+    Parameters
+    ----------
+    comm : MPI.Intracomm
+        The MPI communicator
+    dx : float
+        The mesh resolution
+    Lx : float
+        The length of the slab in the x-direction
+    Ly : float
+        The length of the slab in the y-direction
+    cell_type : dolfinx.mesh.CellType, optional
+        The celltype, by default dolfinx.mesh.CellType.triangle
+    dtype : type, optional
+        Data type, by default np.float64
+    transverse : bool, optional
+        Whether the fiber in the slab is transverse, by default False
+
+    Returns
+    -------
+    Geometry
+        The geometry object
+    """
     mesh = get_2D_slab_mesh(comm, dx, Lx, Ly, cell_type, dtype)
     f0, s0 = get_2D_slab_microstructure(mesh, transverse)
     return Geometry(mesh=mesh, f0=f0, s0=s0)

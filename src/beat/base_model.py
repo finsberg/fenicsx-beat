@@ -43,6 +43,30 @@ def _transform_I_s(
 
 
 class BaseModel:
+    """
+    Base class for models.
+
+    Parameters
+    ----------
+    time : dolfinx.fem.Constant
+        The current time
+    mesh : dolfinx.mesh.Mesh
+        The mesh
+    dx : ufl.Measure, optional
+        The measure for the spatial domain, by default None
+    params : dict, optional
+        Parameters for the model, by default None
+    I_s : Stimulus | Sequence[Stimulus] | ufl.Coefficient, optional
+        The stimulus, by default None
+    jit_options : dict, optional
+        JIT options, by default None
+    form_compiler_options : dict, optional
+        Form compiler options, by default None
+    petsc_options : dict, optional
+        PETSc options, by default None
+
+    """
+
     def __init__(
         self,
         time: dolfinx.fem.Constant,
@@ -177,7 +201,7 @@ class BaseModel:
         self._solver.solver.solve(self._solver.b, self.state.x.petsc_vec)
         self.state.x.scatter_forward()
 
-    def G_stim(self, w):
+    def _G_stim(self, w):
         return sum([i.expr * w * i.dz for i in self._I_s])
 
     def solve(

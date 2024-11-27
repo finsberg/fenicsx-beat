@@ -92,7 +92,7 @@ class MonodomainModel(BaseModel):
 
         theta_parabolic = ufl.inner(self._M * ufl.grad(v_mid), ufl.grad(w))
 
-        G = (self.C_m * Dt_v_dt * w + dt * theta_parabolic) * self.dx - dt * self.G_stim(w)
+        G = (self.C_m * Dt_v_dt * w + dt * theta_parabolic) * self.dx - dt * self._G_stim(w)
         a, L = ufl.system(G)
 
         return a, L
