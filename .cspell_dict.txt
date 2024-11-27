@@ -87,10 +87,12 @@ multiplicatively
 myocyte
 nabla
 Nattel
+nbeats
 ndarray
 neohookean
 Neumann
 Niederer
+nopython
 numpy
 odesolver
 odespace
@@ -117,6 +119,8 @@ rique
 rtol
 scifem
 Severi
+sharex
+sharey
 Shrier
 Silvano
 Sorine
