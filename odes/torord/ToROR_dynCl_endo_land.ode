@@ -1,0 +1,722 @@
+states("IKr",
+C1=ScalarParam(0.9982511, unit="1", description=""),
+C2=ScalarParam( 7.93602000000000023e-4, unit="1", description=""),
+C3=ScalarParam( 6.53214300000000045e-4, unit="1", description=""),
+I_=ScalarParam( 9.80408300000000003e-6, unit="1", description=""),
+O_=ScalarParam( 2.92244900000000025e-4, unit="1", description="")
+)
+
+states("CaMK",
+CaMKt=ScalarParam( 1.09502599999999999e-2, unit="mM", description="")
+)
+
+states("ryr",
+Jrel_np=ScalarParam( 1.80824799999999996e-22, unit="mM/ms", description=""),
+Jrel_p=ScalarParam( 4.35860800000000030e-21, unit="mM/ms", description="")
+)
+
+states("Ito",
+a=ScalarParam( 8.89925900000000051e-4, unit="1", description=""),
+ap=ScalarParam( 4.53416500000000005e-4, unit="1", description=""),
+iF=ScalarParam(0.9996716, unit="1", description=""),
+iFp=ScalarParam(0.9996716, unit="1", description=""),
+iS=ScalarParam(0.5988908, unit="1", description=""),
+iSp=ScalarParam(0.6620692, unit="1", description="")
+)
+
+states("intracellular_ions",
+cajsr=ScalarParam(1.525693, unit="mM", description=""),
+cansr=ScalarParam(1.528001, unit="mM", description=""),
+cass=ScalarParam( 6.49734100000000044e-5, unit="mM", description=""),
+cli=ScalarParam(29.20698, unit="mM", description=""),
+clss=ScalarParam(29.20696, unit="mM", description=""),
+ki=ScalarParam(147.7115, unit="mM", description=""),
+kss=ScalarParam(147.7114, unit="mM", description=""),
+nai=ScalarParam(12.39736, unit="mM", description=""),
+nass=ScalarParam(12.3977, unit="mM", description="")
+)
+
+states("ICaL",
+d=ScalarParam( 1.58884100000000000e-31, unit="1", description=""),
+fcaf=ScalarParam(1, unit="1", description=""),
+fcafp=ScalarParam(1, unit="1", description=""),
+fcas=ScalarParam(0.9999014, unit="1", description=""),
+ff_=ScalarParam(1, unit="1", description=""),
+ffp=ScalarParam(1, unit="1", description=""),
+fs=ScalarParam(0.9401791, unit="1", description=""),
+jca=ScalarParam(0.9999846, unit="1", description=""),
+nca_i=ScalarParam( 8.32600900000000053e-4, unit="1", description=""),
+nca_ss=ScalarParam( 4.89937800000000024e-4, unit="1", description="")
+)
+
+states("INa",
+h=ScalarParam(0.8473267, unit="1", description=""),
+hp=ScalarParam(0.7018454, unit="1", description=""),
+j=ScalarParam(0.8471657, unit="1", description=""),
+jp=ScalarParam(0.8469014, unit="1", description=""),
+m=ScalarParam( 6.51715400000000005e-4, unit="1", description="")
+)
+
+states("INaL",
+hL=ScalarParam(0.5566017, unit="1", description=""),
+hLp=ScalarParam(0.3115491, unit="1", description=""),
+mL=ScalarParam( 1.35120299999999988e-4, unit="1", description="")
+)
+
+states("membrane",
+v=ScalarParam(-89.74808, unit="mV", description="")
+)
+
+states("IKs",
+xs1=ScalarParam(0.243959, unit="1", description=""),
+xs2=ScalarParam( 1.58616700000000009e-4, unit="1", description="")
+)
+
+parameters("I_katp",
+A_atp=ScalarParam(2.0, unit="mM", description=""),
+K_atp=ScalarParam(0.25, unit="mM", description=""),
+K_o_n=ScalarParam(5.0, unit="mM", description=""),
+fkatp=ScalarParam(0.0, unit="1", description=""),
+gkatp=ScalarParam(4.3195, unit="mS/uF", description="")
+)
+
+parameters("ICaL",
+Aff=ScalarParam(0.6, unit="1", description=""),
+ICaL_fractionSS=ScalarParam(0.8, unit="1", description=""),
+Kmn=ScalarParam(0.002, unit="mM", description=""),
+PCa_b=ScalarParam(8.3757e-05, unit="1", description=""),
+dielConstant=ScalarParam(74.0, unit="1/K", description=""),
+k2n=ScalarParam(500.0, unit="mS/uF", description=""),
+offset=ScalarParam(0.0, unit="ms", description=""),
+tjca=ScalarParam(72.5, unit="ms", description=""),
+vShift=ScalarParam(0.0, unit="mV", description="")
+)
+
+parameters("intracellular_ions","mechanics",
+BSLmax=ScalarParam(1.124, unit="mM", description=""),
+BSRmax=ScalarParam(0.047, unit="mM", description=""),
+KmBSL=ScalarParam(0.0087, unit="mM", description=""),
+KmBSR=ScalarParam(0.00087, unit="mM", description=""),
+cmdnmax_b=ScalarParam(0.05, unit="mM", description=""),
+csqnmax=ScalarParam(10.0, unit="mM", description=""),
+kmcmdn=ScalarParam(0.00238, unit="mM", description=""),
+kmcsqn=ScalarParam(0.8, unit="mM", description=""),
+kmtrpn=ScalarParam(0.0005, unit="mM", description=""),
+trpnmax=ScalarParam(0.07, unit="mM", description="")
+)
+
+parameters("CaMK",
+CaMKo=ScalarParam(0.05, unit="1", description=""),
+KmCaM=ScalarParam(0.0015, unit="mM", description=""),
+KmCaMK=ScalarParam(0.15, unit="mM", description=""),
+aCaMK=ScalarParam(0.05, unit="1/mM/ms", description=""),
+bCaMK=ScalarParam(0.00068, unit="mS/uF", description="")
+)
+
+parameters("Ito",
+EKshift=ScalarParam(0.0, unit="mV", description=""),
+Gto_b=ScalarParam(0.16, unit="mS/uF", description="")
+)
+
+parameters("physical_constants","mechanics",
+F=ScalarParam(96485.0, unit="C/mol", description=""),
+R=ScalarParam(8314.0, unit="mJ/mol/K", description=""),
+T=ScalarParam(310.0, unit="K", description=""),
+zca=ScalarParam(2.0, unit="1", description=""),
+zcl=ScalarParam(-1.0, unit="1", description=""),
+zk=ScalarParam(1.0, unit="1", description=""),
+zna=ScalarParam(1.0, unit="1", description="")
+)
+
+parameters("ICl",
+Fjunc=ScalarParam(1.0, unit="1", description=""),
+GClCa=ScalarParam(0.2843, unit="mS/uF", description=""),
+GClb=ScalarParam(0.00198, unit="mS/uF", description=""),
+KdClCa=ScalarParam(0.1, unit="mM", description="")
+)
+
+parameters("IK1",
+GK1_b=ScalarParam(0.6992, unit="mS/uF", description="")
+)
+
+parameters("IKb",
+GKb_b=ScalarParam(0.0189, unit="mS/uF", description="")
+)
+
+parameters("IKr",
+GKr_b=ScalarParam(0.0321, unit="mS/uF", description=""),
+alpha_1=ScalarParam(0.154375, unit="mS/uF", description=""),
+beta_1=ScalarParam(0.1911, unit="mS/uF", description="")
+)
+
+parameters("IKs",
+GKs_b=ScalarParam(0.0011, unit="mS/uF", description="")
+)
+
+parameters("INa",
+GNa=ScalarParam(11.7802, unit="mS/uF", description="")
+)
+
+parameters("INaL",
+GNaL_b=ScalarParam(0.0279, unit="mS/uF", description=""),
+thL=ScalarParam(200.0, unit="ms", description="")
+)
+
+parameters("INaCa",
+Gncx_b=ScalarParam(0.0034, unit="mS/uF", description=""),
+INaCa_fractionSS=ScalarParam(0.35, unit="1", description=""),
+KmCaAct=ScalarParam(0.00015, unit="mM", description=""),
+kasymm=ScalarParam(12.5, unit="1", description=""),
+kcaoff=ScalarParam(5000.0, unit="mS/uF", description=""),
+kcaon=ScalarParam(1500000.0, unit="mS/uF", description=""),
+kna1=ScalarParam(15.0, unit="mS/uF", description=""),
+kna2=ScalarParam(5.0, unit="mS/uF", description=""),
+kna3=ScalarParam(88.12, unit="mS/uF", description=""),
+qca=ScalarParam(0.167, unit="1", description=""),
+qna=ScalarParam(0.5224, unit="1", description=""),
+wca=ScalarParam(60000.0, unit="1", description=""),
+wna=ScalarParam(60000.0, unit="1", description=""),
+wnaca=ScalarParam(5000.0, unit="1", description="")
+)
+
+parameters("IpCa",
+GpCa=ScalarParam(0.0005, unit="mS/uF", description=""),
+KmCap=ScalarParam(0.0005, unit="mM", description="")
+)
+
+parameters("INaK",
+H=ScalarParam(1e-07, unit="mM", description=""),
+Khp=ScalarParam(1.698e-07, unit="mM", description=""),
+Kki=ScalarParam(0.5, unit="mS/uF", description=""),
+Kko=ScalarParam(0.3582, unit="mS/uF", description=""),
+Kmgatp=ScalarParam(1.698e-07, unit="mM", description=""),
+Knai0=ScalarParam(9.073, unit="mM", description=""),
+Knao0=ScalarParam(27.78, unit="mM", description=""),
+Knap=ScalarParam(224.0, unit="mM", description=""),
+Kxkur=ScalarParam(292.0, unit="mM", description=""),
+MgADP=ScalarParam(0.05, unit="mM", description=""),
+MgATP=ScalarParam(9.8, unit="mM", description=""),
+Pnak_b=ScalarParam(15.4509, unit="mS/uF", description=""),
+delta=ScalarParam(-0.155, unit="mV", description=""),
+eP=ScalarParam(4.2, unit="1", description=""),
+k1m=ScalarParam(182.4, unit="mS/uF", description=""),
+k1p=ScalarParam(949.5, unit="mS/uF", description=""),
+k2m=ScalarParam(39.4, unit="mS/uF", description=""),
+k2p=ScalarParam(687.2, unit="mS/uF", description=""),
+k3m=ScalarParam(79300.0, unit="mS/uF", description=""),
+k3p=ScalarParam(1899.0, unit="mS/uF", description=""),
+k4m=ScalarParam(40.0, unit="mS/uF", description=""),
+k4p=ScalarParam(639.0, unit="mS/uF", description="")
+)
+
+parameters("ryr",
+Jrel_b=ScalarParam(1.5378, unit="1", description=""),
+bt=ScalarParam(4.75, unit="ms", description=""),
+cajsr_half=ScalarParam(1.7, unit="mM", description="")
+)
+
+parameters("SERCA",
+Jup_b=ScalarParam(1.0, unit="1", description="")
+)
+
+parameters("cell_geometry","mechanics",
+L=ScalarParam(0.01, unit="cm", description=""),
+rad_=ScalarParam(0.0011, unit="cm", description="")
+)
+
+parameters("ICab",
+PCab=ScalarParam(5.9194e-08, unit="mS/uF", description="")
+)
+
+parameters("reversal_potentials",
+PKNa=ScalarParam(0.01833, unit="1", description="")
+)
+
+parameters("INab",
+PNab=ScalarParam(1.9239e-09, unit="mS/uF", description="")
+)
+
+parameters("extracellular",
+cao=ScalarParam(1.8, unit="mM", description=""),
+clo=ScalarParam(150.0, unit="mM", description=""),
+ko=ScalarParam(5.0, unit="mM", description=""),
+nao=ScalarParam(140.0, unit="mM", description="")
+)
+
+parameters("environment",
+celltype=ScalarParam(0.0, unit="1", description="")
+)
+
+parameters("membrane",
+i_Stim_Amplitude=ScalarParam(-53.0, unit="A/F", description=""),
+i_Stim_End=ScalarParam(1e+17, unit="ms", description=""),
+i_Stim_Period=ScalarParam(1000.0, unit="ms", description=""),
+i_Stim_PulseDuration=ScalarParam(1.0, unit="ms", description=""),
+i_Stim_Start=ScalarParam(0.0, unit="ms", description="")
+)
+
+parameters("diff",
+tauCa=ScalarParam(0.2, unit="ms", description=""),
+tauCl=ScalarParam(2.0, unit="ms", description=""),
+tauK=ScalarParam(2.0, unit="ms", description=""),
+tauNa=ScalarParam(2.0, unit="ms", description="")
+)
+
+expressions("cell_geometry", "mechanics")
+Acap = 2.0*Ageo # cm**2
+Ageo = L*((2.0*3.14)*rad_) + rad_*((2.0*3.14)*rad_) # cm**2
+vcell = L*(rad_*((1000.0*3.14)*rad_)) # uL
+vjsr = 0.0048*vcell # uL
+vmyo = 0.68*vcell # uL
+vnsr = 0.0552*vcell # uL
+vss = 0.02*vcell # uL
+
+expressions("ICaL")
+Afcaf = 0.3 + 0.6/(exp((v - 1*10.0)/10.0) + 1.0)
+Afcas = 1.0 - Afcaf
+Afs = 1.0 - Aff
+ICaK = ICaK_i + ICaK_ss # A/F
+ICaK_i = (1.0 - ICaL_fractionSS)*((d*(PhiCaK_i*(PCaK*(1.0 - fICaLp))))*(f*(1.0 - nca_i) + nca_i*(fca*jca)) + (d*(PhiCaK_i*(PCaKp*fICaLp)))*(fp*(1.0 - nca_i) + nca_i*(fcap*jca))) # A/F
+ICaK_ss = ICaL_fractionSS*((d*(PhiCaK_ss*(PCaK*(1.0 - fICaLp))))*(f*(1.0 - nca_ss) + nca_ss*(fca*jca)) + (d*(PhiCaK_ss*(PCaKp*fICaLp)))*(fp*(1.0 - nca_ss) + nca_ss*(fcap*jca))) # A/F
+ICaL_ICaL = ICaL_i + ICaL_ss # A/F
+ICaL_i = (1.0 - ICaL_fractionSS)*((d*(PhiCaL_i*(PCa*(1.0 - fICaLp))))*(f*(1.0 - nca_i) + nca_i*(fca*jca)) + (d*(PhiCaL_i*(PCap*fICaLp)))*(fp*(1.0 - nca_i) + nca_i*(fcap*jca))) # A/F
+ICaL_ss = ICaL_fractionSS*((d*(PhiCaL_ss*(PCa*(1.0 - fICaLp))))*(f*(1.0 - nca_ss) + nca_ss*(fca*jca)) + (d*(PhiCaL_ss*(PCap*fICaLp)))*(fp*(1.0 - nca_ss) + nca_ss*(fcap*jca))) # A/F
+ICaNa = ICaNa_i + ICaNa_ss # A/F
+ICaNa_i = (1.0 - ICaL_fractionSS)*((d*(PhiCaNa_i*(PCaNa*(1.0 - fICaLp))))*(f*(1.0 - nca_i) + nca_i*(fca*jca)) + (d*(PhiCaNa_i*(PCaNap*fICaLp)))*(fp*(1.0 - nca_i) + nca_i*(fcap*jca))) # A/F
+ICaNa_ss = ICaL_fractionSS*((d*(PhiCaNa_ss*(PCaNa*(1.0 - fICaLp))))*(f*(1.0 - nca_ss) + nca_ss*(fca*jca)) + (d*(PhiCaNa_ss*(PCaNap*fICaLp)))*(fp*(1.0 - nca_ss) + nca_ss*(fcap*jca))) # A/F
+Ii = (0.5*(4.0*cai + (cli + (ki + nai))))/1000.0
+Io = (0.5*(4.0*cao + (clo + (ko + nao))))/1000.0
+Iss = (0.5*(4.0*cass + (clss + (kss + nass))))/1000.0
+PCa = Conditional(Eq(celltype, 1.0), 1.2*PCa_b, Conditional(Eq(celltype, 2.0), 2.0*PCa_b, PCa_b))
+PCaK = 0.0003574*PCa
+PCaKp = 0.0003574*PCap
+PCaNa = 0.00125*PCa
+PCaNap = 0.00125*PCap
+PCap = 1.1*PCa
+PhiCaK_i = ((1.0*vffrt)*(-gamma_ko*ko + (gamma_ki*ki)*exp(1.0*vfrt)))/(exp(1.0*vfrt) - 1*1.0)
+PhiCaK_ss = ((1.0*vffrt)*(-gamma_ko*ko + (gamma_kss*kss)*exp(1.0*vfrt)))/(exp(1.0*vfrt) - 1*1.0)
+PhiCaL_i = ((4.0*vffrt)*(-cao*gamma_cao + (cai*gamma_cai)*exp(2.0*vfrt)))/(exp(2.0*vfrt) - 1*1.0)
+PhiCaL_ss = ((4.0*vffrt)*(-cao*gamma_cao + (cass*gamma_cass)*exp(2.0*vfrt)))/(exp(2.0*vfrt) - 1*1.0)
+PhiCaNa_i = ((1.0*vffrt)*(-gamma_nao*nao + (gamma_nai*nai)*exp(1.0*vfrt)))/(exp(1.0*vfrt) - 1*1.0)
+PhiCaNa_ss = ((1.0*vffrt)*(-gamma_nao*nao + (gamma_nass*nass)*exp(1.0*vfrt)))/(exp(1.0*vfrt) - 1*1.0)
+anca_i = 1.0/(k2n/km2n + (Kmn/cai + 1.0)**4.0)
+anca_ss = 1.0/(k2n/km2n + (Kmn/cass + 1.0)**4.0)
+constA = 1820000.0/(T*dielConstant)**1.5
+dss = Conditional(Ge(v, 31.4978), 1.0, 1.0763*exp(-1.007*exp(-0.0829*v)))
+f = Aff*ff_ + Afs*fs
+fICaLp = 1.0/(1.0 + KmCaMK/CaMKa)
+fca = Afcaf*fcaf + Afcas*fcas
+fcap = Afcaf*fcafp + Afcas*fcas
+fcass = fss
+fp = Aff*ffp + Afs*fs
+fss = 1.0/(exp((v + 19.58)/3.696) + 1.0)
+gamma_cai = exp((-constA*4.0)*(sqrt(Ii)/(sqrt(Ii) + 1.0) - 0.3*Ii))
+gamma_cao = exp((-constA*4.0)*(sqrt(Io)/(sqrt(Io) + 1.0) - 0.3*Io))
+gamma_cass = exp((-constA*4.0)*(sqrt(Iss)/(sqrt(Iss) + 1.0) - 0.3*Iss))
+gamma_ki = exp((-constA*1.0)*(sqrt(Ii)/(sqrt(Ii) + 1.0) - 0.3*Ii))
+gamma_ko = exp((-constA*1.0)*(sqrt(Io)/(sqrt(Io) + 1.0) - 0.3*Io))
+gamma_kss = exp((-constA*1.0)*(sqrt(Iss)/(sqrt(Iss) + 1.0) - 0.3*Iss))
+gamma_nai = exp((-constA*1.0)*(sqrt(Ii)/(sqrt(Ii) + 1.0) - 0.3*Ii))
+gamma_nao = exp((-constA*1.0)*(sqrt(Io)/(sqrt(Io) + 1.0) - 0.3*Io))
+gamma_nass = exp((-constA*1.0)*(sqrt(Iss)/(sqrt(Iss) + 1.0) - 0.3*Iss))
+jcass = 1.0/(exp((v + 18.08)/2.7916) + 1.0)
+km2n = jca*1.0 # mS/uF
+td = (offset + 0.6) + 1.0/(exp((-1*0.05)*((v + vShift) + 6.0)) + exp(0.09*((v + vShift) + 14.0))) # ms
+tfcaf = 7.0 + 1.0/(0.04*exp((-(v - 1*4.0))/7.0) + 0.04*exp((v - 1*4.0)/7.0)) # ms
+tfcafp = 2.5*tfcaf # ms
+tfcas = 100.0 + 1.0/(0.00012*exp((-v)/3.0) + 0.00012*exp(v/7.0)) # ms
+tff = 7.0 + 1.0/(0.0045*exp((-(v + 20.0))/10.0) + 0.0045*exp((v + 20.0)/10.0)) # ms
+tffp = 2.5*tff # ms
+tfs = 1000.0 + 1.0/(3.5e-5*exp((-(v + 5.0))/4.0) + 3.5e-5*exp((v + 5.0)/6.0)) # ms
+dd_dt = (-d + dss)/td
+dfcaf_dt = (-fcaf + fcass)/tfcaf
+dfcafp_dt = (-fcafp + fcass)/tfcafp
+dfcas_dt = (-fcas + fcass)/tfcas
+dff__dt = (-ff_ + fss)/tff
+dffp_dt = (-ffp + fss)/tffp
+dfs_dt = (-fs + fss)/tfs
+djca_dt = (-jca + jcass)/tjca
+dnca_i_dt = anca_i*k2n - km2n*nca_i
+dnca_ss_dt = anca_ss*k2n - km2n*nca_ss
+
+expressions("Ito")
+AiF = 1.0/(exp(((EKshift + v) - 1*213.6)/151.2) + 1.0)
+AiS = 1.0 - AiF
+Gto = Conditional(Or(Eq(celltype, 1.0), Eq(celltype, 2.0)), 2.0*Gto_b, Gto_b) # mS/uF
+Ito_Ito = (Gto*(-EK + v))*(i*(a*(1.0 - fItop)) + ip*(ap*fItop)) # A/F
+ass = 1.0/(exp((-((EKshift + v) - 1*14.34))/14.82) + 1.0)
+assp = 1.0/(exp((-((EKshift + v) - 1*24.34))/14.82) + 1.0)
+delta_epi = Conditional(Eq(celltype, 1.0), 1.0 - 0.95/(exp(((EKshift + v) + 70.0)/5.0) + 1.0), 1.0)
+dti_develop = 1.354 + 0.0001/(exp((-((EKshift + v) - 1*12.23))/0.2154) + exp(((EKshift + v) - 1*167.4)/15.89))
+dti_recover = 1.0 - 0.5/(exp(((EKshift + v) + 70.0)/20.0) + 1.0)
+fItop = 1.0/(1.0 + KmCaMK/CaMKa)
+i = AiF*iF + AiS*iS
+ip = AiF*iFp + AiS*iSp
+iss = 1.0/(exp(((EKshift + v) + 43.94)/5.711) + 1.0)
+ta = 1.0515/(1.0/((1.2089*(exp((-((EKshift + v) - 1*18.4099))/29.3814) + 1.0))) + 3.5/(exp(((EKshift + v) + 100.0)/29.3814) + 1.0)) # ms
+tiF = delta_epi*tiF_b # ms
+tiF_b = 4.562 + 1.0/(0.3933*exp((-((EKshift + v) + 100.0))/100.0) + 0.08004*exp(((EKshift + v) + 50.0)/16.59)) # ms
+tiFp = tiF*(dti_develop*dti_recover) # ms
+tiS = delta_epi*tiS_b # ms
+tiS_b = 23.62 + 1.0/(0.001416*exp((-((EKshift + v) + 96.52))/59.05) + 1.78e-8*exp(((EKshift + v) + 114.1)/8.079)) # ms
+tiSp = tiS*(dti_develop*dti_recover) # ms
+da_dt = (-a + ass)/ta
+dap_dt = (-ap + assp)/ta
+diF_dt = (-iF + iss)/tiF
+diFp_dt = (-iFp + iss)/tiFp
+diS_dt = (-iS + iss)/tiS
+diSp_dt = (-iSp + iss)/tiSp
+
+expressions("intracellular_ions")
+Bcajsr = 1.0/((csqnmax*kmcsqn)/((cajsr + kmcsqn)**2.0) + 1.0)
+Bcass = 1.0/((BSLmax*KmBSL)/((KmBSL + cass)**2.0) + ((BSRmax*KmBSR)/((KmBSR + cass)**2.0) + 1.0))
+cmdnmax = Conditional(Eq(celltype, 1.0), 1.3*cmdnmax_b, cmdnmax_b) # mM
+dcajsr_dt = Bcajsr*(-Jrel + Jtr) # mM
+dcansr_dt = Jup - Jtr*vjsr/vnsr # mM
+dcass_dt = Bcass*(-Jdiff + ((Acap*(-(ICaL_ss - 2.0*INaCa_ss)))/(((2.0*F)*vss)) + (Jrel*vjsr)/vss)) # mM
+dcli_dt = (Acap*(IClCa_sl + IClb))/((F*vmyo)) + (JdiffCl*vss)/vmyo # mM
+dclss_dt = -JdiffCl + (Acap*IClCa_junc)/((F*vss)) # mM
+dki_dt = (Acap*(-(ICaK_i + (-2.0*INaK_INaK + (Istim + (I_katp_I_katp + (IKb_IKb + (IK1_IK1 + (IKs_IKs + (IKr_IKr + Ito_Ito))))))))))/((F*vmyo)) + (JdiffK*vss)/vmyo # mM
+dkss_dt = -JdiffK + (Acap*(-ICaK_ss))/((F*vss)) # mM
+dnai_dt = (Acap*(-(INab_INab + (3.0*INaK_INaK + (ICaNa_i + (3.0*INaCa_i + (INaL_INaL + INa_INa)))))))/((F*vmyo)) + (JdiffNa*vss)/vmyo # mM
+dnass_dt = -JdiffNa + (Acap*(-(ICaNa_ss + 3.0*INaCa_ss)))/((F*vss)) # mM
+
+expressions("CaMK")
+CaMKa = CaMKb + CaMKt # mM
+CaMKb = (CaMKo*(1.0 - CaMKt))/(KmCaM/cass + 1.0) # mM
+dCaMKt_dt = -CaMKt*bCaMK + (CaMKb*aCaMK)*(CaMKb + CaMKt) # mM
+
+expressions("INaK")
+E1_ = x1/(x4 + (x3 + (x1 + x2)))
+E2 = x2/(x4 + (x3 + (x1 + x2)))
+E3 = x3/(x4 + (x3 + (x1 + x2)))
+E4 = x4/(x4 + (x3 + (x1 + x2)))
+INaK_INaK = Pnak*(JnakK*zk + JnakNa*zna) # A/F
+JnakK = 2.0*(-E3*a1 + E4*b1) # mM/ms
+JnakNa = 3.0*(E1_*a3 - E2*b3) # mM/ms
+Knai = Knai0*exp((delta*vfrt)/3.0) # mM
+Knao = Knao0*exp((vfrt*(1.0 - delta))/3.0) # mM
+P = eP/(((H/Khp + 1.0) + nai/Knap) + ki/Kxkur)
+Pnak = Conditional(Eq(celltype, 1.0), 0.9*Pnak_b, Conditional(Eq(celltype, 2.0), 0.7*Pnak_b, Pnak_b)) # mS/uF
+a1 = (k1p*(nai/Knai)**3.0)/(((1.0 + ki/Kki)**2.0 + (1.0 + nai/Knai)**3.0) - 1*1.0)
+a2 = k2p
+a3 = (k3p*(ko/Kko)**2.0)/(((1.0 + ko/Kko)**2.0 + (1.0 + nao/Knao)**3.0) - 1*1.0)
+a4 = ((MgATP*k4p)/Kmgatp)/(1.0 + MgATP/Kmgatp)
+b1 = MgADP*k1m
+b2 = (k2m*(nao/Knao)**3.0)/(((1.0 + ko/Kko)**2.0 + (1.0 + nao/Knao)**3.0) - 1*1.0)
+b3 = (H*(P*k3m))/(1.0 + MgATP/Kmgatp)
+b4 = (k4m*(ki/Kki)**2.0)/(((1.0 + ki/Kki)**2.0 + (1.0 + nai/Knai)**3.0) - 1*1.0)
+x1 = a2*(a1*b3) + (b3*(a2*b4) + (a2*(a1*a4) + b3*(b2*b4)))
+x2 = b4*(a2*a3) + (b4*(a3*b1) + (a3*(a1*a2) + b4*(b1*b2)))
+x3 = b1*(a3*a4) + (a4*(b1*b2) + (a4*(a2*a3) + b1*(b2*b3)))
+x4 = a1*(b2*b3) + (a1*(a4*b2) + (a1*(a3*a4) + b2*(b3*b4)))
+
+expressions("INaCa")
+E1_i = x1_i/(x4_i + (x3_i + (x1_i + x2_i)))
+E1_ss = x1_ss/(x4_ss + (x3_ss + (x1_ss + x2_ss)))
+E2_i = x2_i/(x4_i + (x3_i + (x1_i + x2_i)))
+E2_ss = x2_ss/(x4_ss + (x3_ss + (x1_ss + x2_ss)))
+E3_i = x3_i/(x4_i + (x3_i + (x1_i + x2_i)))
+E3_ss = x3_ss/(x4_ss + (x3_ss + (x1_ss + x2_ss)))
+E4_i = x4_i/(x4_i + (x3_i + (x1_i + x2_i)))
+E4_ss = x4_ss/(x4_ss + (x3_ss + (x1_ss + x2_ss)))
+Gncx = Conditional(Eq(celltype, 1.0), 1.1*Gncx_b, Conditional(Eq(celltype, 2.0), 1.4*Gncx_b, Gncx_b)) # mS/uF
+INaCa_i = (allo_i*(Gncx*(1.0 - INaCa_fractionSS)))*(JncxCa_i*zca + JncxNa_i*zna) # A/F
+INaCa_ss = (allo_ss*(Gncx*INaCa_fractionSS))*(JncxCa_ss*zca + JncxNa_ss*zna) # A/F
+JncxCa_i = -E1_i*k1_i + E2_i*k2_i # mM/ms
+JncxCa_ss = -E1_ss*k1_ss + E2_ss*k2_ss # mM/ms
+JncxNa_i = -E2_i*k3pp_i + (E3_i*k4pp_i + 3.0*(-E1_i*k8_i + E4_i*k7_i)) # mM/ms
+JncxNa_ss = -E2_ss*k3pp_ss + (E3_ss*k4pp_ss + 3.0*(-E1_ss*k8_ss + E4_ss*k7_ss)) # mM/ms
+allo_i = 1.0/((KmCaAct/cai)**2.0 + 1.0)
+allo_ss = 1.0/((KmCaAct/cass)**2.0 + 1.0)
+h10_i = (nao/kna1)*(1.0 + nao/kna2) + (kasymm + 1.0)
+h10_ss = (nao/kna1)*(1.0 + nao/kna2) + (kasymm + 1.0)
+h11_i = (nao*nao)/((kna2*(h10_i*kna1)))
+h11_ss = (nao*nao)/((kna2*(h10_ss*kna1)))
+h12_i = 1.0/h10_i
+h12_ss = 1.0/h10_ss
+h1_i = (nai/kna3)*(hna + 1.0) + 1.0
+h1_ss = (nass/kna3)*(hna + 1.0) + 1.0
+h2_i = (hna*nai)/((h1_i*kna3))
+h2_ss = (hna*nass)/((h1_ss*kna3))
+h3_i = 1.0/h1_i
+h3_ss = 1.0/h1_ss
+h4_i = (nai/kna1)*(1.0 + nai/kna2) + 1.0
+h4_ss = (nass/kna1)*(1.0 + nass/kna2) + 1.0
+h5_i = (nai*nai)/((kna2*(h4_i*kna1)))
+h5_ss = (nass*nass)/((kna2*(h4_ss*kna1)))
+h6_i = 1.0/h4_i
+h6_ss = 1.0/h4_ss
+h7_i = (nao/kna3)*(1.0 + 1.0/hna) + 1.0
+h7_ss = (nao/kna3)*(1.0 + 1.0/hna) + 1.0
+h8_i = nao/((h7_i*(hna*kna3)))
+h8_ss = nao/((h7_ss*(hna*kna3)))
+h9_i = 1.0/h7_i
+h9_ss = 1.0/h7_ss
+hca = exp(qca*vfrt)
+hna = exp(qna*vfrt)
+k1_i = kcaon*(cao*h12_i)
+k1_ss = kcaon*(cao*h12_ss)
+k2_i = kcaoff
+k2_ss = kcaoff
+k3_i = k3p_i + k3pp_i
+k3_ss = k3p_ss + k3pp_ss
+k3p_i = h9_i*wca
+k3p_ss = h9_ss*wca
+k3pp_i = h8_i*wnaca
+k3pp_ss = h8_ss*wnaca
+k4_i = k4p_i + k4pp_i
+k4_ss = k4p_ss + k4pp_ss
+k4p_i = (h3_i*wca)/hca
+k4p_ss = (h3_ss*wca)/hca
+k4pp_i = h2_i*wnaca
+k4pp_ss = h2_ss*wnaca
+k5_i = kcaoff
+k5_ss = kcaoff
+k6_i = kcaon*(cai*h6_i)
+k6_ss = kcaon*(cass*h6_ss)
+k7_i = wna*(h2_i*h5_i)
+k7_ss = wna*(h2_ss*h5_ss)
+k8_i = wna*(h11_i*h8_i)
+k8_ss = wna*(h11_ss*h8_ss)
+x1_i = (k2_i*k4_i)*(k6_i + k7_i) + (k5_i*k7_i)*(k2_i + k3_i)
+x1_ss = (k2_ss*k4_ss)*(k6_ss + k7_ss) + (k5_ss*k7_ss)*(k2_ss + k3_ss)
+x2_i = (k1_i*k7_i)*(k4_i + k5_i) + (k4_i*k6_i)*(k1_i + k8_i)
+x2_ss = (k1_ss*k7_ss)*(k4_ss + k5_ss) + (k4_ss*k6_ss)*(k1_ss + k8_ss)
+x3_i = (k1_i*k3_i)*(k6_i + k7_i) + (k6_i*k8_i)*(k2_i + k3_i)
+x3_ss = (k1_ss*k3_ss)*(k6_ss + k7_ss) + (k6_ss*k8_ss)*(k2_ss + k3_ss)
+x4_i = (k2_i*k8_i)*(k4_i + k5_i) + (k3_i*k5_i)*(k1_i + k8_i)
+x4_ss = (k2_ss*k8_ss)*(k4_ss + k5_ss) + (k3_ss*k5_ss)*(k1_ss + k8_ss)
+
+expressions("reversal_potentials")
+ECl = ((R*T)/((F*zcl)))*log(clo/cli) # mV
+EClss = ((R*T)/((F*zcl)))*log(clo/clss) # mV
+EK = ((R*T)/((F*zk)))*log(ko/ki) # mV
+EKs = ((R*T)/((F*zk)))*log((PKNa*nao + ko)/(PKNa*nai + ki)) # mV
+ENa = ((R*T)/((F*zna)))*log(nao/nai) # mV
+
+expressions("IK1")
+GK1 = Conditional(Eq(celltype, 1.0), 1.2*GK1_b, Conditional(Eq(celltype, 2.0), 1.3*GK1_b, GK1_b)) # mS/uF
+IK1_IK1 = (K1ss*(GK1*sqrt(ko/5.0)))*(-EK + v) # A/F
+K1ss = aK1/(aK1 + bK1)
+aK1 = 4.094/(exp(0.1217*((-EK + v) - 1*49.934)) + 1.0)
+bK1 = (15.72*exp(0.0674*((-EK + v) - 1*3.257)) + exp(0.0618*((-EK + v) - 1*594.31)))/(exp((-1*0.1629)*((-EK + v) + 14.207)) + 1.0)
+
+expressions("IKb")
+GKb = Conditional(Eq(celltype, 1.0), 0.6*GKb_b, GKb_b) # mS/uF
+IKb_IKb = (GKb*xkb)*(-EK + v) # A/F
+xkb = 1.0/(exp((-(v - 1*10.8968))/23.9871) + 1.0)
+
+expressions("IKr")
+GKr = Conditional(Eq(celltype, 1.0), 1.3*GKr_b, Conditional(Eq(celltype, 2.0), 0.8*GKr_b, GKr_b)) # mS/uF
+IKr_IKr = (O_*(GKr*sqrt(ko/5.0)))*(-EK + v) # A/F
+alpha = 0.1161*exp(0.299*vfrt) # mS/uF
+alpha_2 = 0.0578*exp(0.971*vfrt) # mS/uF
+alpha_C2ToI = 5.2e-5*exp(1.525*vfrt) # mS/uF
+alpha_i = 0.2533*exp(0.5953*vfrt) # mS/uF
+beta_ = 0.2442*exp((-1*1.604)*vfrt) # mS/uF
+beta_2 = 0.000349*exp((-1*1.062)*vfrt) # mS/uF
+beta_ItoC2 = (alpha_C2ToI*(beta_2*beta_i))/((alpha_2*alpha_i)) # mS/uF
+beta_i = 0.06525*exp((-1*0.8209)*vfrt) # mS/uF
+dC1_dt = -C1*(alpha_C2ToI + (alpha_2 + beta_1)) + (I_*beta_ItoC2 + (C2*alpha_1 + O_*beta_2))
+dC2_dt = -C2*(alpha_1 + beta_) + (C1*beta_1 + C3*alpha)
+dC3_dt = C2*beta_ - C3*alpha
+dI__dt = -I_*(beta_ItoC2 + beta_i) + (C1*alpha_C2ToI + O_*alpha_i)
+dO__dt = -O_*(alpha_i + beta_2) + (C1*alpha_2 + I_*beta_i)
+
+expressions("IKs")
+GKs = Conditional(Eq(celltype, 1.0), 1.4*GKs_b, GKs_b) # mS/uF
+IKs_IKs = (xs2*(xs1*(GKs*KsCa)))*(-EKs + v) # A/F
+KsCa = 1.0 + 0.6/((3.8e-5/cai)**1.4 + 1.0)
+txs1 = 817.3 + 1.0/(0.0002326*exp((v + 48.28)/17.8) + 0.001292*exp((-(v + 210.0))/230.0)) # ms
+txs2 = 1.0/(0.01*exp((v - 1*50.0)/20.0) + 0.0193*exp((-(v + 66.54))/31.0)) # ms
+xs1ss = 1.0/(exp((-(v + 11.6))/8.932) + 1.0)
+xs2ss = xs1ss
+dxs1_dt = (-xs1 + xs1ss)/txs1
+dxs2_dt = (-xs2 + xs2ss)/txs2
+
+expressions("INaL")
+GNaL = Conditional(Eq(celltype, 1.0), 0.6*GNaL_b, GNaL_b) # mS/uF
+INaL_INaL = (mL*(GNaL*(-ENa + v)))*(fINaLp*hLp + hL*(1.0 - fINaLp)) # A/F
+fINaLp = 1.0/(1.0 + KmCaMK/CaMKa)
+hLss = 1.0/(exp((v + 87.61)/7.488) + 1.0)
+hLssp = 1.0/(exp((v + 93.81)/7.488) + 1.0)
+mLss = 1.0/(exp((-(v + 42.85))/5.264) + 1.0)
+thLp = 3.0*thL # ms
+tmL = 0.06487*exp(-((v - 1*4.823)/51.12)**2.0) + 0.1292*exp(-((v + 45.79)/15.54)**2.0) # ms
+dhL_dt = (-hL + hLss)/thL
+dhLp_dt = (-hLp + hLssp)/thLp
+dmL_dt = (-mL + mLss)/tmL
+
+expressions("ICab")
+ICab_ICab = ((vffrt*(PCab*4.0))*(-cao*gamma_cao + (cai*gamma_cai)*exp(2.0*vfrt)))/(exp(2.0*vfrt) - 1*1.0) # A/F
+
+expressions("ICl")
+IClCa = IClCa_junc + IClCa_sl # A/F
+IClCa_junc = ((Fjunc*GClCa)/(KdClCa/cass + 1.0))*(-EClss + v) # A/F
+IClCa_sl = ((GClCa*(1.0 - Fjunc))/(KdClCa/cai + 1.0))*(-ECl + v) # A/F
+IClb = GClb*(-ECl + v) # A/F
+
+expressions("INa")
+INa_INa = (m**3.0*(GNa*(-ENa + v)))*(j*(h*(1.0 - fINap)) + jp*(fINap*hp)) # A/F
+ah = Conditional(Gt(v, -1*40.0), 0.0, 4.43126792958051e-7*exp(-0.147058823529412*v))
+aj = Conditional(Gt(v, -1*40.0), 0.0, -(v + 37.78)*(25428.0*exp(0.28831*v) + 6.948e-6)*exp(-0.04391*v)/(50262745825.954*exp(0.311*v) + 1.0))
+bh = Conditional(Gt(v, -1*40.0), 0.77*exp(0.0900900900900901*v)/(0.13*exp(0.0900900900900901*v) + 0.0497581410839387), 2.7*exp(0.079*v) + 310000.0*exp(0.3485*v))
+bj = Conditional(Gt(v, -1*40.0), 0.6*exp(0.157*v)/(1.0*exp(0.1*v) + 0.0407622039783662), 0.02424*exp(0.12728*v)/(1.0*exp(0.1378*v) + 0.00396086833990426))
+fINap = 1.0/(1.0 + KmCaMK/CaMKa)
+hss = 1.0/((exp((v + 71.55)/7.43) + 1.0)**2.0)
+hssp = 1.0/((exp((v + 77.55)/7.43) + 1.0)**2.0)
+jss = hss
+mss = 1.0/((exp((-(v + 56.86))/9.03) + 1.0)**2.0)
+th = 1.0/(ah + bh) # ms
+tj = 1.0/(aj + bj) # ms
+tjp = 1.46*tj # ms
+tm = 0.06487*exp(-((v - 1*4.823)/51.12)**2.0) + 0.1292*exp(-((v + 45.79)/15.54)**2.0) # ms
+dh_dt = (-h + hss)/th
+dhp_dt = (-hp + hssp)/th
+dj_dt = (-j + jss)/tj
+djp_dt = (-jp + jss)/tjp
+dm_dt = (-m + mss)/tm
+
+expressions("INab")
+INab_INab = ((PNab*vffrt)*(nai*exp(vfrt) - nao))/(exp(vfrt) - 1*1.0) # A/F
+
+expressions("I_katp")
+I_katp_I_katp = (bkik*(akik*(fkatp*gkatp)))*(-EK + v) # A/F
+akik = (ko/K_o_n)**0.24
+bkik = 1.0/((A_atp/K_atp)**2.0 + 1.0)
+
+expressions("IpCa")
+IpCa_IpCa = (GpCa*cai)/(KmCap + cai) # A/F
+
+expressions("membrane")
+Istim = Conditional(And(Le(i_Stim_Start, time), Ge(i_Stim_PulseDuration, -i_Stim_Period*floor(-(i_Stim_Start - time)/i_Stim_Period) - i_Stim_Start + time)), i_Stim_Amplitude, 0.0) # A/F
+vffrt = (F*(F*v))/((R*T)) # C/mol
+vfrt = (F*v)/((R*T))
+dv_dt = -(Istim + (I_katp_I_katp + (IClb + (IClCa + (ICab_ICab + (IpCa_IpCa + (IKb_IKb + (INab_INab + (INaK_INaK + (INaCa_ss + (INaCa_i + (IK1_IK1 + (IKs_IKs + (IKr_IKr + (ICaK + (ICaNa + (ICaL_ICaL + (Ito_Ito + (INaL_INaL + INa_INa))))))))))))))))))) # mV
+
+expressions("diff")
+Jdiff = (-cai + cass)/tauCa # mM/ms
+JdiffCl = (-cli + clss)/tauNa # mM/ms
+JdiffK = (-ki + kss)/tauK # mM/ms
+JdiffNa = (-nai + nass)/tauNa # mM/ms
+
+expressions("SERCA")
+Jleak = (0.0048825*cansr)/15.0 # mM/ms
+Jup = Jup_b*(-Jleak + (Jupnp*(1.0 - fJupp) + Jupp*fJupp)) # mM/ms
+Jupnp = (cai*(upScale*0.005425))/(cai + 0.00092) # mM/ms
+Jupp = (cai*((upScale*2.75)*0.005425))/((cai + 0.00092) - 1*0.00017) # mM/ms
+fJupp = 1.0/(1.0 + KmCaMK/CaMKa)
+upScale = Conditional(Eq(celltype, 1.0), 1.3, 1.0)
+
+expressions("ryr")
+Jrel = Jrel_b*(Jrel_np*(1.0 - fJrelp) + Jrel_p*fJrelp) # mM/ms
+Jrel_inf = Conditional(Eq(celltype, 2.0), 1.7*Jrel_inf_b, Jrel_inf_b) # mM/ms
+Jrel_inf_b = ((ICaL_ss*(-a_rel))/1.0)/((cajsr_half/cajsr)**8.0 + 1.0) # mM/ms
+Jrel_infp = Conditional(Eq(celltype, 2.0), 1.7*Jrel_infp_b, Jrel_infp_b) # mM/ms
+Jrel_infp_b = ((ICaL_ss*(-a_relp))/1.0)/((cajsr_half/cajsr)**8.0 + 1.0) # mM/ms
+a_rel = (0.5*bt)/1.0 # mM/ms
+a_relp = (0.5*btp)/1.0 # mM/ms
+btp = 1.25*bt # ms
+fJrelp = 1.0/(1.0 + KmCaMK/CaMKa)
+tau_rel = Conditional(Lt(tau_rel_b, 0.001), 0.001, tau_rel_b) # ms
+tau_rel_b = bt/(1.0 + 0.0123/cajsr) # ms
+tau_relp = Conditional(Lt(tau_relp_b, 0.001), 0.001, tau_relp_b) # ms
+tau_relp_b = btp/(1.0 + 0.0123/cajsr) # ms
+dJrel_np_dt = (Jrel_inf - Jrel_np)/tau_rel # mM/ms
+dJrel_p_dt = (Jrel_infp - Jrel_p)/tau_relp # mM/ms
+
+expressions("trans_flux")
+Jtr = (-cajsr + cansr)/60.0 # mM/ms
+
+
+states("mechanics-ep",
+cai=0.0001,
+XS=0,
+XW=0,
+CaTrpn=1e-8,
+TmB=1
+)
+
+states("mechanics",
+Zetas=0,
+Zetaw=0,
+Cd=0
+)
+
+parameters("mechanics-ep","mechanics",
+emcoupling=1,
+lmbda=1,
+dLambda=0,
+mode=1,
+isacs=0,
+calib=1,
+ktrpn = 0.1,
+ntrpn = 2,
+Trpn50 = 0.35,
+rw = 0.5,
+rs = 0.25,
+gammas = 0.0085,
+gammaw = 0.615,
+phi = 2.23,
+Tot_A = 25,
+Beta0 = 2.3,
+Beta1 = -2.4,
+cat50_ref = 0.805,
+Tref = 120,
+kuw = 0.182,
+kws = 0.012,
+ku=0.04,
+ntm=2.4,
+p_a = 2.1,
+p_b = 9.1,
+p_k = 7,
+etal = 200,
+etas = 20)
+
+expressions("mechanics-ep")
+XS_max = Conditional(Gt(XS, 0), XS, 0)
+XW_max = Conditional(Gt(XW, 0), XW, 0)
+CaTrpn_max = Conditional(Gt(CaTrpn, 0), CaTrpn, 0)
+kwu = kuw*(1/rw-1)-kws
+ksu = kws*rw*(1/rs-1)
+Aw = Tot_A*rs/((1-rs)*rw+rs)
+As = Aw
+cw = phi*kuw*((1-rs)*(1-rw))/((1-rs)*rw)
+cs = phi*kws*((1-rs)*rw)/rs
+XU = (1-TmB)-XS-XW
+gammawu = gammaw*Abs(Zetaw)
+gammasu  = gammas*Conditional(Gt(Gt(Zetas,0)*Zetas, Lt(Zetas, -1)*(-Zetas-1)), Gt(Zetas,0)*Zetas, Lt(Zetas, -1)*(-Zetas-1))
+dXS_dt = kws*XW - ksu*XS - gammasu*XS
+dXW_dt = kuw*XU - kwu*XW - kws*XW - gammawu*XW
+cat50 = (cat50_ref+Beta1*(lambda_min12-1))
+dCaTrpn_dt = ktrpn*(((cai*1000/cat50)**ntrpn)*(1-CaTrpn)-CaTrpn)
+kb = ku*Trpn50**ntm/(1-rs-(1-rs)*rw)
+dTmB_dt =  kb*Conditional(Lt(CaTrpn**(-ntm/2), 100), CaTrpn**(-ntm/2), 100)*XU-ku*CaTrpn**(ntm/2)*TmB
+Bcai=1.0/(1.0+cmdnmax*kmcmdn/(kmcmdn+cai)**2.0)
+J_TRPN = dCaTrpn_dt*trpnmax
+dcai_dt=Bcai*(-(IpCa_IpCa+ICab_ICab-2.0*INaCa_i/3)*Acap/(2.0*F*vmyo)-Jup*vnsr/vmyo+Jdiff*vss/vmyo - J_TRPN)
+
+
+expressions("mechanics-ep", "mechanics")
+lambda_min12 = Conditional(Lt(lmbda, 1.2), lmbda, 1.2)
+
+expressions("mechanics")
+Aw = Tot_A*rs/((1-rs)*rw+rs)
+As = Aw
+cw = phi*kuw*((1-rs)*(1-rw))/((1-rs)*rw)
+cs = phi*kws*((1-rs)*rw)/rs
+dZetas_dt = As*dLambda - cs*Zetas
+dZetaw_dt = Aw*dLambda - cw*Zetaw
+lambda_min087 = Conditional(Lt(lambda_min12, 0.87), lambda_min12, 0.87)
+h_lambda_prima = 1+Beta0*(lambda_min12+lambda_min087-1.87)
+h_lambda = Conditional(Gt(h_lambda_prima, 0), h_lambda_prima, 0)
+Ta = h_lambda*(Tref/rs)*(XS*(Zetas+1) + XW*Zetaw)
+C = lambda_min12 - 1
+dCd = C - Cd
+eta = Conditional(Lt(dCd, 0), etas, etal)
+dCd_dt = p_k * (C - Cd) / eta
+Fd = eta * dCd
+F1 = (exp( p_b * C) - 1)
+Tp = p_a * (F1 + Fd)
+Ttot = Ta + Tp
