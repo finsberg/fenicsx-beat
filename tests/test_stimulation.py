@@ -15,14 +15,7 @@ def test_single_stimulation():
     start = 0.5
     dt = 0.01
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
-    # expr = dolfin.Expression(
-    #     "(t >= start && t <= end )? value : 0.0",
-    #     value=value,
-    #     start=start,
-    #     end=end,
-    #     t=time,
-    #     degree=0,
-    # )
+
     expr = I_s = ufl.conditional(ufl.And(ufl.ge(time, start), ufl.le(time, end)), value, 0.0)
     I_s = beat.stimulation.Stimulus(dZ=ufl.dx(domain=mesh), expr=expr)
 

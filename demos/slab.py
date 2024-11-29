@@ -257,7 +257,7 @@ shutil.rmtree(vtxfname, ignore_errors=True)
 shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
-    results_folder / "slab.bp",
+    vtxfname,
     [solver.pde.state],
     engine="BP4",
 )
