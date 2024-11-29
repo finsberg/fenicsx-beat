@@ -215,7 +215,8 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
         arr = self.v_ode.x.array.copy()
         for marker in self._marker_values:
             arr[self._inds[marker]] = self._values[marker][self.v_index[marker], :]
-        self.v_ode.x[:] = arr
+
+        self.v_ode.x.array[:] = arr
 
     def from_dolfin(self) -> None:
         """Assign values from dolfinx function to numpy array"""

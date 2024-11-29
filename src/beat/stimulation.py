@@ -34,6 +34,8 @@ def define_stimulus(
     # breakpoint()
     dim = subdomain_data.dim
 
+    # breakpoint()
+
     if isinstance(amplitude, ureg.Quantity):
         A = amplitude
     else:
