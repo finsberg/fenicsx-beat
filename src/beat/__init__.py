@@ -6,7 +6,6 @@ from . import (
     monodomain_model,
     monodomain_solver,
     odesolver,
-    postprocess,
     single_cell,
     stimulation,
     utils,
@@ -27,6 +26,5 @@ __all__ = [
     "geometry",
     "single_cell",
     "stimulation",
-    "postprocess",
     "ecg",
 ]

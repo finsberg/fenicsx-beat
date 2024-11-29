@@ -18,6 +18,7 @@ import scifem
 import beat
 import pyvista
 
+import beat.postprocess
 from beat.geometry import Geometry
 
 comm = MPI.COMM_WORLD
@@ -46,7 +47,9 @@ def S1_subdomain(x):
 
 
 facets = dolfinx.mesh.locate_entities_boundary(
-    mesh, mesh.topology.dim - 1, S1_subdomain,
+    mesh,
+    mesh.topology.dim - 1,
+    S1_subdomain,
 )
 ffun = dolfinx.mesh.meshtags(
     mesh,
@@ -130,7 +133,8 @@ if not model_path.is_file():
     here = Path.cwd()
     ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
-        ode, scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen],
+        ode,
+        scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen],
     )
     model_path.write_text(code)
 
