@@ -336,7 +336,7 @@ t1 = np.inf
 t2 = np.inf
 phie = []
 ecg = beat.ecg.ECGRecovery(v=v, mesh=mesh, sigma_b=1.0, point=p_ecg)
-gif_file = results_folder / "voltage_slab_time.gif"
+gif_file = Path("voltage_slab_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:

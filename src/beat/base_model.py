@@ -130,13 +130,13 @@ class BaseModel:
         }
 
     @abc.abstractmethod
-    def variational_forms(self, k_n: Expr | float) -> tuple[ufl.Form, ufl.Form]:
+    def variational_forms(self, dt: Expr | float) -> tuple[ufl.Form, ufl.Form]:
         """Create the variational forms corresponding to the given
         discretization of the given system of equations.
 
         Parameters
         ----------
-        k_n : Expr | float
+        dt : Expr | float
             The time step
 
         Returns
@@ -169,15 +169,13 @@ class BaseModel:
 
     def step(self, interval):
         """
-        Solve on the given time step (t0, t1).
+        Perform a single time step.
 
-        *Arguments*
-          interval (:py:class:`tuple`)
-            The time interval (t0, t1) for the step
+        Parameters
+        ----------
+        interval : tuple[float, float]
+            The time interval (T0, T)
 
-        *Invariants*
-          Assuming that v_ is in the correct state for t0, gives
-          self.v in correct state at t1.
         """
 
         # timer = dolfin.Timer("PDE Step")
@@ -208,31 +206,22 @@ class BaseModel:
         self,
         interval: tuple[float, float],
         dt: float | None = None,
-    ):
+    ) -> Results:
         """
-        Solve the discretization on a given time interval (t0, t1)
-        with a given timestep dt and return generator for a tuple of
-        the interval and the current solution.
+        Solve on the given time interval.
 
-        *Arguments*
-          interval (:py:class:`tuple`)
-            The time interval for the solve given by (t0, t1)
-          dt (int, optional)
-            The timestep for the solve. Defaults to length of interval
+        Parameters
+        ----------
+        interval : tuple[float, float]
+            The time interval (T0, T)
+        dt : float, optional
+            The time step, by default None
 
-        *Returns*
-          (timestep, solution_field) via (:py:class:`genexpr`)
+        Returns
+        -------
+        Results
+            The results of the solution
 
-        *Example of usage*::
-
-          # Create generator
-          solutions = solver.solve((0.0, 1.0), 0.1)
-
-          # Iterate over generator (computes solutions as you go)
-          for (interval, solution_fields) in solutions:
-            (t0, t1) = interval
-            v_, v = solution_fields
-            # do something with the solutions
         """
 
         # Initial set-up
