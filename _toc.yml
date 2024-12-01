@@ -9,6 +9,7 @@ parts:
     chapters:
     - file: demos/diffusion.py
     - file: demos/simple_ode.py
+    - file: demos/lv_endocardial.py
     - file: demos/slab.py
     - file: demos/niederer_benchmark.py
     - file: demos/monodomain_convergence.py

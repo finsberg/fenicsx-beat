@@ -134,7 +134,7 @@ if not model_path.is_file():
     ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
         ode,
-        scheme=[gotranx.schemes.Scheme.forward_generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
 
@@ -155,7 +155,7 @@ print("Get steady states")
 nbeats = 2  # Should be set to at least 200
 init_states = {
     0: beat.single_cell.get_steady_state(
-        fun=model["forward_generalized_rush_larsen"],
+        fun=model["generalized_rush_larsen"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=2),
         outdir=results_folder / "mid",
@@ -165,7 +165,7 @@ init_states = {
         dt=0.05,
     ),
     1: beat.single_cell.get_steady_state(
-        fun=model["forward_generalized_rush_larsen"],
+        fun=model["generalized_rush_larsen"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=0),
         outdir=results_folder / "endo",
@@ -179,7 +179,7 @@ init_states = {
         dt=0.05,
     ),
     2: beat.single_cell.get_steady_state(
-        fun=model["forward_generalized_rush_larsen"],
+        fun=model["generalized_rush_larsen"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=1),
         outdir=results_folder / "epi",
@@ -196,9 +196,9 @@ parameters = {
     2: model["init_parameter_values"](i_Stim_Amplitude=0.0, celltype=1),
 }
 fun = {
-    0: model["forward_generalized_rush_larsen"],
-    1: model["forward_generalized_rush_larsen"],
-    2: model["forward_generalized_rush_larsen"],
+    0: model["generalized_rush_larsen"],
+    1: model["generalized_rush_larsen"],
+    2: model["generalized_rush_larsen"],
 }
 v_index = {
     0: model["state_index"]("v"),

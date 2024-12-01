@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 import logging
 from enum import Enum, auto
-from typing import Any, NamedTuple, Sequence
+from typing import Any, Literal, NamedTuple, Sequence
 
 from petsc4py import PETSc
 
@@ -114,7 +114,27 @@ class BaseModel:
     def assign_previous(self) -> None: ...
 
     @staticmethod
-    def default_parameters():
+    def default_parameters(
+        solver_type: Literal["iterative", "direct"] = "direct",
+    ) -> dict[str, Any]:
+        if solver_type == "iterative":
+            petsc_options = {
+                "ksp_type": "cg",
+                # "pc_type": "hypre",
+                "pc_type": "petsc_amg",
+                "pc_hypre_type": "boomeramg",
+                # "ksp_norm_type": "unpreconditioned",
+                # "ksp_atol": 1e-15,
+                # "ksp_rtol": 1e-10,
+                # "ksp_max_it": 10_000,
+                # "ksp_error_if_not_converged": False,
+            }
+        else:
+            petsc_options = {
+                "ksp_type": "preonly",
+                "pc_type": "lu",
+                "pc_factor_mat_solver_type": "mumps",
+            }
         return {
             "theta": 0.5,
             "degree": 1,
@@ -122,11 +142,7 @@ class BaseModel:
             "default_timestep": 1.0,
             "jit_options": {},
             "form_compiler_options": {},
-            "petsc_options": {
-                "ksp_type": "preonly",
-                "pc_type": "lu",
-                "pc_factor_mat_solver_type": "mumps",
-            },
+            "petsc_options": petsc_options,
         }
 
     @abc.abstractmethod
