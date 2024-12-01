@@ -1,3 +1,5 @@
+![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/logo.png)
+
 # fenicsx-beat
 Cardiac electrophysiology simulator in FEniCSx
 
