@@ -1,0 +1,27 @@
+name: Test package (MPI)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+
+  test-code:
+    # This code depends on the result of check-code
+    runs-on: ubuntu-latest
+    timeout-minutes: 10   # Tests shouldn't use more than 10 minutes to run
+    container:
+      image: ghcr.io/fenics/dolfinx/dolfinx:v0.9.0
+
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install package
+        run: |
+          python3 -m pip install scifem --no-build-isolation
+          python3 -m pip install -e .[test]
+
+      - name: Run tests
+        run: mpirun -n 2 python3 -m pytest -v  -m "not skip_in_parallel"
