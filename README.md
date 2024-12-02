@@ -6,9 +6,6 @@ Cardiac electrophysiology simulator in FEniCSx
 - Source code: https://github.com/finsberg/fenicsx-beat
 - Documentation: https://finsberg.github.io/fenicsx-beat
 
-> [!NOTE]
-> This library is under development and not ready for users. Expect breaking changes.
-
 
 ## Install
 You can install the library with pip
