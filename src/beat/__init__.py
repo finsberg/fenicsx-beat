@@ -12,6 +12,7 @@ from . import (
 )
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
+from .stimulation import Stimulus
 
 __all__ = [
     "monodomain_model",
@@ -27,4 +28,5 @@ __all__ = [
     "single_cell",
     "stimulation",
     "ecg",
+    "Stimulus",
 ]

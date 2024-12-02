@@ -4,7 +4,7 @@ root: README
 parts:
   - caption: Getting started
     chapters:
-    - file: docs/quickstart.md
+    - file: demos/fitzhughnagumo.py
   - caption: Examples
     chapters:
     - file: demos/diffusion.py
