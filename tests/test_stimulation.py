@@ -16,7 +16,7 @@ def test_single_stimulation():
     dt = 0.01
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
 
-    expr = I_s = ufl.conditional(ufl.And(ufl.ge(time, start), ufl.le(time, end)), value, 0.0)
+    expr = ufl.conditional(ufl.And(ufl.ge(time, start), ufl.le(time, end)), value, 0.0)
     I_s = beat.stimulation.Stimulus(dZ=ufl.dx(domain=mesh), expr=expr)
 
     pde = beat.MonodomainModel(
@@ -58,8 +58,8 @@ def test_double_stimulation():
     end2 = 1.5
 
     time = dolfinx.fem.Constant(mesh, 0.0)
-    expr1 = I_s = ufl.conditional(ufl.And(ufl.ge(time, start1), ufl.le(time, end1)), value1, 0.0)
-    expr2 = I_s = ufl.conditional(ufl.And(ufl.ge(time, start2), ufl.le(time, end2)), value2, 0.0)
+    expr1 = ufl.conditional(ufl.And(ufl.ge(time, start1), ufl.le(time, end1)), value1, 0.0)
+    expr2 = ufl.conditional(ufl.And(ufl.ge(time, start2), ufl.le(time, end2)), value2, 0.0)
     dx = ufl.dx(domain=mesh)
     I_s = [
         beat.stimulation.Stimulus(dZ=dx, expr=expr1),

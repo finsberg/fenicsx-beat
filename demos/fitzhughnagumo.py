@@ -54,7 +54,9 @@ def rhs(t, states, parameters):
     values = np.zeros_like(states, dtype=np.float64)
     V_amp = V_peak - V_rest
     i_Stim = np.where(
-        t >= stim_start and t <= stim_start + stim_duration, stim_amplitude, 0,
+        t >= stim_start and t <= stim_start + stim_duration,
+        stim_amplitude,
+        0,
     )
     ds_dt = b * (-c_3 * s + (V - V_rest))
     values[0] = ds_dt
@@ -291,4 +293,4 @@ if pyvista:
 #
 
 
-# ![_](niederer_benchmark.gif)
+# ![_](fitzhughnagumo.gif)
