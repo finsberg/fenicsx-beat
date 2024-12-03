@@ -34,7 +34,7 @@ if not geodir.exists():
     cardiac_geometries.mesh.biv_ellipsoid(
         comm=comm,
         outdir=geodir,
-        char_length=0.3,  # Reduce this value to get a finer mesh
+        char_length=0.3,  # Reduce this value to get a finer mesh (should be at least 0.2)
         center_lv_y=0.2,
         center_lv_z=0.0,
         a_endo_lv=5.0,
@@ -58,8 +58,7 @@ geo = cardiac_geometries.geometry.Geometry.from_folder(
     comm=comm,
     folder=geodir,
 )
-mesh_unit = "m"
-geo.mesh.geometry.x[:] *= 3e-2
+mesh_unit = "cm"
 
 # Let us plot the geometry
 
@@ -330,7 +329,7 @@ save_freq = round(save_every_ms / dt)
 
 # And we will run the simulation for 10 ms (one beat is 1000 ms so you would typically run for at least 1000 ms)
 
-end_time = 500.0
+end_time = 10.0
 t = 0.0
 i = 0
 while t < end_time + 1e-12:
@@ -447,7 +446,7 @@ for i, name in enumerate(
 fig.savefig(results_folder / "ecg_12_leads.png")
 
 
-# Here are the results from a pre-computed simulation (note that the conduction here seems to be a bit too slow):
+# Here are the results from a pre-computed simulation using at characteristic length of the mesh of 0.1 and run it for 500 ms (note that the conduction here seems to be a bit too slow):
 
 # ![volt](../docs/_static/voltage_biv_ellipsoid_time.gif "volt")
 
