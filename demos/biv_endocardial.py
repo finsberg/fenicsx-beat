@@ -297,8 +297,8 @@ solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
 
-vtxfname = results_folder / "lv.bp"
-checkpointfname = results_folder / "lv_checkpoint.bp"
+vtxfname = results_folder / "biv.bp"
+checkpointfname = results_folder / "biv_checkpoint.bp"
 
 # Make sure to remove the files if they already exist
 
