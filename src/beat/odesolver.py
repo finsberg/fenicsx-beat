@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
-from typing import Any, Callable, NamedTuple
+from typing import Any, Callable, NamedTuple, Sequence
 
 import dolfinx
 import numpy as np
 import numpy.typing as npt
+import ufl
 
+from . import stimulation
 from .utils import local_project
 
 EPS = 1e-12
@@ -19,13 +21,13 @@ class ODEResults(NamedTuple):
 
 
 def solve(
-    fun: np.NDArray,
+    fun: npt.NDArray,
     t_bound: float,
-    states: np.NDArray,
-    V: np.NDArray,
+    states: npt.NDArray,
+    V: npt.NDArray,
     V_index: int,
     dt: float,
-    parameters: np.NDArray,
+    parameters: npt.NDArray,
     t0: float = 0.0,
     extra: dict[str, float | npt.NDArray] | None = None,
 ):
@@ -111,7 +113,10 @@ class DolfinODESolver(BaseDolfinODESolver):
     parameters: npt.NDArray
     fun: Callable
     num_states: int
+    i_ion: Callable
+    C_m: float
     v_index: int = 0
+    I_s: stimulation.Stimulus | Sequence[stimulation.Stimulus] | ufl.Coefficient | None = None
 
     def __post_init__(self):
         if np.shape(self.init_states) == self.shape:
@@ -120,12 +125,39 @@ class DolfinODESolver(BaseDolfinODESolver):
             self._values = np.zeros(self.shape)
             self._values.T[:] = self.init_states
 
+        parameters = np.zeros((self.num_parameters, self.num_points))
+        parameters.T[:] = self.parameters
+
         self._ode = ODESystemSolver(
             fun=self.fun,
             states=self._values,
-            parameters=self.parameters,
+            parameters=parameters,
         )
         self._initialize_metadata()
+        self._I_s = stimulation.transform_I_s(self.I_s)
+        stim_space = self.v_ode.function_space
+        self._i_stim_zero = dolfinx.fem.Function(stim_space)
+        self.stimulus_functions = [
+            stimulation.StimulusFunction(
+                stimulus=i,
+                function=dolfinx.fem.Function(stim_space, name=f"stim_{i}"),
+            )
+            for i in self._I_s
+        ]
+
+    @property
+    def I_stim(self):
+        i_stim = self._i_stim_zero.x.array.copy()
+        for i in self.stimulus_functions:
+            i_stim += i.function.x.array
+        # breakpoint()
+        return i_stim
+
+    def update_stim(self):
+        for i in self.stimulus_functions:
+            i.update()
+        # print("I_stim = ", self.I_stim)
+        # self._ode.parameters[68, :] = self.I_stim
 
     def to_dolfin(self) -> None:
         """Assign values from numpy array to dolfin function"""
@@ -153,7 +185,14 @@ class DolfinODESolver(BaseDolfinODESolver):
         return self.v_ode.x.array.size
 
     def step(self, t0: float, dt: float):
+        self.update_stim()
         self._ode.step(t0=t0, dt=dt)
+        # if t0 > 1.1:
+        #     breakpoint()
+        self.from_dolfin()
+        self.v_ode.x.array[:] += (dt / self.C_m) * (
+            self.i_ion(t0, self.values, self.parameters) - self.I_stim
+        )
 
     @property
     def full_values(self):

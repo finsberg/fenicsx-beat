@@ -1,4 +1,4 @@
-from typing import NamedTuple
+from typing import NamedTuple, Sequence
 
 import dolfinx
 import ufl
@@ -52,7 +52,9 @@ def define_stimulus(
         unit = f"uA/{mesh_unit}**{dim - 1}"
 
     amp = (A / chi).to(unit).magnitude
+
     I_s = ufl.conditional(ufl.And(ufl.ge(time, start), ufl.le(time, start + duration)), amp, 0.0)
+
     # I_s = dolfin.Expression(
     #     "std::fmod(time,PCL) >= start "
     #     "? (std::fmod(time,PCL) <= (duration + start) ? amplitude : 0.0)"
@@ -72,3 +74,33 @@ def define_stimulus(
     elif dim == mesh.topology.dim:
         dZ = ufl.Measure("dx", domain=mesh, subdomain_data=subdomain_data)
     return Stimulus(dZ=dZ, marker=marker, expr=I_s)
+
+
+class StimulusFunction(NamedTuple):
+    stimulus: Stimulus
+    function: dolfinx.fem.Function
+    # expr: dolfinx.fem.Expression
+
+    def update(self):
+        V = self.function.function_space
+        expr = dolfinx.fem.Expression(self.stimulus, V.element.interpolation_points())
+        self.function.interpolate(expr)
+        # print(self.function.x.array)
+        # print("Updated stimulus function")
+
+
+def transform_I_s(
+    I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None,
+    dZ: ufl.Measure | None = None,
+) -> list[Stimulus]:
+    if I_s is None:
+        # assert dZ is not None, "dZ cannot be None if I_s is None"
+        return []
+    if isinstance(I_s, Stimulus):
+        return [I_s]
+    if isinstance(I_s, ufl.core.expr.Expr):
+        assert dZ is not None, "dZ cannot be None if I_s is an expression"
+        return [Stimulus(expr=I_s, dZ=dZ)]
+
+    # FIXME: Might need more checks here
+    return list(I_s)

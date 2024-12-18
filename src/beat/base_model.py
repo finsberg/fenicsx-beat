@@ -12,7 +12,7 @@ import dolfinx.fem.petsc
 import ufl
 from ufl.core.expr import Expr
 
-from .stimulation import Stimulus
+from . import stimulation
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +25,6 @@ class Status(str, Enum):
 class Results(NamedTuple):
     state: dolfinx.fem.Function
     status: Status
-
-
-def _transform_I_s(
-    I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None,
-    dZ: ufl.Measure,
-) -> list[Stimulus]:
-    if I_s is None:
-        return [Stimulus(expr=ufl.zero(), dZ=dZ)]
-    if isinstance(I_s, Stimulus):
-        return [I_s]
-    if isinstance(I_s, ufl.core.expr.Expr):
-        return [Stimulus(expr=I_s, dZ=dZ)]
-
-    # FIXME: Might need more checks here
-    return list(I_s)
 
 
 class BaseModel:
@@ -73,7 +58,9 @@ class BaseModel:
         mesh: dolfinx.mesh.Mesh,
         dx: ufl.Measure | None = None,
         params: dict[str, Any] | None = None,
-        I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        I_s: (
+            stimulation.Stimulus | Sequence[stimulation.Stimulus] | ufl.Coefficient | None
+        ) = None,
         jit_options: dict[str, Any] | None = None,
         form_compiler_options: dict[str, Any] | None = None,
         petsc_options: dict[str, Any] | None = None,
@@ -86,7 +73,17 @@ class BaseModel:
         if params is not None:
             self.parameters.update(params)
 
-        self._I_s = _transform_I_s(I_s, dZ=self.dx)
+        self._I_s = stimulation.transform_I_s(I_s, dZ=self.dx)
+        # breakpoint()
+        stim_space = dolfinx.fem.functionspace(mesh, ("P", 1))
+        self.stimulus_functions = [
+            stimulation.StimulusFunction(
+                stimulus=i,
+                function=dolfinx.fem.Function(stim_space, name=f"stim_{i}"),
+                # expr=dolfinx.fem.Expression(i.expr, stim_space.element.interpolation_points()),
+            )
+            for i in self._I_s
+        ]
 
         self._setup_state_space()
 
@@ -102,6 +99,10 @@ class BaseModel:
         )
         dolfinx.fem.petsc.assemble_matrix(self._solver.A, self._solver.a)  # type: ignore
         self._solver.A.assemble()
+
+    def update_stim(self):
+        for i in self.stimulus_functions:
+            i.update()
 
     @abc.abstractmethod
     def _setup_state_space(self) -> None: ...
@@ -202,6 +203,7 @@ class BaseModel:
         theta = self.parameters["theta"]
         t = t0 + theta * dt
         self.time.value = t
+        self.update_stim()
 
         # Update matrix and linear solvers etc as needed
         timestep_unchanged = abs(dt - float(self._timestep)) < 1.0e-12
@@ -216,7 +218,8 @@ class BaseModel:
         self.state.x.scatter_forward()
 
     def _G_stim(self, w):
-        return sum([i.expr * w * i.dz for i in self._I_s])
+        # return sum([i.expr * w * i.dz for i in self._I_s])
+        return sum([i.function * w * i.stimulus.dz for i in self.stimulus_functions])
 
     def solve(
         self,
