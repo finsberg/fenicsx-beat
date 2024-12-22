@@ -12,6 +12,8 @@ parts:
     - file: demos/lv_endocardial.py
     - file: demos/slab.py
     - file: demos/niederer_benchmark.py
+    - file: demos/pvc.py
+    - file: demos/pace_train.py
     - file: demos/biv_endocardial.py
     - file: demos/monodomain_convergence.py
   - caption: Verification
