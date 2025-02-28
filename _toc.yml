@@ -16,6 +16,7 @@ parts:
     - file: demos/pace_train.py
     - file: demos/biv_endocardial.py
     - file: demos/monodomain_convergence.py
+    - file: demos/ukb_atlas.py
   - caption: Verification
     chapters:
     - file: tests/README
