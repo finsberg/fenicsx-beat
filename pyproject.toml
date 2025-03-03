@@ -38,7 +38,8 @@ pypi = [
 demos = [
    "cardiac-geometriesx",
    "fenicsx-ldrb",
-   "gotranx"
+   "gotranx",
+   "ukb-atlas",
 ]
 docs = [
    "jupyter-book",
