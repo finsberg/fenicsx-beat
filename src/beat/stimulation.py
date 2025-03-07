@@ -109,3 +109,4 @@ def generate_random_activation(
             stim_amplitude,
             0.0,
         )
+    return stim_expr
