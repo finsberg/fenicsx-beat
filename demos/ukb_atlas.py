@@ -1,4 +1,4 @@
-# # Purkinje like stimulation of a Bi-ventricular ellipsoid
+# # Purkinje like stimulation of a realistic BiV geometry
 # In this example we will use a realistic geometry generated from the mean shape of an   [atlas from the UK Biobank](https://computationalphysiology.github.io/ukb-atlas) of 630 healthy subjects.
 # We will also stimulate it using a random activation pattern on the endocardial layer of the left and right ventricle.
 
