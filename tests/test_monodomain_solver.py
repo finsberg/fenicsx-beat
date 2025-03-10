@@ -49,10 +49,7 @@ def test_monodomain_splitting_analytic(odespace):
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
     x = ufl.SpatialCoordinate(mesh)
 
-    t_var = ufl.variable(time)
-
-    s_exact = ufl.replace(s_exact_func(x, t_var), {t_var: T})
-    I_s = ac_func(x, t_var)
+    I_s = ac_func(x, time)
 
     pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, I_s=I_s)
 
@@ -60,7 +57,9 @@ def test_monodomain_splitting_analytic(odespace):
     v_ode = dolfinx.fem.Function(V_ode)
 
     s = dolfinx.fem.Function(V_ode)
-    s.interpolate(dolfinx.fem.Expression(s_exact, V_ode.element.interpolation_points()))
+    s.interpolate(
+        dolfinx.fem.Expression(s_exact_func(x, time), V_ode.element.interpolation_points()),
+    )
 
     s_arr = s.x.array
     init_states = np.zeros((2, s_arr.size))
@@ -78,11 +77,11 @@ def test_monodomain_splitting_analytic(odespace):
     solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
     solver.solve((t0, T), dt=dt)
 
-    v_exact = ufl.replace(v_exact_func(x, t_var), {t_var: T})
+    v_exact = v_exact_func(x, time)
     error = dolfinx.fem.form((pde.state - v_exact) ** 2 * ufl.dx)
     E = np.sqrt(comm.allreduce(dolfinx.fem.assemble_scalar(error), MPI.SUM))
     print("Error: ", E, odespace)
-    assert E < 0.005
+    assert E < 0.002
 
 
 @pytest.mark.parametrize(
@@ -108,10 +107,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
         time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
         x = ufl.SpatialCoordinate(mesh)
 
-        t_var = ufl.variable(time)
-
-        s_exact = ufl.replace(s_exact_func(x, t_var), {t_var: T})
-        I_s = ac_func(x, t_var)
+        I_s = ac_func(x, time)
 
         pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, I_s=I_s)
 
@@ -119,7 +115,9 @@ def test_monodomain_splitting_spatial_convergence(odespace):
         v_ode = dolfinx.fem.Function(V_ode)
 
         s = dolfinx.fem.Function(V_ode)
-        s.interpolate(dolfinx.fem.Expression(s_exact, V_ode.element.interpolation_points()))
+        s.interpolate(
+            dolfinx.fem.Expression(s_exact_func(x, time), V_ode.element.interpolation_points()),
+        )
 
         s_arr = s.x.array
         init_states = np.zeros((2, s_arr.size))
@@ -137,8 +135,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
         solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=1.0)
         solver.solve((t0, T), dt=dt)
 
-        v_exact = ufl.replace(v_exact_func(x, t_var), {t_var: T})
-
+        v_exact = v_exact_func(x, time)
         error = dolfinx.fem.form((pde.state - v_exact) ** 2 * ufl.dx)
         E = np.sqrt(comm.allreduce(dolfinx.fem.assemble_scalar(error), MPI.SUM))
         errors.append(E)
@@ -146,7 +143,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
     rates = [np.log(e1 / e2) / np.log(2) for e1, e2 in zip(errors[:-1], errors[1:])]
     cvg_rate = sum(rates) / len(rates)
     # Should be 2
-    assert cvg_rate > 1.5
+    assert cvg_rate > 1.85
 
 
 @pytest.mark.parametrize("theta", [1.0])  # Should also be implemented fro theta=0.5
@@ -177,15 +174,14 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
         time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
         x = ufl.SpatialCoordinate(mesh)
 
-        t_var = ufl.variable(time)
-
-        s_exact = ufl.replace(s_exact_func(x, t_var), {t_var: T})
-        I_s = ac_func(x, t_var)
+        I_s = ac_func(x, time)
 
         pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, I_s=I_s)
 
         s = dolfinx.fem.Function(V_ode)
-        s.interpolate(dolfinx.fem.Expression(s_exact, V_ode.element.interpolation_points()))
+        s.interpolate(
+            dolfinx.fem.Expression(s_exact_func(x, time), V_ode.element.interpolation_points()),
+        )
 
         s_arr = s.x.array
         init_states = np.zeros((2, s_arr.size))
@@ -202,16 +198,16 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
         )
         solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=theta)
         solver.solve((t0, T), dt=dt)
-        v_exact = ufl.replace(v_exact_func(x, t_var), {t_var: T})
+        v_exact = v_exact_func(x, time)
 
         error = dolfinx.fem.form((pde.state - v_exact) ** 2 * ufl.dx)
         E = np.sqrt(comm.allreduce(dolfinx.fem.assemble_scalar(error), MPI.SUM))
         errors.append(E)
 
-    rates = [np.log(e1 / e2) / np.log(2) for e1, e2 in zip(errors[:-1], errors[1:])]
+    rates = [np.log2(e1 / e2) for e1, e2 in zip(errors[:-1], errors[1:])]
     cvg_rate = sum(rates) / len(rates)
 
     print(rates, odespace, theta)
 
     # Should be 1
-    assert cvg_rate > 0.5
+    assert cvg_rate > 1.0
