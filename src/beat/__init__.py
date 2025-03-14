@@ -10,6 +10,7 @@ from . import (
     stimulation,
     utils,
 )
+from .ecg import ECGRecovery
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
 from .stimulation import Stimulus
@@ -29,4 +30,5 @@ __all__ = [
     "stimulation",
     "ecg",
     "Stimulus",
+    "ECGRecovery",
 ]

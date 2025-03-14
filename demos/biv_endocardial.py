@@ -97,7 +97,6 @@ endo_epi = beat.utils.expand_layer_biv(
 
 # Let us plot these markers
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = endo_epi.x.array
@@ -310,7 +309,7 @@ vtx = dolfinx.io.VTXWriter(
     [solver.pde.state],
     engine="BP4",
 )
-adios4dolfinx.write_mesh(checkpointfname, geo.mesh)
+
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -319,7 +318,7 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    adios4dolfinx.write_function_on_input_mesh(checkpointfname, solver.pde.state, time=t, name="v")
 
 
 # We will save results every 1 ms
@@ -344,13 +343,11 @@ while t < end_time + 1e-12:
 
 # Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using adios4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/adios4dolfinx/docs/original_checkpoint.html for more info
 
-mesh = adios4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
-V = dolfinx.fem.functionspace(mesh, ("P", 1))
+V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
 # Now let us create a gif of the voltage over time.
 
-pyvista.start_xvfb()
 plotter_voltage = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = v.x.array
@@ -401,19 +398,18 @@ leads = dict(
     V5=(10.0, 2.0, 0.0),
     V6=(10.0, -6.0, 2.0),
 )
-ecg = {
-    k: beat.ecg.ECGRecovery(v=v, mesh=mesh, sigma_b=1.0, point=p)
-    for k, p in leads.items()
-}
-ecg_traces: dict[str, list[float]] = {k: [] for k in ecg.keys()}
+ecg = beat.ecg.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M)
+ecg_forms = {k: ecg.eval(p) for k, p in leads.items()}
+ecg_traces: dict[str, list[float]] = {k: [] for k in ecg_forms.keys()}
 
 for t in times:
     adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    ecg.solve()
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
-    for k, e in ecg.items():
-        ecg_traces[k].append(e.assemble())
+    for k, e in ecg_forms.items():
+        ecg_traces[k].append(geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM))
 
 plotter_voltage.close()
 # -
@@ -443,6 +439,7 @@ for i, name in enumerate(
     axi = ax.flatten()[i]
     axi.plot(times[: len(y)], y)
     axi.set_title(name.strip("_"))
+fig.tight_layout()
 fig.savefig(results_folder / "ecg_12_leads.png")
 
 

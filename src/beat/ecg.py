@@ -1,72 +1,81 @@
-from dataclasses import dataclass
-from typing import NamedTuple, Sequence
+import logging
+from dataclasses import dataclass, field
+from typing import Any, NamedTuple
+
+from petsc4py import PETSc
 
 import dolfinx
 import numpy as np
 import ufl
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ECGRecovery:
     v: dolfinx.fem.Function
-    mesh: dolfinx.mesh.Mesh
-    sigma_b: dolfinx.fem.Constant | float
+    sigma_b: float | dolfinx.fem.Constant = 1.0
+    C_m: float | dolfinx.fem.Constant = 1.0
     dx: ufl.Measure | None = None
-    point: Sequence[float] | None = None
-    r: dolfinx.fem.Function | None = None
+    M: float = 1.0
+    petsc_options: dict[str, Any] = field(
+        default_factory=lambda: {
+            "ksp_type": "cg",
+            "pc_type": "sor",
+            # "ksp_monitor": None,
+            "ksp_rtol": 1.0e-8,
+            "ksp_atol": 1.0e-8,
+            # "ksp_error_if_not_converged": True,
+        },
+    )
 
     def __post_init__(self):
-        if isinstance(self.sigma_b, float):
-            self._sigma_b = dolfinx.fem.Constant(self.mesh, self.sigma_b)
-        else:
-            self._sigma_b = self.sigma_b
-
         if self.dx is None:
-            # breakpoint()
             self.dx = ufl.dx(domain=self.mesh, metadata={"quadrature_degree": 4})
+        self.sol = dolfinx.fem.Function(self.V)
 
-        if self.r is None:
-            assert self.point is not None, "Both r and point cannot be None"
-            r = ufl.SpatialCoordinate(self.mesh) - dolfinx.fem.Constant(self.mesh, self.point)
-            self._r = r
-        else:
-            self._r = self.r
+        w = ufl.TestFunction(self.V)
+        Im = ufl.TrialFunction(self.V)
 
-        r3 = ufl.sqrt((self._r**2)) ** 3
-        # https://carp.medunigraz.at/knowledge-base/tissue-scale-ep.html
-        # return (1 / (4 * ufl.pi * self.sigma_b)) * dolfinx.fem.assemble(
-        #     (ufl.inner(ufl.grad(self.v), self.r) / r3) * self.dx
-        # )
-        self.form = dolfinx.fem.form(
-            (1 / (4 * ufl.pi * self.sigma_b))
-            * (ufl.inner(ufl.grad(self.v), self._r) / r3)
-            * self.dx,
+        self.sol = dolfinx.fem.Function(self.V)
+
+        self._lhs = -self.C_m * Im * w * self.dx
+        self._rhs = ufl.inner(self.M * ufl.grad(self.v), ufl.grad(w)) * self.dx
+
+        self.solver = dolfinx.fem.petsc.LinearProblem(
+            self._lhs,
+            self._rhs,
+            u=self.sol,
+            petsc_options=self.petsc_options,
+        )
+        dolfinx.fem.petsc.assemble_matrix(self.solver.A, self.solver.a)
+        self.solver.A.assemble()
+
+    @property
+    def V(self) -> dolfinx.fem.FunctionSpace:
+        return self.v.function_space
+
+    @property
+    def mesh(self) -> dolfinx.mesh.Mesh:
+        return self.v.function_space.mesh
+
+    def solve(self):
+        logger.debug("Solving ECG recovery")
+        with self.solver.b.localForm() as b_loc:
+            b_loc.set(0)
+        dolfinx.fem.petsc.assemble_vector(self.solver.b, self.solver.L)
+        self.solver.b.ghostUpdate(
+            addv=PETSc.InsertMode.ADD,
+            mode=PETSc.ScatterMode.REVERSE,
         )
 
-    def assemble(self):
-        return dolfinx.fem.assemble_scalar(self.form)
+        self.solver.solver.solve(self.solver.b, self.sol.x.petsc_vec)
+        self.sol.x.scatter_forward()
 
-
-# def ecg_recovery(
-#     *,
-#     v: dolfin.Function,
-#     mesh: dolfin.Mesh,
-#     sigma_b: dolfin.Constant,
-#     dx: dolfin.Measure | None = None,
-#     point: np.ndarray | None = None,
-#     r: dolfin.Function | None = None,
-# ):
-#     if dx is None:
-#         # breakpoint()
-#         dx = ufl.dx(domain=mesh, metadata={"quadrature_degree": 4})
-#     if r is None:
-#         r = ufl.SpatialCoordinate(mesh) - dolfin.Constant(point)
-
-#     r3 = ufl.sqrt((r**2)) ** 3
-#     # https://carp.medunigraz.at/knowledge-base/tissue-scale-ep.html
-#     return (1 / (4 * ufl.pi * sigma_b)) * dolfinx.fem.assemble(
-#         (ufl.inner(ufl.grad(v), r) / r3) * dx
-#     )
+    def eval(self, point) -> dolfinx.fem.forms.Form:
+        r = ufl.SpatialCoordinate(self.mesh) - dolfinx.fem.Constant(self.mesh, point)
+        dist = ufl.sqrt((r**2))
+        return dolfinx.fem.form((1 / (4 * ufl.pi * self.sigma_b)) * (self.sol / dist) * self.dx)
 
 
 def _check_attr(attr: np.ndarray | None):

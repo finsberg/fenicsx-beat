@@ -11,11 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 def get_dimension(u):
-    # TODO : Check argument
     try:
         dim = ufl.domain.find_geometric_dimension(u)
-
-    except ufl.UFLException as ex:
+    except Exception as ex:
         try:
             dim = len(u)
         except Exception as ex2:
@@ -114,5 +112,7 @@ def define_conductivity_tensor(
     g_el: float = 0.62,
     g_et: float = 0.24,
 ):
+    if f0 is None:
+        raise ValueError("f0 must be provided")
     s_l, s_t = get_harmonic_mean_conductivity(chi, g_il, g_it, g_el, g_et)
     return conductivity_tensor(s_l, s_t, f0)

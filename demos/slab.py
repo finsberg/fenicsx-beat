@@ -60,7 +60,6 @@ ffun = dolfinx.mesh.meshtags(
 
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 
-
 pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
@@ -82,7 +81,7 @@ cfun_func = dolfinx.fem.Function(V)
 cfun_func.interpolate(endo_epi)
 
 
-pyvista.start_xvfb()
+
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = cfun_func.x.array
@@ -335,13 +334,15 @@ times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
 t1 = np.inf
 t2 = np.inf
 phie = []
-ecg = beat.ecg.ECGRecovery(v=v, mesh=mesh, sigma_b=1.0, point=p_ecg)
+ecg = beat.ecg.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M)
+p_ecg_form = ecg.eval(p_ecg)
 gif_file = Path("voltage_slab_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
     adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
-    phie.append(ecg.assemble())
+    ecg.solve()
+    phie.append(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p_ecg_form), op=MPI.SUM))
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
