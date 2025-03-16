@@ -102,6 +102,14 @@ class BaseDolfinODESolver(abc.ABC):
     def full_values(self) -> npt.NDArray:
         pass
 
+    @abc.abstractmethod
+    def assign_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
+        pass
+
+    @abc.abstractmethod
+    def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
+        pass
+
 
 @dataclass
 class DolfinODESolver(BaseDolfinODESolver):
@@ -158,6 +166,34 @@ class DolfinODESolver(BaseDolfinODESolver):
     @property
     def full_values(self):
         return self._values
+
+    def assign_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
+        num_states = self._values.shape[0]
+        assert len(functions) == num_states, "Number of functions must match number of states"
+        for index, f in enumerate(functions):
+            f.x.array[:] = self._values[index, :]
+
+    def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
+        V = self.v_ode.function_space
+        functions = []
+        num_states = self._values.shape[0]
+
+        if names is not None:
+            msg = (
+                "Number of names must match number of states, got "
+                f"{len(names)} names, but number of states is {num_states}"
+            )
+            assert len(names) == num_states, msg
+        else:
+            names = [f"state_{i}" for i in range(num_states)]
+
+        for name in names:
+            f = dolfinx.fem.Function(V, name=name)
+            functions.append(f)
+
+        self.assign_all_states(functions)
+
+        return functions
 
 
 @dataclass
@@ -239,6 +275,35 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
     def step(self, t0: float, dt: float):
         for ode in self._odes.values():
             ode.step(t0=t0, dt=dt)
+
+    def assign_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
+        num_states = self._values[self._marker_values[0]].shape[0]
+        assert len(functions) == num_states, "Number of functions must match number of states"
+        for index, f in enumerate(functions):
+            for marker in self._marker_values:
+                f.x.array[self._inds[marker]] = self._values[marker][index, :]
+
+    def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
+        V = self.v_ode.function_space
+        functions = []
+        num_states = self._values[self._marker_values[0]].shape[0]
+
+        if names is not None:
+            msg = (
+                "Number of names must match number of states, got "
+                f"{len(names)} names, but number of states is {num_states}"
+            )
+            assert len(names) == num_states, msg
+        else:
+            names = [f"state_{i}" for i in range(num_states)]
+
+        for name in names:
+            f = dolfinx.fem.Function(V, name=name)
+            functions.append(f)
+
+        self.assign_all_states(functions)
+
+        return functions
 
     @property
     def full_values(self):
