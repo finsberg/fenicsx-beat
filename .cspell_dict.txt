@@ -17,12 +17,14 @@ booktitle
 boomeramg
 Britton
 Bursi
+caplog
 cardiomyocytes
 cellname
 Chiara
 Clermont
 cofac
 Courtemanche
+cpus
 Cristobal
 Culloch
 deviatoric
@@ -72,6 +74,7 @@ Jakub
 Joakim
 Kluwer
 Laszlo
+levelname
 libgl
 libxrender
 linalg

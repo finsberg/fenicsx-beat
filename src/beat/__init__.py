@@ -1,3 +1,5 @@
+from importlib.metadata import metadata
+
 from . import (
     base_model,
     conductivities,
@@ -14,6 +16,13 @@ from .ecg import ECGRecovery
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
 from .stimulation import Stimulus
+
+meta = metadata("fenicsx-beat")
+__version__ = meta["Version"]
+__author__ = meta["Author-email"]
+__license__ = meta["License"]
+__email__ = meta["Author-email"]
+__program_name__ = meta["Name"]
 
 __all__ = [
     "monodomain_model",

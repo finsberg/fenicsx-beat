@@ -15,7 +15,11 @@ dependencies = [
     "scipy",
     "scifem>=0.2.14",
     "pint",
+    "rich",
 ]
+
+[project.scripts]
+beat = "beat.cli:main"
 
 [project.urls]
 Homepage = "https://finsberg.github.io/fenicsx-beat"
@@ -114,6 +118,7 @@ max-complexity = 10
 
 
 [tool.ruff.lint.isort]
+known-first-party = ["beat"]
 known-third-party = [
     "basix",
     "dolfinx",
