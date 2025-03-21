@@ -24,6 +24,7 @@ Chiara
 Clermont
 cofac
 Courtemanche
+cpus
 Cristobal
 Culloch
 deviatoric
@@ -73,6 +74,7 @@ Jakub
 Joakim
 Kluwer
 Laszlo
+levelname
 libgl
 libxrender
 linalg

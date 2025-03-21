@@ -5,6 +5,49 @@ from typing import Optional, Sequence
 logger = logging.getLogger(__name__)
 
 
+def setup_logging(level: int = logging.INFO, log_all_cpus: bool = False):
+    from mpi4py import MPI
+
+    from rich.console import Console
+    from rich.logging import RichHandler
+    from rich.theme import Theme
+
+    comm = MPI.COMM_WORLD
+    rank = comm.rank
+    size = comm.size
+
+    FORMAT = (
+        "%(asctime)s %(rank)s%(name)s - %(levelname)s - " "%(message)s (%(filename)s:%(lineno)d)"
+    )
+
+    class Formatter(logging.Formatter):
+        def format(self, record):
+            record.rank = f"CPU {rank}: " if size > 1 else ""
+            return super().format(record)
+
+    class MPIFilter(logging.Filter):
+        def filter(self, record):
+            if rank == 0:
+                return 1
+            else:
+                return 0
+
+    console = Console(theme=Theme({"logging.level.custom": "green"}), width=140)
+    handler = RichHandler(level=level, console=console)
+
+    handler.setFormatter(Formatter(FORMAT))
+    if not log_all_cpus:
+        handler.addFilter(MPIFilter())
+
+    logging.basicConfig(
+        level="NOTSET",
+        format=FORMAT,
+        handlers=[handler],
+    )
+
+    _disable_loggers()
+
+
 def setup_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # Root parser
@@ -19,6 +62,12 @@ def setup_parser():
         action="store_true",
         help="Print more information",
     )
+    parser.add_argument(
+        "--log-all-cpus",
+        action="store_true",
+        help="Log on all CPUs",
+    )
+
     subparsers = parser.add_subparsers(dest="command")
 
     # Version parser
@@ -57,8 +106,9 @@ def display_version_info():
 
 def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = None) -> int:
     args = vars(parser.parse_args(argv))
-    logging.basicConfig(level=logging.DEBUG if args.pop("verbose") else logging.INFO)
-    _disable_loggers()
+    level = logging.DEBUG if args.pop("verbose") else logging.INFO
+    log_all_cpus = args.pop("log_all_cpus")
+    setup_logging(level=level, log_all_cpus=log_all_cpus)
 
     dry_run = args.pop("dry_run")
     command = args.pop("command")
