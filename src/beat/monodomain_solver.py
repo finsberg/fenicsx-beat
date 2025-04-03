@@ -42,7 +42,7 @@ class MonodomainSplittingSolver:
         t1 = T0 + dt
 
         while t1 < T + EPS:
-            logger.info(f"Solving on t = ({t0:.2f}, {t0:.2f})")
+            logger.debug(f"Solving on t = ({t0:.2f}, {t0:.2f})")
             self.step((t0, t1))
 
             t0 = t1
@@ -54,11 +54,11 @@ class MonodomainSplittingSolver:
 
         # Extract time domain
         (t0, t1) = interval
-        logger.info(f"Stepping from {t0} to {t1} using theta = {theta}")
+        logger.debug(f"Stepping from {t0} to {t1} using theta = {theta}")
         dt = t1 - t0
         t = t0 + theta * dt
 
-        logger.info(f"Tentative ODE step with t0={t0:.5f} dt={theta * dt:.5f}")
+        logger.debug(f"Tentative ODE step with t0={t0:.5f} dt={theta * dt:.5f}")
 
         # Solve ODE
         self.ode.step(t0=t0, dt=theta * dt)
@@ -67,7 +67,7 @@ class MonodomainSplittingSolver:
         self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
         self.pde.assign_previous()
 
-        logger.info("PDE step")
+        logger.debug("PDE step")
         # Solve PDE
         self.pde.step((t0, t1))
 
@@ -82,7 +82,7 @@ class MonodomainSplittingSolver:
             return
 
         # Otherwise, we do another ode_step:
-        logger.info(f"Corrective ODE step with t0={t:5f} and dt={(1.0 - theta) * dt:.5f}")
+        logger.debug(f"Corrective ODE step with t0={t:5f} and dt={(1.0 - theta) * dt:.5f}")
 
         # To the correction step
         self.ode.step(t, (1.0 - theta) * dt)
