@@ -42,7 +42,8 @@ if not model_path.is_file():
         / "tentusscher_panfilov_2006_epi_cell.ode",
     )
     code = gotranx.cli.gotran2py.get_code(
-        ode, scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        ode,
+        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
 
@@ -95,7 +96,8 @@ parameters = model["init_parameter_values"](stim_start=100.0, stim_period=1000)
 V_ode = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
 
 parameters_ode = np.zeros(
-    (len(parameters), V_ode.dofmap.index_map.size_local), dtype=np.float64,
+    (len(parameters), V_ode.dofmap.index_map.size_local),
+    dtype=np.float64,
 )
 parameters_ode.T[:] = parameters
 
@@ -140,7 +142,11 @@ parameters_ode[g_Ks_index, :] = g_Ks.x.array
 
 # +
 pde = beat.MonodomainModel(
-    time=time, mesh=mesh, M=D.magnitude, I_s=I_s, C_m=Cm.magnitude,
+    time=time,
+    mesh=mesh,
+    M=D.magnitude,
+    I_s=I_s,
+    C_m=Cm.magnitude,
 )
 ode = beat.odesolver.DolfinODESolver(
     v_ode=dolfinx.fem.Function(V_ode),
@@ -161,7 +167,8 @@ adios4dolfinx.write_mesh(checkpointfname, mesh)
 
 def save(t):
     v = solver.pde.state.x.array
-    print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
+    if t % 100.0 == 0:
+        print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
 
 
@@ -207,7 +214,8 @@ def post_process(dx, outdir):
             adios4dolfinx.read_function(checkpointfname, v, time=ti, name="v")
 
             traces[i, :] = scifem.evaluate_function(
-                v, np.expand_dims(points, 1),
+                v,
+                np.expand_dims(points, 1),
             ).squeeze()
             vp1p2 = scifem.evaluate_function(v, np.expand_dims(p1p2, 1)).squeeze()
 

@@ -74,7 +74,6 @@ grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 plotter_markers.add_mesh(grid, show_edges=True)
 if geo.mesh.geometry.dim == 2:
     plotter_markers.view_xy()
-
 if not pyvista.OFF_SCREEN:
     plotter_markers.show()
 else:
@@ -106,7 +105,6 @@ plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = endo_epi.x.array
 plotter_markers.add_mesh(grid, show_edges=True)
-
 if not pyvista.OFF_SCREEN:
     plotter_markers.show()
 else:
@@ -200,13 +198,16 @@ init_states = {
 
 parameters = {
     mid_marker: model["init_parameter_values"](
-        i_Stim_Amplitude=0.0, celltype=celltype_mid,
+        i_Stim_Amplitude=0.0,
+        celltype=celltype_mid,
     ),
     endo_marker: model["init_parameter_values"](
-        i_Stim_Amplitude=0.0, celltype=celltype_endo,
+        i_Stim_Amplitude=0.0,
+        celltype=celltype_endo,
     ),
     epi_marker: model["init_parameter_values"](
-        i_Stim_Amplitude=0.0, celltype=celltype_epi,
+        i_Stim_Amplitude=0.0,
+        celltype=celltype_epi,
     ),
 }
 

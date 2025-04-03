@@ -9,16 +9,16 @@
 # The equations for this dynamical system read
 #
 # $$
-# V_{amp} = V_{peak} - V_{rest} \\
-# I_{Stim} =
+# V_{amp} &= V_{peak} - V_{rest} \\
+# I_{Stim} &=
 #     \begin{cases}
 #       stim\_amplitude & \text{if } t \geq stim\_start \text{ and } t \leq stim\_start + stim\_duration \\
 #       0 & \text{otherwise}
 #     \end{cases} \\
-# \frac{ds}{dt} = b \cdot (-c_3 \cdot s + (V - V_{rest})) \\
-# V_{th} = V_{amp} \cdot a + V_{rest} \\
-# I = -s \cdot \left(\frac{c_2}{V_{amp}}\right) \cdot (V - V_{rest}) + \left(\frac{c_1}{V_{amp}^2}\right) \cdot (V - V_{rest}) \cdot (V - V_{th}) \cdot (-V + V_{peak}) \\
-# \frac{dV}{dt} = I + i_{Stim} \\
+# \frac{ds}{dt} &= b \cdot (-c_3 \cdot s + (V - V_{rest})) \\
+# V_{th} &= V_{amp} \cdot a + V_{rest} \\
+# I &= -s \cdot \left(\frac{c_2}{V_{amp}}\right) \cdot (V - V_{rest}) + \left(\frac{c_1}{V_{amp}^2}\right) \cdot (V - V_{rest}) \cdot (V - V_{th}) \cdot (-V + V_{peak}) \\
+# \frac{dV}{dt} &= I + i_{Stim} \\
 # $$
 #
 # where $V$ is the membrane potential, $s$ is the gating variable, $V_{rest}$ is the resting potential, $V_{peak}$ is the peak potential, $V_{amp}$ is the amplitude of the action potential, $V_{th}$ is the threshold potential, $I$ is the current, $I_{Stim}$ is the external stimulus current, $a$, $b$, $c_1$, $c_2$, $c_3$ are parameters, and $t$ is time.
@@ -275,7 +275,7 @@ t = 0.0
 i = 0
 while t < T:
     v = solver.pde.state.x.array
-    if i % 20 == 0:
+    if i % 200 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
         vtx.write(t)
         if pyvista:
