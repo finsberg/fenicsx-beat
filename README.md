@@ -8,11 +8,15 @@ Cardiac electrophysiology simulator in FEniCSx
 
 
 ## Install
-You can install the library with pip
+You can install the library with `pip`
 ```
 python3 -m pip install fenicsx-beat
 ```
-
+or with `conda`
+```
+conda install -c conda-forge fenicsx-beat
+```
+Note that installing with `pip` requires [FEniCSx already installed](https://fenicsproject.org/download/)
 
 ## Getting started
 
