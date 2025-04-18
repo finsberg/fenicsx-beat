@@ -35,22 +35,30 @@ def define_stimulus(
     # breakpoint()
     dim = subdomain_data.dim
 
+    # view subdomains of surfaces and line as slices of 3D
+    if mesh.topology.dim == 3:
+        effective_dim = dim
+    elif mesh.topology.dim == 2:
+        effective_dim = dim + 1
+    elif mesh.topology.dim == 1:
+        effective_dim = dim + 2
+
     # breakpoint()
 
     if isinstance(amplitude, ureg.Quantity):
         A = amplitude
     else:
-        if dim <= 1:
+        if effective_dim <= 1:
             A = amplitude * ureg("uA / cm")
-        elif dim == 2:
+        elif effective_dim == 2:
             A = amplitude * ureg("uA / cm**2")
-        elif dim == 3:
+        elif effective_dim == 3:
             A = amplitude * ureg("uA / cm**3")
 
-    if dim == 0:
+    if effective_dim == 0:
         unit = "uA"
     else:
-        unit = f"uA/{mesh_unit}**{dim - 1}"
+        unit = f"uA/{mesh_unit}**{effective_dim - 1}"
 
     amp = (A / chi).to(unit).magnitude
     I_s = ufl.conditional(ufl.And(ufl.ge(time, start), ufl.le(time, start + duration)), amp, 0.0)
