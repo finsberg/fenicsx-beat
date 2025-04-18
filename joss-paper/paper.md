@@ -60,20 +60,27 @@ The following minimal example demonstrates simulating the Monodomain model on a 
 The state variables are $s$ and $v$. The derivatives $\frac{ds}{dt}$ and $\frac{dv}{dt}$ are calculated, and then the forward Euler update rule is applied.
 
 The equations for the derivatives are:
-$$ \frac{ds}{dt} = b(-c_3 s + (v - v_{rest})) $$
-$$ \frac{dv}{dt} = I + i_{app} $$
-where
-$$ I = -s \left(\frac{c_2}{v_{amp}}\right) (v - v_{rest}) + \left(\left(\frac{c_1}{v_{amp}^2}\right) (v - v_{rest})\right) (v - v_{th}) (-v + v_{peak}) $$
-and the threshold voltage $v_{th}$ is defined as:
-$$ v_{th} = v_{amp} a + v_{rest} $$
-The applied current $i_{app}(t)$ is defined as:
-$$ i_{app}(t) = \begin{cases} stim_{amplitude} & \text{if } stim_{start} < t < stim_{start} + stim_{duration} \\ 0 & \text{otherwise} \end{cases} $$
-The parameters used in these equations are $c_1, c_2, c_3, a, b, v_{amp}, v_{rest}, v_{peak}, stim_{amplitude}, stim_{duration}, stim_{start}$.
 
-The forward Euler update equations for the state variables $s$ and $v$ at time $t + dt$ are given by:
-$$ s(t + dt) = s(t) + \frac{ds}{dt} \cdot dt $$
-$$ v(t + dt) = v(t) + \frac{dV}{dt} \cdot dt $$
-where $\frac{ds}{dt}$ and $\frac{dV}{dt}$ are evaluated at time $t$.
+$$ \frac{ds}{dt} = b((v - v_{rest})-c_3 s) $$
+$$ \frac{dv}{dt} = I + i_{app} $$
+
+where
+
+$$ I =  \left(\left(\frac{c_1}{v_{\mathrm{amp}}^2}\right) (v - v_{\mathrm{res}t})\right) (v - v_{th}) (v_{\mathrm{peak}} - v) - s \left(\frac{c_2}{v_{\mathrm{amp}}}\right) (v - v_{\mathrm{rest}})
+$$
+
+and the threshold voltage $v_{th}$ is defined as:
+
+$$ v_{th} = v_{\mathrm{amp}} a + v_{rest} $$
+
+The applied current $i_{app}(t)$ is defined as:
+
+$$
+i_{\mathrm{app}}(t) = \begin{cases} \mathrm{stim}_{\mathrm{amp}} & \text{if } \mathrm{stim}_{\mathrm{start}} < t < \mathrm{stim}_{\mathrm{start}} + \mathrm{stim}_{\mathrm{dur}} \\ 0 & \text{otherwise} \end{cases}.
+$$
+
+The following code snippet demonstrates the setup and execution of a simulation using `fenicsx-beat`:
+
 
 ```python
 import shutil
@@ -120,15 +127,15 @@ def fitzhughnagumo_forward_euler(t, states, parameters, dt):
     )
     values = np.zeros_like(states)
 
-    ds_dt = b * (-c_3 * s + (v - v_rest))
-    values[0] = ds_dt * dt + s
+    ds_dt = b * ((v - v_rest) - c_3 * s )
+    values[0] = s + ds_dt * dt
 
     v_th = v_amp * a + v_rest
     I = -s * (c_2 / v_amp) * (v - v_rest) + (
         ((c_1 / v_amp**2) * (v - v_rest)) * (v - v_th)
     ) * (-v + v_peak)
-    dV_dt = I + i_app
-    values[1] = v + dV_dt * dt
+    dv_dt = I + i_app
+    values[1] = v + dv_dt * dt
     return values
 
 
@@ -247,11 +254,11 @@ while t < T:
 vtx.close()
 ```
 
-![_](paper_figure.png)
+![Simulation results. Left panel shows the membrane potential after 3 ms in the simulation on a unit square where the stimulation is applied in the lower left corner. The right panel shows the membrane potential in a single cell simulation.](paper_figure.png)
 
 
 ## Comparison with Other Software
-The field of computational cardiac electrophysiology benefits from several open-source simulation packages. `fenicsx-beat` distinguishes itself by being built natively on the modern FEniCSx framework , targeting users who leverage this platform for its flexibility in solving PDEs with the finite element method.  
+The field of computational cardiac electrophysiology benefits from several open-source simulation packages. `fenicsx-beat` distinguishes itself by being built natively on the modern FEniCSx framework, targeting users who leverage this platform for its flexibility in solving PDEs with the finite element method.  
 
 Within the FEniCS ecosystem, `fenicsx-beat` can be seen as a successor or counterpart to `cbcbeat`[@Rognes2017] , which provided similar Monodomain/Bidomain capabilities but was based on the legacy FEniCS library. Other FEniCS/FEniCSx-based tools focus on different physics: `simcardems` [@Finsberg2023] couples electrophysiology with solid mechanics , `pulse` [@Finsberg2019] focuses solely on cardiac mechanics , and `Ambit` [@Hirschvogel2024] is a newer multi-physics solver primarily for cardiac mechanics and fluid-structure interaction (FSI), although future electrophysiology capabilities are envisioned. fenicsx-beat provides the dedicated, up-to-date electrophysiology solver within this FEniCSx environment.  
 
