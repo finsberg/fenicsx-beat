@@ -2,6 +2,7 @@ addv
 Alfio
 allclose
 allreduce
+arange
 Arens
 argsort
 Aslak
@@ -19,6 +20,8 @@ Britton
 Bursi
 caplog
 cardiomyocytes
+carputils
+cbcbeat
 cellname
 Chiara
 Clermont
@@ -47,15 +50,19 @@ fenicsx
 fenicsx_pulse
 ffun
 finsberg
+Fitz
+fitzhughnagumo
 Francesco
 Frederik
 functionspace
 genexpr
 geodir
 Gilles
+gotranx
 gradu
 Guccione
 Gurev
+Hirschvogel
 Holohan
 Holzapfel
 holzapfelogden
@@ -82,6 +89,7 @@ lmbda
 Luca
 Lukas
 Mardal
+matplotlib
 Matteo
 mechanicsproblem
 ment
@@ -94,6 +102,7 @@ Monodomain
 multiplicatively
 myocyte
 nabla
+Nagumo
 Nattel
 nbeats
 ndarray
@@ -105,6 +114,7 @@ numpy
 odesolver
 odespace
 odesystemsolver
+opencarp
 Oreste
 Orovio
 outdir
@@ -117,6 +127,7 @@ pmatrix
 Potse
 preconditioner
 preonly
+pyplot
 PYVISTA
 Quarteroni
 regazzoni
@@ -124,13 +135,17 @@ Regazzoni
 Remedios
 rint
 rique
+rmtree
 rtol
+savefig
 scifem
 Severi
 sharex
 sharey
 Shrier
+shutil
 Silvano
+simcardems
 Sorine
 Stefano
 stim
@@ -154,7 +169,9 @@ viscoelasticity
 Waldman
 XDMF
 Xiaodong
+xlabel
 xvfb
+ylabel
 Zenker
 Zhang
 Zhaoyang
