@@ -195,6 +195,7 @@ vtx.close()
 
 ```
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/simple.gif)
+![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/joss-paper/paper_figure.png)
 
 See more examples in the [documentation](https://finsberg.github.io/fenicsx-beat)
 
