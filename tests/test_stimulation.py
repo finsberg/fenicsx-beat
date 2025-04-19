@@ -286,13 +286,19 @@ def test_define_stimulus():
     assert stimulus.marker == stim_marker
     stim_form = dolfinx.fem.form(stimulus.expr * stimulus.dz)
     # Stimulus should be zero at the start
-    assert np.isclose(dolfinx.fem.assemble_scalar(stim_form), 0.0)
+    assert np.isclose(comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM), 0.0)
     # Stimulus should be non-zero at the start of stimulus
     time.value = start
-    assert np.isclose(dolfinx.fem.assemble_scalar(stim_form), amplitude / chi)
+    assert np.isclose(
+        comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM),
+        amplitude / chi,
+    )
     # Stimulus should still be non-zero
     time.value = start + duration / 2
-    assert np.isclose(dolfinx.fem.assemble_scalar(stim_form), amplitude / chi)
+    assert np.isclose(
+        comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM),
+        amplitude / chi,
+    )
     # Stimulus should be zero after the duration
     time.value = start + duration + 1e-6
-    assert np.isclose(dolfinx.fem.assemble_scalar(stim_form), 0.0)
+    assert np.isclose(comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM), 0.0)
