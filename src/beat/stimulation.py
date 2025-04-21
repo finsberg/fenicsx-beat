@@ -26,8 +26,8 @@ class Stimulus(NamedTuple):
 
 def compute_effective_dim(mesh: dolfinx.mesh.Mesh, subdomain_data: dolfinx.mesh.MeshTags) -> int:
     """
-    Compute the effective dimension of the mesh based on the subdomain data.
-    The effective dimension is the dimension is used
+    Compute the effective dimension of the stimulus domain based on the subdomain data and the mesh.
+    The effective dimension is the dimension used
     to compute the correct unit of the stimulus.
 
     Parameters
@@ -40,7 +40,7 @@ def compute_effective_dim(mesh: dolfinx.mesh.Mesh, subdomain_data: dolfinx.mesh.
     Returns
     -------
     int
-        The effective dimension of the mesh.
+        The effective dimension of the stimulus domain.
 
     Raises
     ------
@@ -121,7 +121,7 @@ def convert_amplitude(effective_dim: int, amplitude: float | pint.Quantity) -> p
     Parameters
     ----------
     effective_dim : int
-        The effective dimension of the mesh.
+        The effective dimension of the stimulus domain.
     amplitude : float | pint.Quantity
         The amplitude value to be converted.
 
@@ -157,7 +157,7 @@ def compute_stimulus_unit(effective_dim: int, mesh_unit: str) -> str:
     Parameters
     ----------
     effective_dim : int
-        The effective dimension of the mesh.
+        The effective dimension of the stimulus.
     mesh_unit : str
         The unit of the mesh.
 
@@ -185,12 +185,12 @@ def compute_stimulus_unit(effective_dim: int, mesh_unit: str) -> str:
 
 def convert_chi(chi: float, mesh_unit: str) -> pint.Quantity:
     """
-    Convert the conductivity value to the appropriate unit based on the mesh unit.
+    Convert the surface to volume ratio to the appropriate unit based on the mesh unit.
 
     Parameters
     ----------
     chi : float
-        The conductivity value.
+        The surface to volume ratio.
     mesh_unit : str
         The unit of the mesh.
 
@@ -220,8 +220,8 @@ def define_stimulus(
 ) -> Stimulus:
     """
     Define a stimulus for the given mesh and subdomain data.
-    The function computes the effective dimension of the mesh,
-    converts the amplitude and conductivity to the appropriate units,
+    The function computes the effective dimension of the stimulus domain,
+    converts the amplitude and surface to volume ratio to the appropriate units,
     and defines the stimulus expression based on the time variable.
     The stimulus is defined as a conditional expression that is active
     within the specified duration and start time.
