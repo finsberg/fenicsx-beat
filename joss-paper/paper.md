@@ -269,6 +269,7 @@ Another prominent open-source package is Chaste (Cancer, Heart And Soft Tissue E
 In summary, `fenicsx-beat` occupies a valuable niche by providing a modern, Python-interfaced, FEniCSx-native tool for Monodomain cardiac electrophysiology simulations. Its primary strength lies in its seamless integration with the FEniCSx platform, making it an attractive choice for researchers utilizing FEniCSx for multi-physics cardiac modeling.
 
 # Acknowledgements
-
+This work has been financially supported by Simula Research Laboratory and by the European Union’s Horizon 2020 research and innovation
+program (grant number: 101016496 (SimCardioTest))
 
 # References
