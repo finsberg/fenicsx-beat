@@ -17,7 +17,7 @@ import numpy.typing as npt
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-if os.environ["NO_PYVISTA"] == "1":
+if os.environ.get("NO_PYVISTA", "0") == "1":
     pyvista = None
     logger.warning("Turn off pyvista")
 else:
