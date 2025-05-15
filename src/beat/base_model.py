@@ -128,8 +128,8 @@ class BaseModel:
         if solver_type == "iterative":
             petsc_options = {
                 "ksp_type": "cg",
-                # "pc_type": "hypre",
-                "pc_type": "petsc_amg",
+                "pc_type": "hypre",
+                # "pc_type": "petsc_amg",
                 "pc_hypre_type": "boomeramg",
                 # "ksp_norm_type": "unpreconditioned",
                 # "ksp_atol": 1e-15,
