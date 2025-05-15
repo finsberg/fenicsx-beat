@@ -3,16 +3,31 @@
 
 from pathlib import Path
 import json
+import time
+import logging
 
 from mpi4py import MPI
 
-# import beat.conductivities
+import os
 import dolfinx
 import scifem
 import numpy as np
 import numpy.typing as npt
 
-import pyvista
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+if os.environ["NO_PYVISTA"] == "1":
+    pyvista = None
+    logger.warning("Turn off pyvista")
+else:
+    try:
+        import pyvista  # type: ignore[no-redef]
+    except ImportError:
+        pyvista = None  # type: ignore[no-redef]
+        logger.warning("pyvista not installed, skipping visualization")
+
+
 import gotranx
 import matplotlib.pyplot as plt
 
@@ -92,19 +107,20 @@ geo = beat.geometry.get_3D_slab_geometry(
 )
 ode_space = dolfinx.fem.functionspace(geo.mesh, ("Lagrange", 1))
 
-pyvista.start_xvfb()
-plotter = pyvista.Plotter()
-grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(geo.mesh))
-plotter.add_mesh(grid, show_edges=True)
-plotter.show_grid()
-plotter.add_axes(line_width=5)
-plotter.show_axes()
-plotter.view_xy()
+if pyvista is not None:
+    pyvista.start_xvfb()
+    plotter = pyvista.Plotter()
+    grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(geo.mesh))
+    plotter.add_mesh(grid, show_edges=True)
+    plotter.show_grid()
+    plotter.add_axes(line_width=5)
+    plotter.show_axes()
+    plotter.view_xy()
 
-if not pyvista.OFF_SCREEN:
-    plotter.show()
-else:
-    figure = plotter.screenshot("niederer_mesh.png")
+    if not pyvista.OFF_SCREEN:
+        plotter.show()
+    else:
+        figure = plotter.screenshot("niederer_mesh.png")
 
 # +
 # Surface to volume ratio
@@ -112,7 +128,7 @@ conductivities = beat.conductivities.default_conductivities("Niederer")
 # # Membrane capacitance
 C_m = 1.0 * beat.units.ureg("uF/cm**2")
 
-time = dolfinx.fem.Constant(geo.mesh, 0.0)
+time_constant = dolfinx.fem.Constant(geo.mesh, 0.0)
 L = 1.5 * beat.units.ureg("mm").to(mesh_unit).magnitude
 S1_marker = 1
 L = 1.5
@@ -139,7 +155,7 @@ S1_markers = dolfinx.mesh.meshtags(
 I_s = beat.stimulation.define_stimulus(
     mesh=geo.mesh,
     chi=conductivities["chi"],
-    time=time,
+    time=time_constant,
     subdomain_data=S1_markers,
     marker=S1_marker,
     mesh_unit=mesh_unit,
@@ -152,10 +168,16 @@ M = beat.conductivities.define_conductivity_tensor(
     **conductivities,
 )
 
-params = {"preconditioner": "sor", "use_custom_preconditioner": False}
+params = {
+    "petsc_options": {
+        "ksp_type": "cg",
+        "pc_type": "hypre",
+        "pc_hypre_type": "boomeramg",
+    },
+}
 
 pde = beat.MonodomainModel(
-    time=time,
+    time=time_constant,
     mesh=geo.mesh,
     M=M,
     I_s=I_s,
@@ -204,34 +226,40 @@ points = {
 activation_times = {p: -1.0 for p in points}
 save_freq = int(1.0 / dt)
 i = 0
-plotter_voltage = pyvista.Plotter()
-viridis = plt.get_cmap("viridis")
-grid.point_data["V"] = solver.pde.state.x.array
-grid.set_active_scalars("V")
-renderer = plotter_voltage.add_mesh(
-    grid,
-    show_edges=True,
-    lighting=False,
-    cmap=viridis,
-    clim=[-90.0, 40.0],
-)
-gif_file = Path("niederer_benchmark.gif")
-gif_file.unlink(missing_ok=True)
-plotter_voltage.open_gif(gif_file.as_posix())
+if pyvista is not None:
+    plotter_voltage = pyvista.Plotter()
+    viridis = plt.get_cmap("viridis")
+    grid.point_data["V"] = solver.pde.state.x.array
+    grid.set_active_scalars("V")
+    renderer = plotter_voltage.add_mesh(
+        grid,
+        show_edges=True,
+        lighting=False,
+        cmap=viridis,
+        clim=[-90.0, 40.0],
+    )
+    gif_file = Path("niederer_benchmark.gif")
+    gif_file.unlink(missing_ok=True)
+    plotter_voltage.open_gif(gif_file.as_posix())
 
 T = 20
 # T = 100  # Change to 100 to reproduce Niederer benchmark
 t = 0.0
+times: list[float] = []
 while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
     v = solver.pde.state.x.array
     if i % save_freq == 0:
-        print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
-        print(activation_times)
+        logger.info(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
+        if len(times) > 0:
+            logger.info(f"Average solver time per time step: {np.mean(times):.5f} s")
+        logger.info(activation_times)
         vtx.write(t)
-        grid.point_data["V"] = solver.pde.state.x.array
-        plotter_voltage.write_frame()
+        if pyvista is not None:
+            grid.point_data["V"] = solver.pde.state.x.array
+            plotter_voltage.write_frame()
+    t0 = time.perf_counter()
     solver.step((t, t + dt))
-
+    times.append(time.perf_counter() - t0)
     for p in points:
         value = scifem.evaluate_function(solver.pde.state, [points[p]]).squeeze()
         if value > 0.0 and activation_times[p] < 0.0:
@@ -239,7 +267,8 @@ while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
     i += 1
     t += dt
 
-plotter_voltage.close()
+if pyvista is not None:
+    plotter_voltage.close()
 # -
 
 # ![_](niederer_benchmark.gif)
