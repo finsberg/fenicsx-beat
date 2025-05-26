@@ -265,7 +265,21 @@ I_s = [
     )
     for marker in [geo.markers["ENDO_LV"][0], geo.markers["ENDO_RV"][0]]
 ]
-# Now we are ready to create the PDE solver.
+# Now we are ready to create the ODE solver. Here we also need to specify which space to use for the ODE solver. We will use first order Lagrange elements, which will solve one ODE per node in the mesh.
+
+V_ode = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
+v_ode = dolfinx.fem.Function(V_ode)
+ode = beat.odesolver.DolfinMultiODESolver(
+    v_ode=v_ode,
+    markers=endo_epi,
+    num_states={i: len(s) for i, s in init_states.items()},
+    fun=fun,
+    init_states=init_states,
+    parameters=parameters,
+    v_index=v_index,
+)
+
+# and the PDE solver.
 
 pde = beat.MonodomainModel(
     time=time,
@@ -273,20 +287,7 @@ pde = beat.MonodomainModel(
     M=M,
     I_s=I_s,
     C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
-)
-
-# and the ODE solver. Here we also need to specify which space to use for the ODE solver. We will use first order Lagrange elements, which will solve one ODE per node in the mesh.
-
-V_ode = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
-ode = beat.odesolver.DolfinMultiODESolver(
-    v_ode=dolfinx.fem.Function(V_ode),
-    v_pde=pde.state,
-    markers=endo_epi,
-    num_states={i: len(s) for i, s in init_states.items()},
-    fun=fun,
-    init_states=init_states,
-    parameters=parameters,
-    v_index=v_index,
+    v_ode=v_ode,
 )
 
 # We will the the ODE and PDE using a Godunov splitting scheme. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
@@ -318,7 +319,9 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function_on_input_mesh(checkpointfname, solver.pde.state, time=t, name="v")
+    adios4dolfinx.write_function_on_input_mesh(
+        checkpointfname, solver.pde.state, time=t, name="v",
+    )
 
 
 # We will save results every 1 ms
@@ -398,7 +401,9 @@ leads = dict(
     V5=(10.0, 2.0, 0.0),
     V6=(10.0, -6.0, 2.0),
 )
-ecg = beat.ecg.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M)
+ecg = beat.ecg.ECGRecovery(
+    v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M,
+)
 ecg_forms = {k: ecg.eval(p) for k, p in leads.items()}
 ecg_traces: dict[str, list[float]] = {k: [] for k in ecg_forms.keys()}
 
@@ -409,7 +414,9 @@ for t in times:
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
     for k, e in ecg_forms.items():
-        ecg_traces[k].append(geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM))
+        ecg_traces[k].append(
+            geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM),
+        )
 
 plotter_voltage.close()
 # -
