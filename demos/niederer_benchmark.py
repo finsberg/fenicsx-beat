@@ -176,7 +176,6 @@ params = {
     },
 }
 
-v_ode = dolfinx.fem.Function(ode_space)
 pde = beat.MonodomainModel(
     time=time_constant,
     mesh=geo.mesh,
@@ -185,10 +184,10 @@ pde = beat.MonodomainModel(
     params=params,
     C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
     dx=I_s.dZ,
-    v_ode=v_ode,
 )
 ode = beat.odesolver.DolfinODESolver(
-    v_ode=v_ode,
+    v_ode=dolfinx.fem.Function(ode_space),
+    v_pde=pde.state,
     fun=fun,
     init_states=init_states,
     parameters=parameters,

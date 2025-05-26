@@ -54,7 +54,6 @@ def main():
         sharey="row",
         sharex="row",
     )
-
     for k, odespace in enumerate(odespaces):
         errors = defaultdict(list)
         error_fname = Path(f"convergence_{odespace}.json")
@@ -74,17 +73,15 @@ def main():
 
                     I_s = ac_func(x, time)
 
+                    pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, I_s=I_s)
+
                     V_ode = beat.utils.space_from_string(odespace, mesh, dim=1)
                     v_ode = dolfinx.fem.Function(V_ode)
 
-                    pde = beat.MonodomainModel(
-                        time=time, mesh=mesh, M=M, I_s=I_s, v_ode=v_ode,
-                    )
                     s = dolfinx.fem.Function(V_ode)
                     s.interpolate(
                         dolfinx.fem.Expression(
-                            s_exact_func(x, time),
-                            V_ode.element.interpolation_points(),
+                            s_exact_func(x, time), V_ode.element.interpolation_points(),
                         ),
                     )
 
@@ -94,6 +91,7 @@ def main():
 
                     ode = beat.odesolver.DolfinODESolver(
                         v_ode=v_ode,
+                        v_pde=pde.state,
                         fun=simple_ode_forward_euler,
                         init_states=init_states,
                         parameters=None,
