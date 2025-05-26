@@ -74,6 +74,7 @@ class BaseModel:
         dx: ufl.Measure | None = None,
         params: dict[str, Any] | None = None,
         I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        v_ode: dolfinx.fem.Function | None = None,
         **kwargs: Any,
     ) -> None:
         # Warn about unused kwargs
@@ -98,6 +99,13 @@ class BaseModel:
 
         self._setup_state_space()
 
+        if v_ode is not None:
+            self.v_ode = v_ode
+            self._update_ode = False
+        else:
+            self._update_ode = True
+            self.v_ode = dolfinx.fem.Function(self.V, name="v_ode")
+
         self._timestep = dolfinx.fem.Constant(mesh, self.parameters["default_timestep"])
         a, L = self.variational_forms(self._timestep)
         self._solver = dolfinx.fem.petsc.LinearProblem(
@@ -117,6 +125,10 @@ class BaseModel:
     @property
     @abc.abstractmethod
     def state(self) -> dolfinx.fem.Function: ...
+
+    @property
+    @abc.abstractmethod
+    def V(self) -> dolfinx.fem.FunctionSpace: ...
 
     @abc.abstractmethod
     def assign_previous(self) -> None: ...

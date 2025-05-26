@@ -15,10 +15,6 @@ class ODESolver(Protocol):
 
     def from_dolfin(self) -> None: ...
 
-    def ode_to_pde(self) -> None: ...
-
-    def pde_to_ode(self) -> None: ...
-
     def step(self, t0: float, dt: float) -> None: ...
 
 
@@ -31,7 +27,6 @@ class MonodomainSplittingSolver:
     def __post_init__(self) -> None:
         assert np.isclose(self.theta, 1.0), "Only first order splitting is implemented"
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
-        self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
         self.pde.assign_previous()
 
     def solve(self, interval, dt):
@@ -64,14 +59,12 @@ class MonodomainSplittingSolver:
         self.ode.step(t0=t0, dt=theta * dt)
         # Move voltage to FEniCS
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
-        self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
         self.pde.assign_previous()
 
         logger.debug("PDE step")
         # Solve PDE
         self.pde.step((t0, t1))
 
-        self.ode.pde_to_ode()  # CG1 dolfin function -> dolfin function in ODE space (quad?)
         # Copy voltage from PDE to ODE
         self.ode.from_dolfin()
 
@@ -88,5 +81,4 @@ class MonodomainSplittingSolver:
         self.ode.step(t, (1.0 - theta) * dt)
         # And copy the solution back to FEniCS
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
-        self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
         self.pde.assign_previous()

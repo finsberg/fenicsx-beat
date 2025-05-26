@@ -185,15 +185,6 @@ I_s = beat.Stimulus(expr=stim_expr, dZ=dx, marker=stim_marker)
 
 parameters[7] = 0.0
 
-# We can now define the PDE model.
-
-pde = beat.MonodomainModel(
-    time=time,
-    mesh=mesh,
-    M=0.01,
-    I_s=I_s,
-    dx=dx,
-)
 
 # For the ODE model, we first need to define a function that will be used to solve the ODEs. We will use the same function as before in an explicit Euler scheme
 
@@ -205,14 +196,26 @@ def fun(t, states, parameters, dt):
 # We also need to specify a function space for the ODE's. We will use a simple piecewise linear function space which will solve one ODE per node in the mesh.
 
 ode_space = dolfinx.fem.functionspace(mesh, ("P", 1))
+v_ode = dolfinx.fem.Function(ode_space)
 ode = beat.odesolver.DolfinODESolver(
-    v_ode=dolfinx.fem.Function(ode_space),
-    v_pde=pde.state,
+    v_ode=v_ode,
     fun=fun,
     init_states=states,
     parameters=parameters,
     num_states=2,
     v_index=1,
+)
+
+
+# We can now define the PDE model.
+
+pde = beat.MonodomainModel(
+    time=time,
+    mesh=mesh,
+    M=0.01,
+    I_s=I_s,
+    dx=dx,
+    v_ode=v_ode,
 )
 
 # Here, we also need to specify the index of the state variable corresponding to the membrane potential, which in our case is the second state variable, with index 1.
