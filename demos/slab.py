@@ -81,6 +81,7 @@ cfun_func = dolfinx.fem.Function(V)
 cfun_func.interpolate(endo_epi)
 
 
+
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = cfun_func.x.array
@@ -225,17 +226,6 @@ M = beat.conductivities.define_conductivity_tensor(
 )
 
 params = {"preconditioner": "sor", "use_custom_preconditioner": False}
-V_ode = dolfinx.fem.functionspace(data.mesh, ("P", 1))
-v_ode = dolfinx.fem.Function(V_ode)
-ode = beat.odesolver.DolfinMultiODESolver(
-    v_ode=v_ode,
-    markers=cfun_func,
-    num_states={i: len(s) for i, s in init_states.items()},
-    fun=fun,
-    init_states=init_states,
-    parameters=parameters,
-    v_index=v_index,
-)
 pde = beat.MonodomainModel(
     time=time,
     mesh=data.mesh,
@@ -243,10 +233,19 @@ pde = beat.MonodomainModel(
     I_s=I_s,
     params=params,
     C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
-    v_ode=v_ode,
 )
 
-
+V_ode = dolfinx.fem.functionspace(data.mesh, ("P", 1))
+ode = beat.odesolver.DolfinMultiODESolver(
+    v_ode=dolfinx.fem.Function(V_ode),
+    v_pde=pde.state,
+    markers=cfun_func,
+    num_states={i: len(s) for i, s in init_states.items()},
+    fun=fun,
+    init_states=init_states,
+    parameters=parameters,
+    v_index=v_index,
+)
 t = 0.0
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
@@ -335,9 +334,7 @@ times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
 t1 = np.inf
 t2 = np.inf
 phie = []
-ecg = beat.ecg.ECGRecovery(
-    v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M,
-)
+ecg = beat.ecg.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M)
 p_ecg_form = ecg.eval(p_ecg)
 gif_file = Path("voltage_slab_time.gif")
 gif_file.unlink(missing_ok=True)
@@ -345,9 +342,7 @@ plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
     adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
     ecg.solve()
-    phie.append(
-        mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p_ecg_form), op=MPI.SUM),
-    )
+    phie.append(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p_ecg_form), op=MPI.SUM))
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()

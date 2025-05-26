@@ -141,17 +141,16 @@ parameters_ode[g_Ks_index, :] = g_Ks.x.array
 # Finally we set up the models
 
 # +
-v_ode = dolfinx.fem.Function(V_ode)
 pde = beat.MonodomainModel(
     time=time,
     mesh=mesh,
     M=D.magnitude,
     I_s=I_s,
     C_m=Cm.magnitude,
-    v_ode=v_ode,
 )
 ode = beat.odesolver.DolfinODESolver(
-    v_ode=v_ode,
+    v_ode=dolfinx.fem.Function(V_ode),
+    v_pde=pde.state,
     fun=fun,
     init_states=y,
     parameters=parameters_ode,

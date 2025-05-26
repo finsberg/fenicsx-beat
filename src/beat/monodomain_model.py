@@ -5,7 +5,6 @@ from typing import Sequence
 
 import basix
 import dolfinx
-import numpy as np
 import ufl
 from ufl.core.expr import Expr
 
@@ -34,12 +33,11 @@ class MonodomainModel(BaseModel):
         params=None,
         C_m: float = 1.0,
         dx: ufl.Measure | None = None,
-        v_ode: dolfinx.fem.Function | None = None,
         **kwargs,
     ) -> None:
         self._M = M
         self.C_m = dolfinx.fem.Constant(mesh, C_m)
-        super().__init__(mesh=mesh, time=time, params=params, I_s=I_s, dx=dx, v_ode=v_ode, **kwargs)
+        super().__init__(mesh=mesh, time=time, params=params, I_s=I_s, dx=dx, **kwargs)
 
     def _setup_state_space(self) -> None:
         # Set-up function spaces
@@ -48,7 +46,7 @@ class MonodomainModel(BaseModel):
 
         element = basix.ufl.element(family=family, cell=self._mesh.basix_cell(), degree=k)
 
-        self._V = dolfinx.fem.functionspace(self._mesh, element)
+        self.V = dolfinx.fem.functionspace(self._mesh, element)
 
         # Set-up solution fields:
         self.v_ = dolfinx.fem.Function(self.V, name="v_")
@@ -58,15 +56,8 @@ class MonodomainModel(BaseModel):
     def state(self) -> dolfinx.fem.Function:
         return self._state
 
-    @property
-    def V(self) -> dolfinx.fem.FunctionSpace:
-        """Return the function space for the state variable."""
-        return self._V
-
     def assign_previous(self):
         self.v_.x.array[:] = self.state.x.array[:]
-        if self._update_ode:
-            self.v_ode.x.array[:] = self.state.x.array[:]
 
     @staticmethod
     def default_parameters():
@@ -96,14 +87,12 @@ class MonodomainModel(BaseModel):
         w = ufl.TestFunction(self.V)
 
         # # Set-up variational problem
-        a = w * v * self.dx + dt * theta * ufl.dot(ufl.grad(w), self._M * ufl.grad(v)) * self.dx
-        if np.isclose(theta, 1.0):
-            L = w * self.v_ode * self.dx + dt * self._G_stim(w)
-        else:
-            L = (
-                w * self.v_ode * self.dx
-                + dt * self._G_stim(w)
-                - dt * (1 - theta) * ufl.dot(ufl.grad(w), self._M * ufl.grad(self.v_ode)) * self.dx
-            )
+        Dt_v_dt = v - self.v_
+        v_mid = theta * v + (1.0 - theta) * self.v_
+
+        theta_parabolic = ufl.inner(self._M * ufl.grad(v_mid), ufl.grad(w))
+
+        G = (self.C_m * Dt_v_dt * w + dt * theta_parabolic) * self.dx - dt * self._G_stim(w)
+        a, L = ufl.system(G)
 
         return a, L

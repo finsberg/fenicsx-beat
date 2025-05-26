@@ -8,6 +8,8 @@ import dolfinx
 import numpy as np
 import numpy.typing as npt
 
+from .utils import local_project
+
 EPS = 1e-12
 
 
@@ -58,6 +60,7 @@ class ODESystemSolver:
 
 class BaseDolfinODESolver(abc.ABC):
     v_ode: dolfinx.fem.Function
+    v_pde: dolfinx.fem.Function
     _metadata: dict[str, Any] | None = None
 
     def _initialize_metadata(self):
@@ -73,6 +76,22 @@ class BaseDolfinODESolver(abc.ABC):
     @abc.abstractmethod
     def from_dolfin(self) -> None:
         pass
+
+    def ode_to_pde(self) -> None:
+        """Projects v_ode (DG0, quadrature space, ...) into v_pde (CG1)"""
+        local_project(
+            self.v_ode,
+            self.v_pde.function_space,
+            self.v_pde,
+        )
+
+    def pde_to_ode(self) -> None:
+        """Projects v_pde (CG1) into v_ode (DG0, quadrature space, ...)"""
+        local_project(
+            self.v_pde,
+            self.v_ode.function_space,
+            self.v_ode,
+        )
 
     @abc.abstractmethod
     def step(self, t0: float, dt: float) -> None:
@@ -95,6 +114,7 @@ class BaseDolfinODESolver(abc.ABC):
 @dataclass
 class DolfinODESolver(BaseDolfinODESolver):
     v_ode: dolfinx.fem.Function
+    v_pde: dolfinx.fem.Function
     init_states: npt.NDArray
     parameters: npt.NDArray
     fun: Callable
@@ -179,6 +199,7 @@ class DolfinODESolver(BaseDolfinODESolver):
 @dataclass
 class DolfinMultiODESolver(BaseDolfinODESolver):
     v_ode: dolfinx.fem.Function
+    v_pde: dolfinx.fem.Function
     markers: dolfinx.fem.Function
     init_states: dict[int, npt.NDArray]
     parameters: dict[int, npt.NDArray]

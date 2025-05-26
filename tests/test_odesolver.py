@@ -53,6 +53,9 @@ def test_DolfinODESolver():
     N = 5
     mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
 
+    V_pde = dolfinx.fem.functionspace(mesh, ("P", 1))
+    v_pde = dolfinx.fem.Function(V_pde)
+
     V_ode = dolfinx.fem.functionspace(mesh, ("P", 1))
     v_ode = dolfinx.fem.Function(V_ode)
 
@@ -64,11 +67,12 @@ def test_DolfinODESolver():
     parameters = np.array([1, 1])
     ode = DolfinODESolver(
         v_ode=v_ode,
+        v_pde=v_pde,
         init_states=init_states,
         parameters=parameters,
         fun=simple_ode_forward_euler,
         num_states=2,
-        v_index=0,  # The is the index in the state vector that corresponds to voltage
+        v_index=0,  # The is the index in the state vector that corresponds to PDE variable
     )
 
     assert ode.full_values.shape == (2, N_ode)
@@ -89,10 +93,16 @@ def test_DolfinODESolver():
     ode.to_dolfin()
     # And we check that the values are updated
     assert np.allclose(v_ode.x.array, v0 - s0 * dt)
-
+    # However, not for the PDE function
+    assert np.allclose(v_pde.x.array, 0.0)
+    # Which is updated by the next method
+    ode.ode_to_pde()
+    assert np.allclose(v_pde.x.array, v0 - s0 * dt)
     # Now let us update the pde
-    v_ode.x.array[:] = 1.0
-
+    v_pde.x.array[:] = 1.0
+    # And transfer the values back
+    ode.pde_to_ode()
+    assert np.allclose(v_ode.x.array, 1.0)
     # Finally let us transfer the values back to the ODE values
     ode.from_dolfin()
     assert np.allclose(ode.values[0, :], 1.0)
@@ -111,6 +121,9 @@ def test_DolfinMultiODESolver():
     N = 5
     mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
 
+    V_pde = dolfinx.fem.functionspace(mesh, ("P", 1))
+    v_pde = dolfinx.fem.Function(V_pde)
+
     V_ode = dolfinx.fem.functionspace(mesh, ("P", 1))
     v_ode = dolfinx.fem.Function(V_ode)
 
@@ -123,22 +136,17 @@ def test_DolfinMultiODESolver():
     first_s0 = 2.0
     second_v0 = 3.0
     second_s0 = 4.0
-    init_states = {
-        1: np.array([first_v0, first_s0]),
-        2: np.array([second_v0, second_s0]),
-    }
+    init_states = {1: np.array([first_v0, first_s0]), 2: np.array([second_v0, second_s0])}
 
     first_p0 = 1
     second_p0 = 2
-    parameters = {
-        1: np.array([first_p0, first_p0]),
-        2: np.array([second_p0, second_p0]),
-    }
+    parameters = {1: np.array([first_p0, first_p0]), 2: np.array([second_p0, second_p0])}
 
     N_ode = V_ode.dofmap.index_map.size_local + V_ode.dofmap.index_map.num_ghosts
 
     ode = DolfinMultiODESolver(
         v_ode=v_ode,
+        v_pde=v_pde,
         markers=markers,
         init_states=init_states,
         parameters=parameters,
@@ -172,13 +180,19 @@ def test_DolfinMultiODESolver():
     # And we check that the values are updated
     assert np.allclose(v_ode.x.array[markers.x.array == 1], first_v0 - first_p0 * first_s0 * dt)
     assert np.allclose(v_ode.x.array[markers.x.array == 2], second_v0 - second_p0 * second_s0 * dt)
-
-    # Now let us update the ode
-    v_ode.x.array[:] = 1.0
-
+    # However, not for the PDE function
+    assert np.allclose(v_pde.x.array, 0.0)
+    # Which is updated by the next method
+    ode.ode_to_pde()
+    assert np.allclose(v_pde.x.array[markers.x.array == 1], first_v0 - first_p0 * first_s0 * dt)
+    assert np.allclose(v_pde.x.array[markers.x.array == 2], second_v0 - second_p0 * second_s0 * dt)
+    # Now let us update the pde
+    v_pde.x.array[:] = 1.0
+    # And transfer the values back
+    ode.pde_to_ode()
+    assert np.allclose(v_ode.x.array, 1.0)
     # Finally let us transfer the values back to the ODE values
     ode.from_dolfin()
-
     assert np.allclose(ode.values(1)[0, :], 1.0)
     assert np.allclose(ode.values(2)[0, :], 1.0)
     # The s value should be the same as before
