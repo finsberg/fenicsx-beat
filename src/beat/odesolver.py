@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, NamedTuple
 
 import dolfinx
@@ -45,6 +45,12 @@ class ODESystemSolver:
     fun: Callable
     states: npt.NDArray
     parameters: npt.NDArray
+    missing_variables: npt.NDArray | None = None
+    _kwargs: dict[str, npt.NDArray] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.missing_variables is not None:
+            self._kwargs["missing_variables"] = self.missing_variables
 
     @property
     def num_points(self) -> int:
@@ -55,7 +61,9 @@ class ODESystemSolver:
         return self.states.shape[0]
 
     def step(self, t0: float, dt: float) -> None:
-        self.states[:] = self.fun(states=self.states, t=t0, parameters=self.parameters, dt=dt)
+        self.states[:] = self.fun(
+            states=self.states, t=t0, parameters=self.parameters, dt=dt, **self._kwargs
+        )
 
 
 class BaseDolfinODESolver(abc.ABC):
@@ -120,6 +128,8 @@ class DolfinODESolver(BaseDolfinODESolver):
     fun: Callable
     num_states: int
     v_index: int = 0
+    missing_variables: npt.NDArray | None = None
+    num_missing_variables: int = 0
 
     def __post_init__(self):
         if np.shape(self.init_states) == self.shape:
@@ -132,6 +142,7 @@ class DolfinODESolver(BaseDolfinODESolver):
             fun=self.fun,
             states=self._values,
             parameters=self.parameters,
+            missing_variables=self.missing_variables,
         )
         self._initialize_metadata()
 
@@ -155,6 +166,10 @@ class DolfinODESolver(BaseDolfinODESolver):
     @property
     def shape(self) -> tuple[int, int]:
         return (self.num_states, self.num_points)
+
+    @property
+    def shape_missing_values(self) -> tuple[int, int]:
+        return (self.num_missing_variables, self.num_points)
 
     @property
     def num_points(self) -> int:
