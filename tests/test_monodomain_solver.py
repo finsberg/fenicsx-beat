@@ -67,7 +67,6 @@ def test_monodomain_splitting_analytic(odespace):
 
     ode = beat.odesolver.DolfinODESolver(
         v_ode=v_ode,
-        v_pde=pde.state,
         fun=simple_ode_forward_euler,
         init_states=init_states,
         parameters=None,
@@ -124,7 +123,6 @@ def test_monodomain_splitting_spatial_convergence(odespace):
 
         ode = beat.odesolver.DolfinODESolver(
             v_ode=v_ode,
-            v_pde=pde.state,
             fun=simple_ode_forward_euler,
             init_states=init_states,
             parameters=None,
@@ -187,7 +185,6 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
 
         ode = beat.odesolver.DolfinODESolver(
             v_ode=v_ode,
-            v_pde=pde.state,
             fun=simple_ode_forward_euler,
             init_states=init_states,
             parameters=None,
