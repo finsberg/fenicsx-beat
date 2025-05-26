@@ -75,3 +75,41 @@ def test_12_leads_ecg():
 
     for i, vi in enumerate([v1, v2, v3, v4, v5, v6], start=1):
         assert np.allclose(getattr(ecg, f"V{i}_"), vi - Vw)
+
+
+def test_qt_interval():
+    qrs_peak_time = 200  # ms
+    t_peak_offset_ms = 200  # ms
+    t_width_ms = 60  # ms
+    t, y = beat.ecg.example(
+        sampling_rate_hz=1000,
+        duration_s=1,
+        noise_amplitude=0.0,
+        wander_amplitude=0.0,
+        heart_rate_bpm=60,
+        q_offset_ms=40,
+        s_offset_ms=40,
+        t_peak_offset_ms=t_peak_offset_ms,
+        r_width_ms=20,
+        q_width_ms=20,
+        s_width_ms=30,
+        t_width_ms=t_width_ms,
+        qrs_peak_time=qrs_peak_time,
+    )
+
+    qt = beat.ecg.qt_interval(t=t, ecg_signal=y)
+
+    # Start index should be close to the QRS peak time
+    assert np.isclose(qt.start_index, qrs_peak_time, atol=2)
+
+    # End index should be after t_peak_offset + about 2/3 of the t_width_ms
+
+    assert np.isclose(qt.end_index, qrs_peak_time + t_peak_offset_ms + 2 * t_width_ms / 3, atol=5)
+
+    assert np.isclose(qt.qt_interval, qt.end_index - qt.start_index)
+
+    # import matplotlib.pyplot as plt
+    # plt.plot(t, y)
+    # plt.plot([t[qt.start_index]], [y[qt.start_index]], "ro", label="QT Interval")
+    # plt.plot([t[qt.end_index]], [y[qt.end_index]], "go", label="QT Interval")
+    # plt.savefig("ecg_qt_interval.png")

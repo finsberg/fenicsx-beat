@@ -2,9 +2,11 @@ from mpi4py import MPI
 
 import dolfinx
 import numpy as np
+import pytest
 import ufl
 
 import beat
+import beat.units
 
 
 def test_single_stimulation():
@@ -103,3 +105,200 @@ def test_double_stimulation():
         pde.state.x.array,
         (end1 - start1 - dt) * value1 + (end2 - start2 - dt) * value2,
     )
+
+
+@pytest.mark.parametrize("subdomain_dim", [0, 1, 2, 3])
+def test_effective_dim_3D(subdomain_dim):
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_cube(comm, 2, 2, 2, dolfinx.cpp.mesh.CellType.tetrahedron)
+    entities = dolfinx.mesh.locate_entities(mesh, subdomain_dim, lambda x: np.full(x.shape[1], 1))
+    subdomain_data = dolfinx.mesh.meshtags(
+        mesh,
+        subdomain_dim,
+        entities,
+        np.full(entities.shape, 1),
+    )
+    effective_dim = beat.stimulation.compute_effective_dim(mesh, subdomain_data)
+
+    assert effective_dim == subdomain_dim
+
+
+@pytest.mark.parametrize("subdomain_dim", [0, 1, 2])
+def test_effective_dim_2D(subdomain_dim):
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    entities = dolfinx.mesh.locate_entities(mesh, subdomain_dim, lambda x: np.full(x.shape[1], 1))
+    subdomain_data = dolfinx.mesh.meshtags(
+        mesh,
+        subdomain_dim,
+        entities,
+        np.full(entities.shape, 1),
+    )
+    effective_dim = beat.stimulation.compute_effective_dim(mesh, subdomain_data)
+
+    assert effective_dim == subdomain_dim + 1
+
+
+@pytest.mark.parametrize("subdomain_dim", [0, 1])
+def test_effective_dim_1D(subdomain_dim):
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_interval(comm, 2)
+    entities = dolfinx.mesh.locate_entities(mesh, subdomain_dim, lambda x: np.full(x.shape[1], 1))
+    subdomain_data = dolfinx.mesh.meshtags(
+        mesh,
+        subdomain_dim,
+        entities,
+        np.full(entities.shape, 1),
+    )
+    effective_dim = beat.stimulation.compute_effective_dim(mesh, subdomain_data)
+
+    assert effective_dim == subdomain_dim + 2
+
+
+@pytest.mark.parametrize("subdomain_dim, integral_type", [(1, "exterior_facet"), (2, "cell")])
+def test_get_dZ_2D(subdomain_dim, integral_type):
+    """
+    Test the get_dZ function with different mesh and subdomain data.
+    """
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    cells = dolfinx.mesh.locate_entities(
+        mesh,
+        subdomain_dim,
+        lambda x: np.logical_and(x[0] <= 0.5, x[1] <= 0.5),
+    )
+    stim_marker = 1
+    stim_tags = dolfinx.mesh.meshtags(
+        mesh,
+        subdomain_dim,
+        cells,
+        np.full(len(cells), stim_marker, dtype=np.int32),
+    )
+
+    dZ = beat.stimulation.get_dZ(mesh, stim_tags)
+    assert isinstance(dZ, ufl.Measure)
+    assert dZ.integral_type() == integral_type
+
+
+@pytest.mark.parametrize("subdomain_dim, integral_type", [(2, "exterior_facet"), (3, "cell")])
+def test_get_dZ_3D(subdomain_dim, integral_type):
+    """
+    Test the get_dZ function with different mesh and subdomain data.
+    """
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_cube(comm, 2, 2, 2, dolfinx.cpp.mesh.CellType.tetrahedron)
+    cells = dolfinx.mesh.locate_entities(
+        mesh,
+        subdomain_dim,
+        lambda x: np.logical_and(x[0] <= 0.5, x[1] <= 0.5),
+    )
+    stim_marker = 1
+    stim_tags = dolfinx.mesh.meshtags(
+        mesh,
+        subdomain_dim,
+        cells,
+        np.full(len(cells), stim_marker, dtype=np.int32),
+    )
+
+    dZ = beat.stimulation.get_dZ(mesh, stim_tags)
+    assert isinstance(dZ, ufl.Measure)
+    assert dZ.integral_type() == integral_type
+
+
+@pytest.mark.parametrize(
+    "effective_dim, mesh_unit, expected_unit",
+    [
+        (0, "cm", "uA"),
+        (1, "cm", "uA"),
+        (2, "cm", "uA/cm"),
+        (3, "cm", "uA/cm**2"),
+        (0, "m", "uA"),
+        (1, "m", "uA"),
+        (2, "m", "uA/m"),
+    ],
+)
+def test_compute_stimulus_unit(effective_dim, mesh_unit, expected_unit):
+    """
+    Test the compute_stimulus_unit function with different effective
+    dimensions and mesh units.
+    """
+    assert beat.stimulation.compute_stimulus_unit(effective_dim, mesh_unit) == beat.units.ureg(
+        expected_unit,
+    )
+
+
+@pytest.mark.parametrize(
+    "value, mesh_unit, expected_value",
+    [
+        (1.0, "cm", 1.0 * beat.units.ureg("cm**-1")),
+        (2.0 * beat.units.ureg("mm**-1"), "cm", 2.0 * beat.units.ureg("mm**-1")),
+    ],
+)
+def test_convert_chi(value, mesh_unit, expected_value):
+    assert beat.stimulation.convert_chi(value, mesh_unit) == expected_value
+
+
+@pytest.mark.parametrize(
+    "effective_dim, amplitude, expected_value",
+    [
+        (1, 2.0, 2.0 * beat.units.ureg("uA / cm")),
+        (2, 2.0, 2.0 * beat.units.ureg("uA / cm**2")),
+        (3, 2.0, 2.0 * beat.units.ureg("uA / cm**3")),
+    ],
+)
+def test_convert_amplitude(effective_dim, amplitude, expected_value):
+    assert beat.stimulation.convert_amplitude(effective_dim, amplitude) == expected_value
+
+
+def test_define_stimulus():
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    # Create cells where all points are inside the subdomain
+    cells = dolfinx.mesh.locate_entities(
+        mesh,
+        mesh.topology.dim,
+        lambda x: np.full(x.shape[1], True),
+    )
+    stim_marker = 1
+    stim_tags = dolfinx.mesh.meshtags(
+        mesh,
+        mesh.topology.dim,
+        cells,
+        np.full(len(cells), stim_marker, dtype=np.int32),
+    )
+
+    time = dolfinx.fem.Constant(mesh, 0.0)
+    start = 1.0
+    duration = 2.0
+    amplitude = 3.0
+    chi = 2.0
+    stimulus = beat.stimulation.define_stimulus(
+        mesh=mesh,
+        chi=chi,
+        time=time,
+        amplitude=amplitude,
+        start=start,
+        duration=duration,
+        mesh_unit="cm",
+        marker=stim_marker,
+        subdomain_data=stim_tags,
+    )
+    assert stimulus.marker == stim_marker
+    stim_form = dolfinx.fem.form(stimulus.expr * stimulus.dz)
+    # Stimulus should be zero at the start
+    assert np.isclose(comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM), 0.0)
+    # Stimulus should be non-zero at the start of stimulus
+    time.value = start
+    assert np.isclose(
+        comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM),
+        amplitude / chi,
+    )
+    # Stimulus should still be non-zero
+    time.value = start + duration / 2
+    assert np.isclose(
+        comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM),
+        amplitude / chi,
+    )
+    # Stimulus should be zero after the duration
+    time.value = start + duration + 1e-6
+    assert np.isclose(comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM), 0.0)

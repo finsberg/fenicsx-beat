@@ -2,12 +2,6 @@
 
 To verify our solvers we derive some analytic solutions and checks the numerical solution against the analytic. We also perform convergence tests in the spatial and temporal dimension and verify that we get the correct order of convergence.
 
-## Spatial convergence tests
-TBW
-
-## Temporal convergence tests
-TBW
-
 ## Analytic solution to the Monodomain model
 
 We want to solve

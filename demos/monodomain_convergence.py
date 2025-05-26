@@ -71,10 +71,7 @@ def main():
                     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
                     x = ufl.SpatialCoordinate(mesh)
 
-                    t_var = ufl.variable(time)
-
-                    s_exact = ufl.replace(s_exact_func(x, t_var), {t_var: T})
-                    I_s = ac_func(x, t_var)
+                    I_s = ac_func(x, time)
 
                     pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, I_s=I_s)
 
@@ -84,8 +81,7 @@ def main():
                     s = dolfinx.fem.Function(V_ode)
                     s.interpolate(
                         dolfinx.fem.Expression(
-                            s_exact,
-                            V_ode.element.interpolation_points(),
+                            s_exact_func(x, time), V_ode.element.interpolation_points(),
                         ),
                     )
 
@@ -105,8 +101,7 @@ def main():
                     solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=1.0)
                     solver.solve((t0, T), dt=dt)
 
-                    v_exact = ufl.replace(v_exact_func(x, t_var), {t_var: T})
-
+                    v_exact = v_exact_func(x, T)
                     error = dolfinx.fem.form((pde.state - v_exact) ** 2 * ufl.dx)
                     E = np.sqrt(
                         comm.allreduce(dolfinx.fem.assemble_scalar(error), MPI.SUM),

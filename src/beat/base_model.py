@@ -74,10 +74,15 @@ class BaseModel:
         dx: ufl.Measure | None = None,
         params: dict[str, Any] | None = None,
         I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
-        jit_options: dict[str, Any] | None = None,
-        form_compiler_options: dict[str, Any] | None = None,
-        petsc_options: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
+        # Warn about unused kwargs
+        if kwargs:
+            logger.warning(
+                "Unused keyword arguments: %s",
+                ", ".join(f"{k}={v}" for k, v in kwargs.items()),
+            )
+
         self._mesh = mesh
         self.time = time
         self.dx = dx or ufl.dx(domain=mesh)
@@ -85,6 +90,9 @@ class BaseModel:
         self.parameters = type(self).default_parameters()
         if params is not None:
             self.parameters.update(params)
+        form_compiler_options = self.parameters["form_compiler_options"]
+        jit_options = self.parameters["jit_options"]
+        petsc_options = self.parameters["petsc_options"]
 
         self._I_s = _transform_I_s(I_s, dZ=self.dx)
 
@@ -120,8 +128,8 @@ class BaseModel:
         if solver_type == "iterative":
             petsc_options = {
                 "ksp_type": "cg",
-                # "pc_type": "hypre",
-                "pc_type": "petsc_amg",
+                "pc_type": "hypre",
+                # "pc_type": "petsc_amg",
                 "pc_hypre_type": "boomeramg",
                 # "ksp_norm_type": "unpreconditioned",
                 # "ksp_atol": 1e-15,
