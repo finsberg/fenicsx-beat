@@ -118,8 +118,8 @@ init_states = np.array([0.0, -85], dtype=np.float64)
 # which will also inform the PDE solver later
 v_index = 1
 
-# We can also check that the solution of the ODE
-# by solving a the ODE for a single cell
+# We can also check the solution of the ODE
+# by solving the ODE for a single cell
 times = np.arange(0.0, 1000.0, 0.1)
 values = np.zeros((len(times), 2))
 values[0, :] = np.array([0.0, -85.0])
