@@ -16,6 +16,7 @@ dependencies = [
     "scifem>=0.2.14",
     "pint",
     "rich",
+    "fenics-dolfinx",
 ]
 
 [project.scripts]
