@@ -1,7 +1,9 @@
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/logo.png)
 
 # fenicsx-beat
-Cardiac electrophysiology simulator in FEniCSx
+Cardiac electrophysiology research uses computational modeling to study heart rhythm disorders and test therapies.
+
+This tool, fenicsx-beat, is a cardiac electrophysiology simulator built specifically for the FEniCSx platform. It provides a dedicated and easy-to-use tool for researchers already using [FEniCSx](https://fenicsproject.org) to perform simulations based on the Monodomain model.
 
 - Source code: https://github.com/finsberg/fenicsx-beat
 - Documentation: https://finsberg.github.io/fenicsx-beat
@@ -17,6 +19,12 @@ or with `conda`
 conda install -c conda-forge fenicsx-beat
 ```
 Note that installing with `pip` requires [FEniCSx already installed](https://fenicsproject.org/download/)
+
+Also that to run most of the examples you will need to install additional dependencies which can be done using the command
+```
+python3 -m pip install fenicsx-beat[demos]
+```
+
 
 ## Getting started
 
