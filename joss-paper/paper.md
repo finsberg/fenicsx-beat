@@ -54,7 +54,7 @@ The software leverages the FEniCSx library for the spatial discretization of the
 
 
 ## Illustrative example
-The following minimal example demonstrates simulating the Monodomain model on a unit square domain using a modified FitzHugh-Nagumo model [@rogers1994collocation]. For simplicity we use the forward Euler method to solve the ODEs. However, in a real simulation, we would use `gotranx` [@Finsberg2024] to generate code for solving the ODEs (see more examples in the documentation).
+The following minimal example demonstrates simulating the Monodomain model on a unit square domain using a modified FitzHugh-Nagumo model [@rogers1994collocation]. For simplicity, we use the forward Euler method to solve the ODEs. However, in a real simulation, we would use `gotranx` [@Finsberg2024] to generate code for solving the ODEs (see more examples in the documentation).
 
 The state variables are $s$ and $v$. The derivatives $\frac{ds}{dt}$ and $\frac{dv}{dt}$ are calculated, and then the forward Euler update rule is applied.
 
@@ -253,7 +253,7 @@ while t < T:
 vtx.close()
 ```
 
-![Simulation results. Left panel shows the membrane potential after 3 ms in the simulation on a unit square where the stimulation is applied in the lower left corner. The right panel shows the membrane potential in a single cell simulation.](paper_figure.png)
+![Simulation results. The left panel shows the membrane potential after 3 ms in the simulation on a unit square where the stimulation is applied in the lower left corner. The right panel shows the membrane potential in a single cell simulation.](paper_figure.png)
 
 
 ## Comparison with Other Software
