@@ -161,20 +161,21 @@ stim_tags = dolfinx.mesh.meshtags(
 dx = ufl.Measure("dx", domain=mesh, subdomain_data=stim_tags)
 I_s = beat.Stimulus(expr=stim_expr, dZ=dx, marker=stim_marker)
 
-# Create PDE model
-pde = beat.MonodomainModel(time=time, mesh=mesh, M=0.001, I_s=I_s, dx=dx)
-
-# Next we create the PDE solver where we make sure to
+# Next we create the ODE solver where we make sure to
 # pass the variable for the membrane potential from the PDE
+v_ode = dolfinx.fem.Function(ode_space)
 ode = beat.odesolver.DolfinODESolver(
-    v_ode=dolfinx.fem.Function(ode_space),
-    v_pde=pde.state,
+    v_ode=v_ode,
     fun=fitzhughnagumo_forward_euler,
     init_states=init_states,
     parameters=parameters,
     num_states=len(init_states),
     v_index=1,
 )
+
+# Create PDE model
+pde = beat.MonodomainModel(time=time, mesh=mesh, M=0.001, I_s=I_s, dx=dx, v_ode=v_ode)
+
 
 # Combine PDE and ODE solver
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)

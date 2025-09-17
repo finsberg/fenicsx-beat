@@ -276,22 +276,12 @@ stim = dolfinx.fem.Function(W)
 
 stim_update_expr = dolfinx.fem.Expression(stim_expr, W.element.interpolation_points())
 
-# Now we are ready to create the PDE solver.
-
-pde = beat.MonodomainModel(
-    time=time,
-    mesh=geo.mesh,
-    M=M,
-    I_s=stim,
-    C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
-)
-
-# and the ODE solver. Here we also need to specify which space to use for the ODE solver. We will use first order Lagrange elements, which will solve one ODE per node in the mesh.
+# Now we are ready to create the ODE solver. Here we also need to specify which space to use for the ODE solver. We will use first order Lagrange elements, which will solve one ODE per node in the mesh.
 
 V_ode = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
+v_ode = dolfinx.fem.Function(V_ode)
 ode = beat.odesolver.DolfinMultiODESolver(
-    v_ode=dolfinx.fem.Function(V_ode),
-    v_pde=pde.state,
+    v_ode=v_ode,
     markers=endo_epi,
     num_states={i: len(s) for i, s in init_states.items()},
     fun=fun,
@@ -299,6 +289,18 @@ ode = beat.odesolver.DolfinMultiODESolver(
     parameters=parameters,
     v_index=v_index,
 )
+
+# and the PDE solver.
+
+pde = beat.MonodomainModel(
+    time=time,
+    mesh=geo.mesh,
+    M=M,
+    I_s=stim,
+    C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
+    v_ode=v_ode,
+)
+
 
 # We will the the ODE and PDE using a Godunov splitting scheme. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
