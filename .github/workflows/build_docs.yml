@@ -35,6 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python3 -m pip install -r https://raw.githubusercontent.com/scientificcomputing/scifem/refs/heads/main/build-requirements.txt
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install ".[docs]"
 
