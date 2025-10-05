@@ -1,10 +1,8 @@
-[build-system] # Require setuptool version due to https://github.com/pypa/setuptools/issues/2938
+[build-system]
 requires = [
-    "setuptools>=77.0.3",                   # Ensuring license field is correctly parsed]
-    "packaging>=24.2",                      # Ensuring license field is correctly parsed]
-    "pkgconfig",
+    "setuptools>=77.0.3",
     "wheel",
-    "scikit-build-core[pyproject]>=0.11.0"
+
 ]
 
 [project]
