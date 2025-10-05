@@ -20,7 +20,7 @@ from .stimulation import Stimulus
 meta = metadata("fenicsx-beat")
 __version__ = meta["Version"]
 __author__ = meta["Author-email"]
-__license__ = meta["License"]
+__license__ = meta["License-Expression"]
 __email__ = meta["Author-email"]
 __program_name__ = meta["Name"]
 
