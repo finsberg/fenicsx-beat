@@ -64,7 +64,6 @@ mesh_unit = "cm"
 
 V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 plotter_markers.add_mesh(grid, show_edges=True)
@@ -318,7 +317,9 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function_on_input_mesh(checkpointfname, solver.pde.state, time=t, name="v")
+    adios4dolfinx.write_function_on_input_mesh(
+        checkpointfname, solver.pde.state, time=t, name="v",
+    )
 
 
 # We will save results every 1 ms
@@ -398,7 +399,9 @@ leads = dict(
     V5=(10.0, 2.0, 0.0),
     V6=(10.0, -6.0, 2.0),
 )
-ecg = beat.ecg.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M)
+ecg = beat.ecg.ECGRecovery(
+    v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M,
+)
 ecg_forms = {k: ecg.eval(p) for k, p in leads.items()}
 ecg_traces: dict[str, list[float]] = {k: [] for k in ecg_forms.keys()}
 
@@ -409,7 +412,9 @@ for t in times:
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
     for k, e in ecg_forms.items():
-        ecg_traces[k].append(geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM))
+        ecg_traces[k].append(
+            geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM),
+        )
 
 plotter_voltage.close()
 # -

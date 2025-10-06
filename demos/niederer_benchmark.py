@@ -108,7 +108,6 @@ geo = beat.geometry.get_3D_slab_geometry(
 ode_space = dolfinx.fem.functionspace(geo.mesh, ("Lagrange", 1))
 
 if pyvista is not None:
-    pyvista.start_xvfb()
     plotter = pyvista.Plotter()
     grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(geo.mesh))
     plotter.add_mesh(grid, show_edges=True)

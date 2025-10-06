@@ -8,7 +8,6 @@ on:
 
 env:
   DEB_PYTHON_INSTALL_LAYOUT: deb_system
-  DISPLAY: ":99.0"
 
 jobs:
 
@@ -17,9 +16,6 @@ jobs:
     container: ghcr.io/fenics/dolfinx/lab:v0.9.0
     env:
       PUBLISH_DIR: ./_build/html
-      DISPLAY: ":99.0"
-      PYVISTA_TRAME_SERVER_PROXY_PREFIX: "/proxy/"
-      PYVISTA_TRAME_SERVER_PROXY_ENABLED: "True"
       PYVISTA_OFF_SCREEN: false
       PYVISTA_JUPYTER_BACKEND: "html"
 
@@ -29,9 +25,7 @@ jobs:
 
       - name: Install dependencies for pyvista
         run: |
-          apt-get update && apt-get install -y libgl1-mesa-dev xvfb
-          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-        # Might need:
+          apt-get update && apt-get install -y libxrender1
 
       - name: Install dependencies
         run: |
