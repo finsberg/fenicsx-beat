@@ -246,8 +246,6 @@ except ImportError:
     pyvista = None
 
 else:
-
-    pyvista.start_xvfb()
     plotter = pyvista.Plotter()
     viridis = plt.get_cmap("viridis")
     grid = pyvista.UnstructuredGrid(

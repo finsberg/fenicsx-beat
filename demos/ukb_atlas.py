@@ -42,7 +42,6 @@ V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 
 # Let us plot the geometry
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 plotter_markers.add_mesh(grid, show_edges=True)
@@ -75,7 +74,6 @@ endo_epi = beat.utils.expand_layer_biv(
 
 # Let us plot these markers
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = endo_epi.x.array
