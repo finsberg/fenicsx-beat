@@ -58,6 +58,9 @@ docs = [
    "ipywidgets",
    "imageio",
    "pyvista[jupyter]",
+   "sphinx-codeautolink",
+   "sphinxcontrib-bibtex",
+    "sphinx-copybutton",
 ]
 all = [
    "fenicsx-beat[test]",
