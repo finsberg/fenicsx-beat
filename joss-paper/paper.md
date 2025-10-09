@@ -11,7 +11,7 @@ tags:
   - finite element method
 authors:
   - name: Henrik Finsberg
-    orcid: 0000-0001-6489-8858
+    orcid: 0000-0003-3766-2393
     corresponding: true
     affiliation: 1
 
