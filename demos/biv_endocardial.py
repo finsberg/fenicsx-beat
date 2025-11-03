@@ -35,22 +35,6 @@ if not geodir.exists():
         comm=comm,
         outdir=geodir,
         char_length=0.3,  # Reduce this value to get a finer mesh (should be at least 0.2)
-        center_lv_y=0.2,
-        center_lv_z=0.0,
-        a_endo_lv=5.0,
-        b_endo_lv=2.2,
-        c_endo_lv=2.2,
-        a_epi_lv=6.0,
-        b_epi_lv=3.0,
-        c_epi_lv=3.0,
-        center_rv_y=1.0,
-        center_rv_z=0.0,
-        a_endo_rv=6.0,
-        b_endo_rv=2.5,
-        c_endo_rv=2.7,
-        a_epi_rv=8.0,
-        b_epi_rv=5.5,
-        c_epi_rv=4.0,
         create_fibers=True,
     )
 
@@ -58,7 +42,43 @@ geo = cardiac_geometries.geometry.Geometry.from_folder(
     comm=comm,
     folder=geodir,
 )
-mesh_unit = "cm"
+mesh_unit = "cm"  # The unit of the mesh is in cm
+
+# Now we need to redefine the markers to have so that facets on the endo- and epicardium combine both
+# free wall and the septum.
+
+markers = {"ENDO_LV": [1, 2], "ENDO_RV": [2, 2], "BASE": [3, 2], "EPI": [4, 2]}
+marker_values = geo.ffun.values.copy()
+marker_values[
+    np.isin(geo.ffun.indices, geo.ffun.find(geo.markers["LV_ENDO_FW"][0]))
+] = markers["ENDO_LV"][0]
+marker_values[np.isin(geo.ffun.indices, geo.ffun.find(geo.markers["LV_SEPTUM"][0]))] = (
+    markers["ENDO_LV"][0]
+)
+marker_values[
+    np.isin(geo.ffun.indices, geo.ffun.find(geo.markers["RV_ENDO_FW"][0]))
+] = markers["ENDO_RV"][0]
+marker_values[np.isin(geo.ffun.indices, geo.ffun.find(geo.markers["RV_SEPTUM"][0]))] = (
+    markers["ENDO_RV"][0]
+)
+marker_values[np.isin(geo.ffun.indices, geo.ffun.find(geo.markers["BASE"][0]))] = (
+    markers["BASE"][0]
+)
+marker_values[np.isin(geo.ffun.indices, geo.ffun.find(geo.markers["LV_EPI_FW"][0]))] = (
+    markers["EPI"][0]
+)
+marker_values[np.isin(geo.ffun.indices, geo.ffun.find(geo.markers["RV_EPI_FW"][0]))] = (
+    markers["EPI"][0]
+)
+geo.markers = markers
+ffun = dolfinx.mesh.meshtags(
+    geo.mesh,
+    geo.ffun.dim,
+    geo.ffun.indices,
+    marker_values,
+)
+geo.ffun = ffun
+
 
 # Let us plot the geometry
 
@@ -318,7 +338,10 @@ def save(t):
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
     adios4dolfinx.write_function_on_input_mesh(
-        checkpointfname, solver.pde.state, time=t, name="v",
+        checkpointfname,
+        solver.pde.state,
+        time=t,
+        name="v",
     )
 
 
@@ -400,7 +423,10 @@ leads = dict(
     V6=(10.0, -6.0, 2.0),
 )
 ecg = beat.ecg.ECGRecovery(
-    v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M,
+    v=v,
+    sigma_b=1.0,
+    C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
+    M=M,
 )
 ecg_forms = {k: ecg.eval(p) for k, p in leads.items()}
 ecg_traces: dict[str, list[float]] = {k: [] for k in ecg_forms.keys()}
