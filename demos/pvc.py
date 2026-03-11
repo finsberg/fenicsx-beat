@@ -117,7 +117,7 @@ g_Kr = dolfinx.fem.Function(V_ode)
 g_Kr.interpolate(
     dolfinx.fem.Expression(
         ufl.conditional(ufl.ge(X[0], L / 2), 0.0, g_Kr_value),
-        V_ode.element.interpolation_points(),
+        beat.utils.interpolation_points(V_ode),
     ),
 )
 
@@ -133,7 +133,7 @@ g_Ks = dolfinx.fem.Function(V_ode)
 g_Ks.interpolate(
     dolfinx.fem.Expression(
         ufl.conditional(ufl.ge(X[0], L / 2), 0.0, g_Ks_value),
-        V_ode.element.interpolation_points(),
+        beat.utils.interpolation_points(V_ode),
     ),
 )
 parameters_ode[g_Ks_index, :] = g_Ks.x.array

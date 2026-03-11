@@ -10,11 +10,13 @@ from petsc4py import PETSc
 import dolfinx
 import dolfinx.fem.petsc
 import ufl
+from packaging.version import Version
 from ufl.core.expr import Expr
 
 from .stimulation import Stimulus
 
 logger = logging.getLogger(__name__)
+_dolfinx_version = Version(dolfinx.__version__)
 
 
 class Status(str, Enum):
@@ -100,6 +102,11 @@ class BaseModel:
 
         self._timestep = dolfinx.fem.Constant(mesh, self.parameters["default_timestep"])
         a, L = self.variational_forms(self._timestep)
+
+        kwargs = {}
+        if _dolfinx_version >= Version("0.10"):
+            kwargs["petsc_options_prefix"] = "beat_base_model_"
+
         self._solver = dolfinx.fem.petsc.LinearProblem(
             a,
             L,
@@ -107,6 +114,7 @@ class BaseModel:
             form_compiler_options=form_compiler_options,
             jit_options=jit_options,
             petsc_options=petsc_options,
+            **kwargs,
         )
         dolfinx.fem.petsc.assemble_matrix(self._solver.A, self._solver.a)  # type: ignore
         self._solver.A.assemble()
