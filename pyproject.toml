@@ -7,7 +7,7 @@ requires = [
 
 [project]
 name = "fenicsx-beat"
-version = "0.2.3"
+version = "0.2.4"
 description = "Library to run cardiac EP simulations"
 authors = [{name = "Henrik Finsberg", email = "henriknf@simula.no"}]
 license = "MIT"
@@ -160,7 +160,7 @@ tag = true
 sign_tags = false
 tag_name = "v{new_version}"
 tag_message = "Bump version: {current_version} → {new_version}"
-current_version = "0.2.3"
+current_version = "0.2.4"
 
 
 [[tool.bumpversion.files]]
