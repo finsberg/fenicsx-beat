@@ -8,20 +8,41 @@ on:
 jobs:
 
   test-code:
-    # This code depends on the result of check-code
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/fenics/dolfinx/dolfinx:v0.9.0
+    name: Test on ${{ matrix.container }}
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.container }}
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
 
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [
+          "ghcr.io/fenics/dolfinx/dolfinx:v0.9.0",
+          "ghcr.io/fenics/dolfinx/dolfinx:stable",
+          "ghcr.io/fenics/dolfinx/dolfinx:nightly"
+        ]
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install package
+
+      - name: Install build dependencies
         run: |
           python3 -m pip install -r https://raw.githubusercontent.com/scientificcomputing/scifem/refs/heads/main/build-requirements.txt
+
+      - name: Install development versions of dependencies
+        if: ${{ matrix.container == 'ghcr.io/fenics/dolfinx/dolfinx:nightly' }}
+        run: |
+          python3 -m pip install git+https://github.com/scientificcomputing/io4dolfinx.git
+          python3 -m pip install git+https://github.com/scientificcomputing/scifem.git --no-build-isolation
+          python3 -m pip install git+https://github.com/ComputationalPhysiology/cardiac-geometriesx.git
+
+      - name: Install package
+        run: |
           python3 -m pip install scifem --no-build-isolation
-          python3 -m pip install -e .[test]
+          python3 -m pip install .[test]
+
 
       - name: Run tests
         run: python3 -m pytest --cov=beat --cov-report=html --cov-report=term-missing -v

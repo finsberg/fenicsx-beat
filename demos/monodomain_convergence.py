@@ -81,7 +81,8 @@ def main():
                     s = dolfinx.fem.Function(V_ode)
                     s.interpolate(
                         dolfinx.fem.Expression(
-                            s_exact_func(x, time), V_ode.element.interpolation_points(),
+                            s_exact_func(x, time),
+                            beat.utils.interpolation_points(V_ode),
                         ),
                     )
 

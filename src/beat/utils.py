@@ -7,8 +7,19 @@ import dolfinx
 import dolfinx.fem.petsc
 import numpy as np
 import ufl
+from packaging.version import Version
 
 logger = logging.getLogger(__name__)
+
+
+_dolfinx_version = Version(dolfinx.__version__)
+
+
+def interpolation_points(V):
+    if _dolfinx_version >= Version("0.10"):
+        return V.element.interpolation_points
+    else:
+        return V.element.interpolation_points()
 
 
 def local_project(
@@ -41,7 +52,7 @@ def local_project(
         U.x.array[:] = v.x.array[:]
         return U
 
-    expr = dolfinx.fem.Expression(v, V.element.interpolation_points())
+    expr = dolfinx.fem.Expression(v, interpolation_points(V))
     U.interpolate(expr)
     return U
 
@@ -51,7 +62,7 @@ def parse_element(space_string: str, mesh: dolfinx.mesh.Mesh, dim: int) -> basix
     Parse a string representation of a basix element family
     """
     family_str, degree_str = space_string.split("_")
-    kwargs = {"degree": int(degree_str), "cell": mesh.ufl_cell().cellname()}
+    kwargs = {"degree": int(degree_str), "cell": mesh.basix_cell()}
     if dim > 1:
         if family_str in ["Quadrature", "Q", "Quad"]:
             kwargs["value_shape"] = (dim,)
@@ -171,6 +182,10 @@ def expand_layer(
         dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
     ]
 
+    kwargs = {}
+    if _dolfinx_version >= Version("0.10"):
+        kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_"
+
     problem = dolfinx.fem.petsc.LinearProblem(
         a,
         L,
@@ -187,6 +202,7 @@ def expand_layer(
             "ksp_max_it": 10_000,
             "ksp_error_if_not_converged": False,
         },
+        **kwargs,
     )
     uh = problem.solve()
 
@@ -285,6 +301,10 @@ def expand_layer_biv(
     endo_rv_dofs = dolfinx.fem.locate_dofs_topological(V, ft.dim, ft.find(endo_rv_marker))
     epi_dofs = dolfinx.fem.locate_dofs_topological(V, ft.dim, ft.find(epi_marker))
 
+    kwargs = {}
+    if _dolfinx_version >= Version("0.10"):
+        kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
+
     lv_problem = dolfinx.fem.petsc.LinearProblem(
         a,
         L,
@@ -293,8 +313,13 @@ def expand_layer_biv(
             dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
         ],
         petsc_options=petsc_options,
+        **kwargs,
     )
     uh_lv = lv_problem.solve()
+
+    kwargs = {}
+    if _dolfinx_version >= Version("0.10"):
+        kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
 
     rv_problem = dolfinx.fem.petsc.LinearProblem(
         a,
@@ -304,6 +329,7 @@ def expand_layer_biv(
             dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
         ],
         petsc_options=petsc_options,
+        **kwargs,
     )
     uh_rv = rv_problem.solve()
 

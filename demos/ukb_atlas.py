@@ -272,7 +272,7 @@ stim = dolfinx.fem.Function(W)
 
 # We also create an expression that will be used to update the stimulus at each time step.
 
-stim_update_expr = dolfinx.fem.Expression(stim_expr, W.element.interpolation_points())
+stim_update_expr = dolfinx.fem.Expression(stim_expr, beat.utils.interpolation_points(W))
 
 # Now we are ready to create the PDE solver.
 
