@@ -17,6 +17,7 @@ import gotranx
 import scifem
 import beat
 import pyvista
+from dolfinx.io import VTXMeshPolicy
 
 import beat.postprocess
 from beat.geometry import Geometry
@@ -257,6 +258,7 @@ vtx = dolfinx.io.VTXWriter(
     vtxfname,
     [solver.pde.state],
     engine="BP4",
+    mesh_policy=VTXMeshPolicy.reuse,
 )
 
 adios4dolfinx.write_mesh(checkpointfname, mesh)
