@@ -10,7 +10,7 @@ from mpi4py import MPI
 import matplotlib.pyplot as plt
 import ufl
 
-import adios4dolfinx
+import io4dolfinx
 import numpy as np
 import cardiac_geometries as cg
 import dolfinx
@@ -303,7 +303,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
-# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
+# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://scientificcomputing.github.io/io4dolfinx) package.
 
 vtxfname = results_folder / "v.bp"
 checkpointfname = results_folder / "v_checkpoint.bp"
@@ -318,7 +318,7 @@ vtx = dolfinx.io.VTXWriter(
     [solver.pde.state],
     engine="BP4",
 )
-adios4dolfinx.write_mesh(checkpointfname, geo.mesh)
+io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -343,7 +343,7 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
     grid.point_data["V"] = solver.pde.state.x.array
     plotter_voltage.write_frame()
 

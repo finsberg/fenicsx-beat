@@ -7,7 +7,7 @@ import shutil
 from mpi4py import MPI
 
 
-import adios4dolfinx
+import io4dolfinx
 
 
 import dolfinx
@@ -19,7 +19,6 @@ import beat
 import pyvista
 from dolfinx.io import VTXMeshPolicy
 
-import beat.postprocess
 from beat.geometry import Geometry
 
 comm = MPI.COMM_WORLD
@@ -261,14 +260,14 @@ vtx = dolfinx.io.VTXWriter(
     mesh_policy=VTXMeshPolicy.reuse,
 )
 
-adios4dolfinx.write_mesh(checkpointfname, mesh)
+io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
 
 
 i = 0
@@ -298,9 +297,9 @@ else:
     p2 = (x1, dx * 0.5, dx * 0.5)  # type: ignore
 
 
-# Need to either save the functions on the input mesh using adios4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/adios4dolfinx/docs/original_checkpoint.html
+# Need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://scientificcomputing.github.io/io4dolfinx/docs/original_checkpoint.html
 
-mesh = adios4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
@@ -330,7 +329,7 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 t1 = np.inf
 t2 = np.inf
 phie = []
@@ -342,7 +341,7 @@ gif_file = Path("voltage_slab_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
-    adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
     ecg.solve()
     phie.append(
         mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p_ecg_form), op=MPI.SUM),
