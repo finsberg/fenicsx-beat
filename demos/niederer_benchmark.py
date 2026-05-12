@@ -161,7 +161,7 @@ I_s = beat.stimulation.define_stimulus(
     amplitude=50_000.0,
 )
 
-
+assert geo.f0 is not None
 M = beat.conductivities.define_conductivity_tensor(
     f0=geo.f0,
     **conductivities,
