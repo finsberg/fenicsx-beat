@@ -235,13 +235,13 @@ np.random.seed(0)
 num_points = 900
 lv_endo_facets = geo.ffun.find(geo.markers["LV"][0])
 rv_endo_facets = geo.ffun.find(geo.markers["RV"][0])
-endo_facets = np.concatenate([lv_endo_facets, rv_endo_facets])
-np.random.shuffle(endo_facets)
-endo_facets_stim = endo_facets[:num_points]
+local_endo_facets = np.concatenate([lv_endo_facets, rv_endo_facets])
+# Compute midpoints of all local endocardial facets
+local_midpoints = dolfinx.mesh.compute_midpoints(geo.mesh, 2, local_endo_facets)
 
-# We then select the midpoints of the facets as the points to stimulate.
+# Gather midpoints from all MPI ranks to rank 0
+gathered_midpoints = comm.gather(local_midpoints, root=0)
 
-midpoints = dolfinx.mesh.compute_midpoints(geo.mesh, 2, endo_facets_stim)
 
 # We will stimulate the cells with a current of 2.5 uA/cm^2 for 2 ms starting at 0 ms.
 # The points will be activated with some delay which is a random number between 0 and 4 ms.
@@ -250,14 +250,44 @@ start = 0.0
 duration = 2.0
 value = 2.5
 activation_duration = 4.0
-delays = np.random.uniform(0, activation_duration, num_points)
+
+# We will now gather the midpoints of the endocardial facets from all ranks to rank 0,
+# where we will randomly select 900 points and generate random delays for these points.
+# We will then broadcast the selected points and delays to all ranks.
+
+if comm.rank == 0:
+    # Combine all midpoints into a single array
+    global_midpoints = (
+        np.vstack(gathered_midpoints) if gathered_midpoints else np.empty((0, 3))
+    )
+
+    # Remove duplicates caused by ghost facets spanning multiple ranks
+    global_midpoints = np.unique(global_midpoints, axis=0)
+
+    # Shuffle and select up to num_points
+    np.random.seed(0)
+    np.random.shuffle(global_midpoints)
+
+    # Safely select up to 900 points (just in case the global mesh is very coarse)
+    actual_num_points = min(num_points, len(global_midpoints))
+    selected_points = global_midpoints[:actual_num_points]
+
+    # Generate delays
+    delays = np.random.uniform(0, activation_duration, len(selected_points))
+else:
+    selected_points = None
+    delays = None
+
+# 4. Broadcast the randomly selected points and delays to all ranks
+selected_points = comm.bcast(selected_points, root=0)
+delays = comm.bcast(delays, root=0)
 
 # We now generate the expression for the stimulation. Here we also specify a tolerance of 1.0 which means that the stimulation will be applied to points that are within 1.0 mm of the midpoints.
 
 stim_expr = beat.stimulation.generate_random_activation(
     mesh=geo.mesh,
     time=time,
-    points=midpoints,
+    points=selected_points,
     delays=delays,
     stim_start=start,
     stim_duration=duration,
