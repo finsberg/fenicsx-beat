@@ -17,6 +17,7 @@ import dolfinx
 import gotranx
 import beat
 import pyvista
+from dolfinx.io import VTXMeshPolicy
 
 logging.basicConfig(level=logging.INFO)
 
@@ -233,24 +234,60 @@ np.random.seed(0)
 # We will stimulate 900 points on the endocardial layer, and we do this by first finding the facets on the endocardial layer and then selecting 900 random points on these facets.
 
 num_points = 900
+
 lv_endo_facets = geo.ffun.find(geo.markers["LV"][0])
 rv_endo_facets = geo.ffun.find(geo.markers["RV"][0])
 endo_facets = np.concatenate([lv_endo_facets, rv_endo_facets])
-np.random.shuffle(endo_facets)
-endo_facets_stim = endo_facets[:num_points]
 
-# We then select the midpoints of the facets as the points to stimulate.
+# Distribute the requested number of stimulus points over MPI ranks.
+
+local_num_endo_facets = len(endo_facets)
+all_num_endo_facets = comm.allgather(local_num_endo_facets)
+total_num_endo_facets = sum(all_num_endo_facets)
+
+if total_num_endo_facets < num_points:
+    raise RuntimeError(
+        "Not enough endocardial facets to select "
+        f"{num_points} stimulus points. "
+        f"Only found {total_num_endo_facets} facets globally.",
+    )
+
+raw_counts = [
+    num_points * n / total_num_endo_facets
+    for n in all_num_endo_facets
+]
+
+stim_counts = [int(np.floor(count)) for count in raw_counts]
+missing = num_points - sum(stim_counts)
+
+fractions = [
+    raw_counts[i] - stim_counts[i]
+    for i in range(len(stim_counts))
+]
+
+for i in np.argsort(fractions)[::-1][:missing]:
+    stim_counts[i] += 1
+
+local_num_points = stim_counts[comm.rank]
+
+np.random.seed(1234 + comm.rank)
+np.random.shuffle(endo_facets)
+endo_facets_stim = endo_facets[:local_num_points]
 
 midpoints = dolfinx.mesh.compute_midpoints(geo.mesh, 2, endo_facets_stim)
-
-# We will stimulate the cells with a current of 2.5 uA/cm^2 for 2 ms starting at 0 ms.
-# The points will be activated with some delay which is a random number between 0 and 4 ms.
 
 start = 0.0
 duration = 2.0
 value = 2.5
 activation_duration = 4.0
-delays = np.random.uniform(0, activation_duration, num_points)
+
+delays = np.random.uniform(0, activation_duration, local_num_points)
+
+print(
+    f"[rank {comm.rank}] endo_facets={len(endo_facets)}, "
+    f"stim_points={len(midpoints)}, delays={len(delays)}",
+    flush=True,
+)
 
 # We now generate the expression for the stimulation. Here we also specify a tolerance of 1.0 which means that the stimulation will be applied to points that are within 1.0 mm of the midpoints.
 
@@ -317,6 +354,7 @@ vtx = dolfinx.io.VTXWriter(
     vtxfname,
     [solver.pde.state],
     engine="BP4",
+    mesh_policy=VTXMeshPolicy.reuse,
 )
 adios4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
