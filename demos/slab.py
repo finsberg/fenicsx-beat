@@ -204,6 +204,7 @@ v_index = {
 }
 
 time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+assert data.ffun is not None
 I_s = beat.stimulation.define_stimulus(
     mesh=data.mesh,
     chi=chi,
@@ -214,9 +215,12 @@ I_s = beat.stimulation.define_stimulus(
     mesh_unit=mesh_unit,
 )
 
+fiber_direction = data.f0
+assert fiber_direction is not None
+
 M = beat.conductivities.define_conductivity_tensor(
     chi,
-    f0=data.f0,
+    f0=fiber_direction,
     g_il=g_il,
     g_it=g_it,
     g_el=g_el,

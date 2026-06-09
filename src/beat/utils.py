@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import basix
 import dolfinx
@@ -87,7 +88,7 @@ def space_from_string(
     space_string: str,
     mesh: dolfinx.mesh.Mesh,
     dim: int = 1,
-) -> dolfinx.fem.functionspace:
+) -> dolfinx.fem.FunctionSpace:
     """
     Constructed a finite elements space from a string
     representation of the space
@@ -182,7 +183,7 @@ def expand_layer(
         dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
     ]
 
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if _dolfinx_version >= Version("0.10"):
         kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_"
 
@@ -204,7 +205,9 @@ def expand_layer(
         },
         **kwargs,
     )
-    uh = problem.solve()
+    uh_result = problem.solve()
+    assert isinstance(uh_result, dolfinx.fem.Function)
+    uh = uh_result
 
     arr = uh.x.array.copy()
     uh.x.array[:] = output_mid_marker
@@ -301,9 +304,9 @@ def expand_layer_biv(
     endo_rv_dofs = dolfinx.fem.locate_dofs_topological(V, ft.dim, ft.find(endo_rv_marker))
     epi_dofs = dolfinx.fem.locate_dofs_topological(V, ft.dim, ft.find(epi_marker))
 
-    kwargs = {}
+    lv_kwargs: dict[str, Any] = {}
     if _dolfinx_version >= Version("0.10"):
-        kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
+        lv_kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
 
     lv_problem = dolfinx.fem.petsc.LinearProblem(
         a,
@@ -313,13 +316,15 @@ def expand_layer_biv(
             dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
         ],
         petsc_options=petsc_options,
-        **kwargs,
+        **lv_kwargs,
     )
-    uh_lv = lv_problem.solve()
+    uh_lv_result = lv_problem.solve()
+    assert isinstance(uh_lv_result, dolfinx.fem.Function)
+    uh_lv = uh_lv_result
 
-    kwargs = {}
+    rv_kwargs: dict[str, Any] = {}
     if _dolfinx_version >= Version("0.10"):
-        kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
+        rv_kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
 
     rv_problem = dolfinx.fem.petsc.LinearProblem(
         a,
@@ -329,9 +334,11 @@ def expand_layer_biv(
             dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
         ],
         petsc_options=petsc_options,
-        **kwargs,
+        **rv_kwargs,
     )
-    uh_rv = rv_problem.solve()
+    uh_rv_result = rv_problem.solve()
+    assert isinstance(uh_rv_result, dolfinx.fem.Function)
+    uh_rv = uh_rv_result
 
     # In BiV we have have one epi and two endo solutions
     # We take the minimum of the two endo solutions
