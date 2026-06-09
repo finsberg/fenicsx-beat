@@ -10,15 +10,17 @@ from mpi4py import MPI
 import matplotlib.pyplot as plt
 import ufl
 
-import adios4dolfinx
+import io4dolfinx
 import numpy as np
 import cardiac_geometries as cg
 import dolfinx
 import gotranx
 import beat
 import pyvista
+from dolfinx.io import VTXMeshPolicy
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # Initialize the MPI communicator and create a folder to store the results
@@ -236,10 +238,53 @@ num_points = 900
 lv_endo_facets = geo.ffun.find(geo.markers["LV"][0])
 rv_endo_facets = geo.ffun.find(geo.markers["RV"][0])
 endo_facets = np.concatenate([lv_endo_facets, rv_endo_facets])
-np.random.shuffle(endo_facets)
-endo_facets_stim = endo_facets[:num_points]
 
-# We then select the midpoints of the facets as the points to stimulate.
+# Distribute the requested number of stimulus points over MPI ranks.
+
+local_num_endo_facets = len(endo_facets)
+all_num_endo_facets = comm.allgather(local_num_endo_facets)
+total_num_endo_facets = sum(all_num_endo_facets)
+
+if total_num_endo_facets < num_points:
+    raise RuntimeError(
+        "Not enough endocardial facets to select "
+        f"{num_points} stimulus points. "
+        f"Only found {total_num_endo_facets} facets globally.",
+    )
+
+# Distribute the total number of stimulus points across MPI ranks
+# proportional to the number of local endocardial facets
+
+raw_counts = [
+    num_points * n / total_num_endo_facets
+    for n in all_num_endo_facets
+]
+
+# Round down to get integer point counts. This will likely result in some points being unassigned due to rounding down, which we will handle in the next step.
+stim_counts = [int(np.floor(count)) for count in raw_counts]
+
+# Add the remaining points to the ranks with the largest fractional parts
+# so that the global number of stimulus points is exactly num_points.
+missing = num_points - sum(stim_counts)
+
+# Compute the fractional parts of the proportional counts.
+# Ranks with the largest fractional parts are the ones that were
+# closest to receiving one extra point before rounding down.
+fractions = [
+    raw_counts[i] - stim_counts[i]
+    for i in range(len(stim_counts))
+]
+
+
+for i in np.argsort(fractions)[::-1][:missing]:
+    stim_counts[i] += 1
+
+# Number of stimulus points assigned to this rank.
+local_num_points = stim_counts[comm.rank]
+
+np.random.seed(1234 + comm.rank)
+np.random.shuffle(endo_facets)
+endo_facets_stim = endo_facets[:local_num_points]
 
 midpoints = dolfinx.mesh.compute_midpoints(geo.mesh, 2, endo_facets_stim)
 
@@ -250,7 +295,15 @@ start = 0.0
 duration = 2.0
 value = 2.5
 activation_duration = 4.0
-delays = np.random.uniform(0, activation_duration, num_points)
+delays = np.random.uniform(0, activation_duration, local_num_points)
+
+logger.info(
+    "[rank %d] endo_facets=%d, stim_points=%d, delays=%d",
+    comm.rank,
+    len(endo_facets),
+    len(midpoints),
+    len(delays),
+)
 
 # We now generate the expression for the stimulation. Here we also specify a tolerance of 1.0 which means that the stimulation will be applied to points that are within 1.0 mm of the midpoints.
 
@@ -303,7 +356,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
-# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
+# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://scientificcomputing.github.io/io4dolfinx) package.
 
 vtxfname = results_folder / "v.bp"
 checkpointfname = results_folder / "v_checkpoint.bp"
@@ -317,8 +370,9 @@ vtx = dolfinx.io.VTXWriter(
     vtxfname,
     [solver.pde.state],
     engine="BP4",
+    mesh_policy=VTXMeshPolicy.reuse,
 )
-adios4dolfinx.write_mesh(checkpointfname, geo.mesh)
+io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -343,7 +397,7 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
     grid.point_data["V"] = solver.pde.state.x.array
     plotter_voltage.write_frame()
 

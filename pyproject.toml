@@ -51,6 +51,7 @@ demos = [
    "fenicsx-ldrb",
    "gotranx",
    "ukb-atlas",
+   "io4dolfinx",
 ]
 docs = [
    "jupyter-book<2.0",

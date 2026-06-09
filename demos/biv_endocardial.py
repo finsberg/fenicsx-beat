@@ -6,7 +6,7 @@ from pathlib import Path
 import shutil
 
 from mpi4py import MPI
-import adios4dolfinx
+import io4dolfinx
 import numpy as np
 import cardiac_geometries
 import dolfinx
@@ -14,8 +14,6 @@ import matplotlib.pyplot as plt
 import gotranx
 import beat
 import pyvista
-
-import beat.postprocess
 
 # Initialize the MPI communicator and create a folder to store the results
 
@@ -278,7 +276,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
-# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
+# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://github.com/scientificcomputing/io4dolfinx) package.
 
 vtxfname = results_folder / "biv.bp"
 checkpointfname = results_folder / "biv_checkpoint.bp"
@@ -302,7 +300,7 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function_on_input_mesh(
+    io4dolfinx.write_function_on_input_mesh(
         checkpointfname,
         solver.pde.state,
         time=t,
@@ -330,7 +328,7 @@ while t < end_time + 1e-12:
     i += 1
     t += dt
 
-# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using adios4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/adios4dolfinx/docs/original_checkpoint.html for more info
+# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/io4dolfinx/docs/original_checkpoint.html for more info
 
 V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
@@ -361,7 +359,7 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 
 gif_file = Path("voltage_biv_ellipsoid_time.gif")
 gif_file.unlink(missing_ok=True)
@@ -397,7 +395,7 @@ ecg_forms = {k: ecg.eval(p) for k, p in leads.items()}
 ecg_traces: dict[str, list[float]] = {k: [] for k in ecg_forms.keys()}
 
 for t in times:
-    adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
     ecg.solve()
 
     grid.point_data["V"] = v.x.array

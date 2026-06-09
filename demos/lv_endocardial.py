@@ -6,7 +6,7 @@ from pathlib import Path
 import shutil
 import math
 
-import adios4dolfinx
+import io4dolfinx
 from mpi4py import MPI
 import cardiac_geometries
 import dolfinx
@@ -15,7 +15,6 @@ import gotranx
 import beat
 import pyvista
 
-import beat.postprocess
 
 # Initialize the MPI communicator and create a folder to store the results
 
@@ -290,7 +289,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
-# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
+# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://github.com/scientificcomputing/io4dolfinx) package.
 
 vtxfname = results_folder / "lv.bp"
 checkpointfname = results_folder / "lv_checkpoint.bp"
@@ -305,7 +304,7 @@ vtx = dolfinx.io.VTXWriter(
     [solver.pde.state],
     engine="BP4",
 )
-adios4dolfinx.write_mesh(checkpointfname, geo.mesh)
+io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -314,7 +313,7 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
 
 
 # We will save results every 1 ms
@@ -338,9 +337,9 @@ while t < end_time + 1e-12:
     t += dt
 
 
-# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using adios4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/adios4dolfinx/docs/original_checkpoint.html for more info
+# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/io4dolfinx/docs/original_checkpoint.html for more info
 
-mesh = adios4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
@@ -372,13 +371,13 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 
 gif_file = Path("voltage_lv_ellipsoid_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
-    adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
