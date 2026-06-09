@@ -175,6 +175,11 @@ params = {
     },
 }
 
+save_freq = int(1.0 / dt)
+# Create a monitor to log the solver time and performance metrics every `save_freq` time steps
+monitor = beat.PerformanceMonitor(log_frequency=save_freq)
+
+
 pde = beat.MonodomainModel(
     time=time_constant,
     mesh=geo.mesh,
@@ -183,6 +188,7 @@ pde = beat.MonodomainModel(
     params=params,
     C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
     dx=I_s.dZ,
+    monitor=monitor,
 )
 ode = beat.odesolver.DolfinODESolver(
     v_ode=dolfinx.fem.Function(ode_space),
@@ -192,10 +198,11 @@ ode = beat.odesolver.DolfinODESolver(
     parameters=parameters,
     num_states=len(init_states),
     v_index=model.state_index("V"),
+    monitor=monitor,
 )
 
 # +
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, monitor=monitor)
 output_dir = Path("results-niederer-benchmark")
 output_dir.mkdir(exist_ok=True)
 filename = output_dir / f"results-{dt}-{dx}.xdmf"
@@ -224,6 +231,7 @@ points = {
 # +
 activation_times = {p: -1.0 for p in points}
 save_freq = int(1.0 / dt)
+
 i = 0
 if pyvista is not None:
     plotter_voltage = pyvista.Plotter()
@@ -268,6 +276,9 @@ while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
 
 if pyvista is not None:
     plotter_voltage.close()
+
+monitor.display_summary()
+monitor.save_summary(output_dir / "performance_summary.json")
 # -
 
 # ![_](niederer_benchmark.gif)
