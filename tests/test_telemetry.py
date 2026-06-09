@@ -116,8 +116,9 @@ def test_performance_monitor_save_summary(tmp_path):
         assert not filepath.exists()
 
 
-def test_performance_monitor_display(capsys):
-    """Test that the display outputs formatted tables to stdout (and only on Rank 0)."""
+def test_performance_monitor_display(caplog):
+    """Test that the display outputs formatted tables to the logger (and only on Rank 0)."""
+    caplog.set_level(logging.INFO)
     comm = MPI.COMM_WORLD
     monitor = PerformanceMonitor(comm=comm)
 
@@ -128,16 +129,18 @@ def test_performance_monitor_display(capsys):
 
     monitor.display_summary()
 
-    captured = capsys.readouterr()
-
     if comm.rank == 0:
-        assert "PERFORMANCE SUMMARY" in captured.out
-        assert "Total Steps:           5" in captured.out
-        assert "slow_op" in captured.out
-        assert "fast_op" in captured.out
+        # We expect exactly 1 log record holding the entire multi-line string
+        assert len(caplog.records) == 1
+        log_text = caplog.records[0].message
 
-        # Ensure that it sorted the outputs (slow_op should print before fast_op)
-        assert captured.out.find("slow_op") < captured.out.find("fast_op")
+        assert "PERFORMANCE SUMMARY" in log_text
+        assert "Total Steps:           5" in log_text
+        assert "slow_op" in log_text
+        assert "fast_op" in log_text
+
+        # Ensure that it sorted the outputs (slow_op should be logged before fast_op)
+        assert log_text.find("slow_op") < log_text.find("fast_op")
     else:
-        # On other MPI ranks, standard output should be empty
-        assert captured.out == ""
+        # On other MPI ranks, nothing should be logged
+        assert len(caplog.records) == 0

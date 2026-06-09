@@ -92,25 +92,27 @@ class PerformanceMonitor(BaseMonitor):
         )
 
     def display_summary(self) -> None:
-        """Prints a nicely formatted summary of the accumulated timings and metrics."""
+        """Logs a nicely formatted summary of the accumulated timings and metrics."""
         if self.comm.rank != 0:
             return
 
-        print("\n" + "=" * 50)
-        print(f"{'PERFORMANCE SUMMARY':^50}")
-        print("=" * 50)
-        print(f"Total Steps:           {self.step_counter}")
-        print(f"KSP Total Iterations:  {self.ksp_total_iterations}")
-        print(f"KSP Max Iterations:    {self.ksp_max_iterations}")
-        print("-" * 50)
-        print(f"{'Metric':<35} | {'Time (s)':>10}")
-        print("-" * 50)
+        summary = ["\n" + "=" * 50]
+        summary.append(f"{'PERFORMANCE SUMMARY':^50}")
+        summary.append("=" * 50)
+        summary.append(f"Total Steps:           {self.step_counter}")
+        summary.append(f"KSP Total Iterations:  {self.ksp_total_iterations}")
+        summary.append(f"KSP Max Iterations:    {self.ksp_max_iterations}")
+        summary.append("-" * 50)
+        summary.append(f"{'Metric':<35} | {'Time (s)':>10}")
+        summary.append("-" * 50)
 
         # Sort timings by duration (descending)
         sorted_timings = sorted(self.timings.items(), key=lambda x: x[1], reverse=True)
         for name, duration in sorted_timings:
-            print(f"{name:<35} | {duration:>10.4f}")
-        print("=" * 50 + "\n")
+            summary.append(f"{name:<35} | {duration:>10.4f}")
+        summary.append("=" * 50 + "\n")
+
+        logger.info("\n".join(summary))
 
     def save_summary(self, filepath: Union[str, Path]) -> None:
         """Saves the performance metrics to a JSON file."""

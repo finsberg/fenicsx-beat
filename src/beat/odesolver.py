@@ -147,7 +147,7 @@ class DolfinODESolver(BaseDolfinODESolver):
             fun=self.fun,
             states=self._values,
             parameters=self.parameters,
-            monitor=self.monitor,  # <--- Pass monitor down
+            monitor=self.monitor,
         )
         self._initialize_metadata()
 
@@ -250,7 +250,7 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
                 fun=self.fun[marker],
                 states=self._values[marker],
                 parameters=self.parameters[marker],
-                monitor=self.monitor,  # <--- Pass monitor down
+                monitor=self.monitor,
             )
         self._initialize_metadata()
 
