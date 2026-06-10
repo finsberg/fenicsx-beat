@@ -261,15 +261,18 @@ raw_counts = [
 ]
 
 # Round down to get integer point counts. This will likely result in some points being unassigned due to rounding down, which we will handle in the next step.
+
 stim_counts = [int(np.floor(count)) for count in raw_counts]
 
 # Add the remaining points to the ranks with the largest fractional parts
 # so that the global number of stimulus points is exactly num_points.
+
 missing = num_points - sum(stim_counts)
 
 # Compute the fractional parts of the proportional counts.
 # Ranks with the largest fractional parts are the ones that were
 # closest to receiving one extra point before rounding down.
+
 fractions = [
     raw_counts[i] - stim_counts[i]
     for i in range(len(stim_counts))
@@ -280,6 +283,7 @@ for i in np.argsort(fractions)[::-1][:missing]:
     stim_counts[i] += 1
 
 # Number of stimulus points assigned to this rank.
+
 local_num_points = stim_counts[comm.rank]
 
 np.random.seed(1234 + comm.rank)
