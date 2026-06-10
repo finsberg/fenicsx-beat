@@ -1,10 +1,11 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import numpy as np
 
 from .monodomain_model import MonodomainModel
+from .telemetry import BaseMonitor, NullMonitor
 
 logger = logging.getLogger(__name__)
 EPS = 1e-12
@@ -27,6 +28,7 @@ class MonodomainSplittingSolver:
     pde: MonodomainModel
     ode: ODESolver
     theta: float = 1.0
+    monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self) -> None:
         # assert np.isclose(self.theta, 1.0), "Only first order splitting is implemented"
@@ -35,7 +37,7 @@ class MonodomainSplittingSolver:
         self.pde.assign_previous()
 
     def solve(self, interval, dt):
-        (T0, T) = interval
+        T0, T = interval
         if dt is None:
             dt = T - T0
         t0 = T0
@@ -53,40 +55,62 @@ class MonodomainSplittingSolver:
         theta = self.theta
 
         # Extract time domain
-        (t0, t1) = interval
+        t0, t1 = interval
         logger.debug(f"Stepping from {t0} to {t1} using theta = {theta}")
+
         dt = t1 - t0
         t = t0 + theta * dt
 
         logger.debug(f"Tentative ODE step with t0={t0:.5f} dt={theta * dt:.5f}")
 
-        # Solve ODE
-        self.ode.step(t0=t0, dt=theta * dt)
-        # Move voltage to FEniCS
-        self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
-        self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
-        self.pde.assign_previous()
+        with self.monitor.track_time("total_step"):
+            with self.monitor.track_time("ode_step"):
+                self.ode.step(t0=t0, dt=theta * dt)
 
-        logger.debug("PDE step")
-        # Solve PDE
-        self.pde.step((t0, t1))
+            with self.monitor.track_time("ode_to_dolfin"):
+                # numpy array (ODE solver) -> dolfin function
+                self.ode.to_dolfin()
 
-        self.ode.pde_to_ode()  # CG1 dolfin function -> dolfin function in ODE space (quad?)
-        # Copy voltage from PDE to ODE
-        self.ode.from_dolfin()
+            with self.monitor.track_time("ode_to_pde"):
+                # dolfin function in ODE space (quad?) -> CG1 dolfin function
+                self.ode.ode_to_pde()
 
-        # If first order splitting, we are done.
-        if np.isclose(theta, 1.0):
-            # But first update previous value in PDE
-            self.pde.assign_previous()
-            return
+            with self.monitor.track_time("pde_assign_previous_before"):
+                self.pde.assign_previous()
 
-        # Otherwise, we do another ode_step:
-        logger.debug(f"Corrective ODE step with t0={t:5f} and dt={(1.0 - theta) * dt:.5f}")
+            logger.debug("PDE step")
 
-        # To the correction step
-        self.ode.step(t, (1.0 - theta) * dt)
-        # And copy the solution back to FEniCS
-        self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
-        self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
-        self.pde.assign_previous()
+            with self.monitor.track_time("pde_step"):
+                self.pde.step((t0, t1))
+
+            with self.monitor.track_time("pde_to_ode"):
+                # CG1 dolfin function -> dolfin function in ODE space (quad?)
+                self.ode.pde_to_ode()
+
+            with self.monitor.track_time("ode_from_dolfin"):
+                self.ode.from_dolfin()
+
+            # If first order splitting, we are done. Otherwise, we need to do a corrective ODE step.
+            if np.isclose(theta, 1.0):
+                with self.monitor.track_time("pde_assign_previous_after"):
+                    # But first update previous value in PDE
+                    self.pde.assign_previous()
+            else:
+                logger.debug(f"Corrective ODE step with t0={t:5f} and dt={(1.0 - theta) * dt:.5f}")
+
+                with self.monitor.track_time("corrective_ode_step"):
+                    self.ode.step(t, (1.0 - theta) * dt)
+
+                with self.monitor.track_time("corrective_ode_to_dolfin"):
+                    # numpy array (ODE solver) -> dolfin function
+                    self.ode.to_dolfin()
+
+                with self.monitor.track_time("corrective_ode_to_pde"):
+                    # dolfin function in ODE space (quad?) -> CG1 dolfin function
+                    self.ode.ode_to_pde()
+
+                with self.monitor.track_time("corrective_pde_assign_previous"):
+                    self.pde.assign_previous()
+
+        # Alert the monitor that the step is finished so it can handle logging/aggregation
+        self.monitor.advance_step(t0, t1)

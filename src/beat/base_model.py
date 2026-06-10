@@ -14,6 +14,7 @@ from packaging.version import Version
 from ufl.core.expr import Expr
 
 from .stimulation import Stimulus
+from .telemetry import BaseMonitor, NullMonitor
 
 logger = logging.getLogger(__name__)
 _dolfinx_version = Version(dolfinx.__version__)
@@ -76,6 +77,7 @@ class BaseModel:
         dx: ufl.Measure | None = None,
         params: dict[str, Any] | None = None,
         I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        monitor: BaseMonitor | None = None,
         **kwargs: Any,
     ) -> None:
         # Warn about unused kwargs
@@ -88,10 +90,12 @@ class BaseModel:
         self._mesh = mesh
         self.time = time
         self.dx = dx or ufl.dx(domain=mesh)
+        self.monitor = monitor or NullMonitor()
 
         self.parameters = type(self).default_parameters()
         if params is not None:
             self.parameters.update(params)
+
         form_compiler_options = self.parameters["form_compiler_options"]
         jit_options = self.parameters["jit_options"]
         petsc_options = self.parameters["petsc_options"]
@@ -159,6 +163,8 @@ class BaseModel:
             "jit_options": {},
             "form_compiler_options": {},
             "petsc_options": petsc_options,
+            "log_timings": False,
+            "timing_log_frequency": 1,
         }
 
     @abc.abstractmethod
@@ -200,36 +206,43 @@ class BaseModel:
         )
 
     def step(self, interval):
-        """
-        Perform a single time step.
+        """Perform a single time step.
 
         Parameters
         ----------
         interval : tuple[float, float]
             The time interval (T0, T)
-
         """
-
-        # timer = dolfin.Timer("PDE Step")
-
-        # Extract interval and thus time-step
-        (t0, t1) = interval
+        t0, t1 = interval
         dt = t1 - t0
         theta = self.parameters["theta"]
         t = t0 + theta * dt
-        self.time.value = t
 
-        # Update matrix and linear solvers etc as needed
-        timestep_unchanged = abs(dt - float(self._timestep)) < 1.0e-12
-        if not timestep_unchanged:
-            self._timestep.value = dt
-            self._update_matrices()
+        with self.monitor.track_time("pde_total_step"):
+            with self.monitor.track_time("pde_set_time"):
+                self.time.value = t
 
-        self._update_rhs()
-        # Solve linear system and update ghost values in the solution
+            timestep_unchanged = abs(dt - float(self._timestep)) < 1.0e-12
 
-        self._solver.solver.solve(self._solver.b, self.state.x.petsc_vec)
-        self.state.x.scatter_forward()
+            if not timestep_unchanged:
+                self._timestep.value = dt
+                with self.monitor.track_time("pde_update_matrices"):
+                    self._update_matrices()
+
+            with self.monitor.track_time("pde_update_rhs"):
+                self._update_rhs()
+
+            with self.monitor.track_time("pde_linear_solve"):
+                self._solver.solver.solve(self._solver.b, self.state.x.petsc_vec)
+
+            # Record solver metrics
+            self.monitor.record_ksp(self._solver.solver)
+
+            with self.monitor.track_time("pde_scatter_forward"):
+                self.state.x.scatter_forward()
+
+        # Trigger logging/end-of-step aggregation
+        self.monitor.advance_step(t0, t1)
 
     def _G_stim(self, w):
         return sum([i.expr * w * i.dz for i in self._I_s])
@@ -258,7 +271,7 @@ class BaseModel:
 
         # Initial set-up
         # Solve on entire interval if no interval is given.
-        (T0, T) = interval
+        T0, T = interval
         if dt is None:
             dt = T - T0
         t0 = T0

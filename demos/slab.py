@@ -333,12 +333,17 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
+times = io4dolfinx.read_timestamps(
+    comm=comm, filename=checkpointfname, function_name="v",
+)
 t1 = np.inf
 t2 = np.inf
 phie = []
 ecg = beat.ecg.ECGRecovery(
-    v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M,
+    v=v,
+    sigma_b=1.0,
+    C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
+    M=M,
 )
 p_ecg_form = ecg.eval(p_ecg)
 gif_file = Path("voltage_slab_time.gif")
