@@ -3,8 +3,11 @@ from mpi4py import MPI
 import dolfinx
 import numpy as np
 import ufl
+from packaging.version import Version
 
 import beat
+
+_dolfinx_version = Version(dolfinx.__version__)
 
 
 def test_ecg():
@@ -34,7 +37,7 @@ def test_ecg():
     value = mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p1_ecg), op=MPI.SUM)
     assert np.isclose(value, 0.0)
 
-    v.interpolate(dolfinx.fem.Expression(v_expr, V.element.interpolation_points()))
+    v.interpolate(dolfinx.fem.Expression(v_expr, beat.utils.interpolation_points(V)))
     ecg.solve()
     value_p1 = mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p1_ecg), op=MPI.SUM)
     value_p2 = mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p2_ecg), op=MPI.SUM)

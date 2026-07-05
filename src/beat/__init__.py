@@ -10,17 +10,19 @@ from . import (
     odesolver,
     single_cell,
     stimulation,
+    telemetry,
     utils,
 )
 from .ecg import ECGRecovery
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
 from .stimulation import Stimulus
+from .telemetry import BaseMonitor, NullMonitor, PerformanceMonitor
 
 meta = metadata("fenicsx-beat")
 __version__ = meta["Version"]
 __author__ = meta["Author-email"]
-__license__ = meta["License"]
+__license__ = meta["License-Expression"]
 __email__ = meta["Author-email"]
 __program_name__ = meta["Name"]
 
@@ -40,4 +42,8 @@ __all__ = [
     "ecg",
     "Stimulus",
     "ECGRecovery",
+    "telemetry",
+    "BaseMonitor",
+    "NullMonitor",
+    "PerformanceMonitor",
 ]

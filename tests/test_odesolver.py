@@ -4,6 +4,7 @@ import dolfinx
 import numpy as np
 import ufl
 
+import beat.utils
 from beat.odesolver import DolfinMultiODESolver, DolfinODESolver, ODESystemSolver
 
 
@@ -130,17 +131,23 @@ def test_DolfinMultiODESolver():
     markers = dolfinx.fem.Function(V_ode)
     X = ufl.SpatialCoordinate(mesh)
     expr = ufl.conditional(ufl.lt(X[0], 0.5), 1, 2)
-    markers.interpolate(dolfinx.fem.Expression(expr, V_ode.element.interpolation_points()))
+    markers.interpolate(dolfinx.fem.Expression(expr, beat.utils.interpolation_points(V_ode)))
 
     first_v0 = 1.0
     first_s0 = 2.0
     second_v0 = 3.0
     second_s0 = 4.0
-    init_states = {1: np.array([first_v0, first_s0]), 2: np.array([second_v0, second_s0])}
+    init_states = {
+        1: np.array([first_v0, first_s0]),
+        2: np.array([second_v0, second_s0]),
+    }
 
     first_p0 = 1
     second_p0 = 2
-    parameters = {1: np.array([first_p0, first_p0]), 2: np.array([second_p0, second_p0])}
+    parameters = {
+        1: np.array([first_p0, first_p0]),
+        2: np.array([second_p0, second_p0]),
+    }
 
     N_ode = V_ode.dofmap.index_map.size_local + V_ode.dofmap.index_map.num_ghosts
 

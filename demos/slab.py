@@ -7,7 +7,7 @@ import shutil
 from mpi4py import MPI
 
 
-import adios4dolfinx
+import io4dolfinx
 
 
 import dolfinx
@@ -17,8 +17,8 @@ import gotranx
 import scifem
 import beat
 import pyvista
+from dolfinx.io import VTXMeshPolicy
 
-import beat.postprocess
 from beat.geometry import Geometry
 
 comm = MPI.COMM_WORLD
@@ -60,7 +60,6 @@ ffun = dolfinx.mesh.meshtags(
 
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 plotter_markers.add_mesh(grid, show_edges=True)
@@ -79,7 +78,6 @@ def endo_epi(x):
 
 cfun_func = dolfinx.fem.Function(V)
 cfun_func.interpolate(endo_epi)
-
 
 
 plotter_markers = pyvista.Plotter()
@@ -206,6 +204,7 @@ v_index = {
 }
 
 time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+assert data.ffun is not None
 I_s = beat.stimulation.define_stimulus(
     mesh=data.mesh,
     chi=chi,
@@ -216,9 +215,12 @@ I_s = beat.stimulation.define_stimulus(
     mesh_unit=mesh_unit,
 )
 
+fiber_direction = data.f0
+assert fiber_direction is not None
+
 M = beat.conductivities.define_conductivity_tensor(
     chi,
-    f0=data.f0,
+    f0=fiber_direction,
     g_il=g_il,
     g_it=g_it,
     g_el=g_el,
@@ -259,16 +261,17 @@ vtx = dolfinx.io.VTXWriter(
     vtxfname,
     [solver.pde.state],
     engine="BP4",
+    mesh_policy=VTXMeshPolicy.reuse,
 )
 
-adios4dolfinx.write_mesh(checkpointfname, mesh)
+io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
 
 
 i = 0
@@ -298,9 +301,9 @@ else:
     p2 = (x1, dx * 0.5, dx * 0.5)  # type: ignore
 
 
-# Need to either save the functions on the input mesh using adios4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/adios4dolfinx/docs/original_checkpoint.html
+# Need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://scientificcomputing.github.io/io4dolfinx/docs/original_checkpoint.html
 
-mesh = adios4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
@@ -330,19 +333,28 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+times = io4dolfinx.read_timestamps(
+    comm=comm, filename=checkpointfname, function_name="v",
+)
 t1 = np.inf
 t2 = np.inf
 phie = []
-ecg = beat.ecg.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M)
+ecg = beat.ecg.ECGRecovery(
+    v=v,
+    sigma_b=1.0,
+    C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
+    M=M,
+)
 p_ecg_form = ecg.eval(p_ecg)
 gif_file = Path("voltage_slab_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
-    adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
     ecg.solve()
-    phie.append(mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p_ecg_form), op=MPI.SUM))
+    phie.append(
+        mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p_ecg_form), op=MPI.SUM),
+    )
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()

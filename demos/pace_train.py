@@ -8,7 +8,7 @@ from mpi4py import MPI
 import matplotlib.pyplot as plt
 from pathlib import Path
 import shutil
-import adios4dolfinx
+import io4dolfinx
 import scifem
 import numpy as np
 import ufl
@@ -16,7 +16,7 @@ import beat
 import dolfinx
 import gotranx
 from beat.single_cell import get_steady_state
-import beat.postprocess
+
 
 # Next we set the output directory for the results and define the geometry. Here we specify an interval mesh of 200 cells with 0.015 cm between each cell
 
@@ -137,7 +137,7 @@ g_Kr = dolfinx.fem.Function(V_ode)
 g_Kr.interpolate(
     dolfinx.fem.Expression(
         ufl.conditional(ufl.ge(X[0], L / 2), 0.0, g_Kr_value),
-        V_ode.element.interpolation_points(),
+        beat.utils.interpolation_points(V_ode),
     ),
 )
 parameters_ode[g_Kr_index, :] = g_Kr.x.array
@@ -150,7 +150,7 @@ g_Ks = dolfinx.fem.Function(V_ode)
 g_Ks.interpolate(
     dolfinx.fem.Expression(
         ufl.conditional(ufl.ge(X[0], L / 2), 0.0, g_Ks_value),
-        V_ode.element.interpolation_points(),
+        beat.utils.interpolation_points(V_ode),
     ),
 )
 parameters_ode[g_Ks_index, :] = g_Ks.x.array
@@ -179,14 +179,14 @@ solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 checkpointfname = outdir / "slab_checkpoint.bp"
 
 shutil.rmtree(checkpointfname, ignore_errors=True)
-adios4dolfinx.write_mesh(checkpointfname, mesh)
+io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
     v = solver.pde.state.x.array
     if t % 100.0 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
 
 
 # -
@@ -219,10 +219,10 @@ while t < end_time + 1e-12:
 
 
 def post_process(dx, outdir):
-    mesh = adios4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+    mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
     V = dolfinx.fem.functionspace(mesh, ("P", 1))
     v = dolfinx.fem.Function(V)
-    times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+    times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 
     cellnr = [0, 25, 50, 75, 100, 125, 150, 175, 200]
     cellnr = np.arange(0, 200, 10)
@@ -240,7 +240,7 @@ def post_process(dx, outdir):
         traces = np.zeros((len(times), len(cellnr)))
 
         for i, ti in enumerate(times):
-            adios4dolfinx.read_function(checkpointfname, v, time=ti, name="v")
+            io4dolfinx.read_function(checkpointfname, v, time=ti, name="v")
 
             traces[i, :] = scifem.evaluate_function(
                 v,

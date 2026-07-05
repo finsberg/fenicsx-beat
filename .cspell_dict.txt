@@ -16,11 +16,13 @@ bazett
 bcast
 bestel
 Bestel
+bibtex
 booktitle
 boomeramg
 Britton
 Bursi
 caplog
+capsys
 cardiomyocytes
 carputils
 cbcbeat
@@ -143,6 +145,7 @@ rmtree
 rtol
 savefig
 scifem
+setrecursionlimit
 Severi
 sharex
 sharey
@@ -151,6 +154,7 @@ shutil
 Silvano
 simcardems
 Sorine
+spatio
 Stefano
 stim
 subplus

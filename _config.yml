@@ -39,11 +39,30 @@ sphinx:
             - fmt: py
     suppress_warnings: ["mystnb.unknown_mime_type", "bibtex.duplicate_citation"]
 
+    codeautolink_concat_default: True
+    intersphinx_mapping:
+      basix : ["https://docs.fenicsproject.org/basix/main/python/", null]
+      ffcx : ["https://docs.fenicsproject.org/ffcx/main/", null]
+      ufl : ["https://docs.fenicsproject.org/ufl/main/", null]
+      dolfinx : ["https://docs.fenicsproject.org/dolfinx/main/python", null]
+      petsc4py: ["https://petsc.org/release/petsc4py", null]
+      mpi4py: ["https://mpi4py.readthedocs.io/en/stable", null]
+      numpy: ["https://numpy.org/doc/stable/", null]
+      pyvista: ["https://docs.pyvista.org/", null]
+      packaging: ["https://packaging.pypa.io/en/stable/", null]
+      gotranx: ["https://finsberg.github.io/gotranx/", null]
+      cardiac_geometries: ["https://computationalphysiology.github.io/cardiac-geometriesx/", null]
+
 
   extra_extensions:
   - 'sphinx.ext.autodoc'
   - 'sphinx.ext.napoleon'
   - 'sphinx.ext.viewcode'
   - 'sphinxcontrib.bibtex'
+  - 'sphinx_copybutton'
+  - 'sphinx_codeautolink'
+  - 'sphinx.ext.intersphinx'
+
+
 
 exclude_patterns: [".pytest_cache/*", "tests/.pytest_cache/*"]

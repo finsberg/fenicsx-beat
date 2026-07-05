@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, NamedTuple
 
@@ -8,9 +9,11 @@ import dolfinx
 import numpy as np
 import numpy.typing as npt
 
+from .telemetry import BaseMonitor, NullMonitor
 from .utils import local_project
 
 EPS = 1e-12
+logger = logging.getLogger(__name__)
 
 
 class ODEResults(NamedTuple):
@@ -47,6 +50,7 @@ class ODESystemSolver:
     parameters: npt.NDArray
     missing_variables: npt.NDArray | None = None
     _kwargs: dict[str, npt.NDArray] = field(default_factory=dict)
+    monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self):
         if self.missing_variables is not None:
@@ -61,9 +65,18 @@ class ODESystemSolver:
         return self.states.shape[0]
 
     def step(self, t0: float, dt: float) -> None:
-        self.states[:] = self.fun(
-            states=self.states, t=t0, parameters=self.parameters, dt=dt, **self._kwargs
-        )
+        with self.monitor.track_time("ode_total_step"):
+            with self.monitor.track_time("ode_function_call"):
+                updated_states = self.fun(
+                    states=self.states,
+                    t=t0,
+                    parameters=self.parameters,
+                    dt=dt,
+                    **self._kwargs,
+                )
+
+            with self.monitor.track_time("ode_state_update"):
+                self.states[:] = updated_states
 
 
 class BaseDolfinODESolver(abc.ABC):
@@ -130,6 +143,7 @@ class DolfinODESolver(BaseDolfinODESolver):
     v_index: int = 0
     missing_variables: npt.NDArray | None = None
     num_missing_variables: int = 0
+    monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self):
         if np.shape(self.init_states) == self.shape:
@@ -143,12 +157,12 @@ class DolfinODESolver(BaseDolfinODESolver):
             states=self._values,
             parameters=self.parameters,
             missing_variables=self.missing_variables,
+            monitor=self.monitor,
         )
         self._initialize_metadata()
 
     def to_dolfin(self) -> None:
         """Assign values from numpy array to dolfin function"""
-
         self.v_ode.x.array[:] = self._values[self.v_index, :]
 
     def from_dolfin(self) -> None:
@@ -221,6 +235,7 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
     fun: dict[int, Callable]
     num_states: dict[int, int]
     v_index: dict[int, int]
+    monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self):
         if self.v_ode.x.array.size != self.markers.x.array.size:
@@ -249,6 +264,7 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
                 fun=self.fun[marker],
                 states=self._values[marker],
                 parameters=self.parameters[marker],
+                monitor=self.monitor,
             )
         self._initialize_metadata()
 
@@ -288,8 +304,10 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
         return self._num_points[marker]
 
     def step(self, t0: float, dt: float):
-        for ode in self._odes.values():
-            ode.step(t0=t0, dt=dt)
+        with self.monitor.track_time("total_ode_step"):
+            for marker, ode in self._odes.items():
+                with self.monitor.track_time(f"marker_{marker}_ode_step"):
+                    ode.step(t0=t0, dt=dt)
 
     def assign_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
         num_states = self._values[self._marker_values[0]].shape[0]

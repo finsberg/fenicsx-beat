@@ -8,33 +8,28 @@ on:
 
 env:
   DEB_PYTHON_INSTALL_LAYOUT: deb_system
-  DISPLAY: ":99.0"
 
 jobs:
 
   build:
     runs-on: ubuntu-22.04
-    container: ghcr.io/fenics/dolfinx/lab:v0.9.0
+    container: ghcr.io/fenics/dolfinx/lab:v0.10.0
     env:
       PUBLISH_DIR: ./_build/html
-      DISPLAY: ":99.0"
-      PYVISTA_TRAME_SERVER_PROXY_PREFIX: "/proxy/"
-      PYVISTA_TRAME_SERVER_PROXY_ENABLED: "True"
       PYVISTA_OFF_SCREEN: false
       PYVISTA_JUPYTER_BACKEND: "html"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Install dependencies for pyvista
         run: |
-          apt-get update && apt-get install -y libgl1-mesa-dev xvfb
-          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-        # Might need:
+          apt-get update && apt-get install -y libxrender1
 
       - name: Install dependencies
         run: |
+          python3 -m pip install -r https://raw.githubusercontent.com/scientificcomputing/scifem/refs/heads/main/build-requirements.txt
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install ".[docs]"
 
@@ -42,6 +37,6 @@ jobs:
         run: jupyter book build -W --keep-going .
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ env.PUBLISH_DIR }}

@@ -7,11 +7,14 @@ from petsc4py import PETSc
 import dolfinx
 import numpy as np
 import ufl
+from packaging.version import Version
 
 logger = logging.getLogger(__name__)
 
 
 from scipy.signal import find_peaks
+
+_dolfinx_version = Version(dolfinx.__version__)
 
 
 def detect_r_peaks(ecg_signal: np.ndarray, min_distance: float = 20) -> np.ndarray:
@@ -254,11 +257,16 @@ class ECGRecovery:
         self._lhs = -self.C_m * Im * w * self.dx
         self._rhs = ufl.inner(self.M * ufl.grad(self.v), ufl.grad(w)) * self.dx
 
+        kwargs = {}
+        if _dolfinx_version >= Version("0.10"):
+            kwargs["petsc_options_prefix"] = "beat_ecg_recovery_"
+
         self.solver = dolfinx.fem.petsc.LinearProblem(
             self._lhs,
             self._rhs,
             u=self.sol,
             petsc_options=self.petsc_options,
+            **kwargs,
         )
         dolfinx.fem.petsc.assemble_matrix(self.solver.A, self.solver.a)
         self.solver.A.assemble()

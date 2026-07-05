@@ -1,14 +1,26 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import basix
 import dolfinx
 import dolfinx.fem.petsc
 import numpy as np
 import ufl
+from packaging.version import Version
 
 logger = logging.getLogger(__name__)
+
+
+_dolfinx_version = Version(dolfinx.__version__)
+
+
+def interpolation_points(V):
+    if _dolfinx_version >= Version("0.10"):
+        return V.element.interpolation_points
+    else:
+        return V.element.interpolation_points()
 
 
 def local_project(
@@ -41,7 +53,7 @@ def local_project(
         U.x.array[:] = v.x.array[:]
         return U
 
-    expr = dolfinx.fem.Expression(v, V.element.interpolation_points())
+    expr = dolfinx.fem.Expression(v, interpolation_points(V))
     U.interpolate(expr)
     return U
 
@@ -51,7 +63,7 @@ def parse_element(space_string: str, mesh: dolfinx.mesh.Mesh, dim: int) -> basix
     Parse a string representation of a basix element family
     """
     family_str, degree_str = space_string.split("_")
-    kwargs = {"degree": int(degree_str), "cell": mesh.ufl_cell().cellname()}
+    kwargs = {"degree": int(degree_str), "cell": mesh.basix_cell()}
     if dim > 1:
         if family_str in ["Quadrature", "Q", "Quad"]:
             kwargs["value_shape"] = (dim,)
@@ -76,7 +88,7 @@ def space_from_string(
     space_string: str,
     mesh: dolfinx.mesh.Mesh,
     dim: int = 1,
-) -> dolfinx.fem.functionspace:
+) -> dolfinx.fem.FunctionSpace:
     """
     Constructed a finite elements space from a string
     representation of the space
@@ -171,6 +183,10 @@ def expand_layer(
         dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
     ]
 
+    kwargs: dict[str, Any] = {}
+    if _dolfinx_version >= Version("0.10"):
+        kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_"
+
     problem = dolfinx.fem.petsc.LinearProblem(
         a,
         L,
@@ -187,8 +203,11 @@ def expand_layer(
             "ksp_max_it": 10_000,
             "ksp_error_if_not_converged": False,
         },
+        **kwargs,
     )
-    uh = problem.solve()
+    uh_result = problem.solve()
+    assert isinstance(uh_result, dolfinx.fem.Function)
+    uh = uh_result
 
     arr = uh.x.array.copy()
     uh.x.array[:] = output_mid_marker
@@ -285,6 +304,10 @@ def expand_layer_biv(
     endo_rv_dofs = dolfinx.fem.locate_dofs_topological(V, ft.dim, ft.find(endo_rv_marker))
     epi_dofs = dolfinx.fem.locate_dofs_topological(V, ft.dim, ft.find(epi_marker))
 
+    lv_kwargs: dict[str, Any] = {}
+    if _dolfinx_version >= Version("0.10"):
+        lv_kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
+
     lv_problem = dolfinx.fem.petsc.LinearProblem(
         a,
         L,
@@ -293,8 +316,15 @@ def expand_layer_biv(
             dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
         ],
         petsc_options=petsc_options,
+        **lv_kwargs,
     )
-    uh_lv = lv_problem.solve()
+    uh_lv_result = lv_problem.solve()
+    assert isinstance(uh_lv_result, dolfinx.fem.Function)
+    uh_lv = uh_lv_result
+
+    rv_kwargs: dict[str, Any] = {}
+    if _dolfinx_version >= Version("0.10"):
+        rv_kwargs["petsc_options_prefix"] = "beat_utils_expand_layer_biv_"
 
     rv_problem = dolfinx.fem.petsc.LinearProblem(
         a,
@@ -304,8 +334,11 @@ def expand_layer_biv(
             dolfinx.fem.dirichletbc(1.0, epi_dofs, V),
         ],
         petsc_options=petsc_options,
+        **rv_kwargs,
     )
-    uh_rv = rv_problem.solve()
+    uh_rv_result = rv_problem.solve()
+    assert isinstance(uh_rv_result, dolfinx.fem.Function)
+    uh_rv = uh_rv_result
 
     # In BiV we have have one epi and two endo solutions
     # We take the minimum of the two endo solutions

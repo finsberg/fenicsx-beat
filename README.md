@@ -1,3 +1,5 @@
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.08416/status.svg)](https://doi.org/10.21105/joss.08416)
+
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/logo.png)
 
 # fenicsx-beat
@@ -206,6 +208,23 @@ vtx.close()
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/joss-paper/paper_figure.png)
 
 See more examples in the [documentation](https://finsberg.github.io/fenicsx-beat)
+
+## Citation
+If you use this software in your research, please cite the following paper
+```bibtex
+@article{Finsberg2025,
+    doi = {10.21105/joss.08416},
+    url = {https://doi.org/10.21105/joss.08416},
+    year = {2025},
+    publisher = {The Open Journal},
+    volume = {10},
+    number = {114},
+    pages = {8416},
+    author = {Finsberg, Henrik},
+    title = {fenicsx-beat - An Open Source Simulation Framework for Cardiac Electrophysiology},
+    journal = {Journal of Open Source Software}
+}
+```
 
 ## License
 MIT

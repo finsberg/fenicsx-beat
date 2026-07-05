@@ -57,8 +57,9 @@ def test_monodomain_splitting_analytic(odespace):
     v_ode = dolfinx.fem.Function(V_ode)
 
     s = dolfinx.fem.Function(V_ode)
+
     s.interpolate(
-        dolfinx.fem.Expression(s_exact_func(x, time), V_ode.element.interpolation_points()),
+        dolfinx.fem.Expression(s_exact_func(x, time), beat.utils.interpolation_points(V_ode)),
     )
 
     s_arr = s.x.array
@@ -116,7 +117,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
 
         s = dolfinx.fem.Function(V_ode)
         s.interpolate(
-            dolfinx.fem.Expression(s_exact_func(x, time), V_ode.element.interpolation_points()),
+            dolfinx.fem.Expression(s_exact_func(x, time), beat.utils.interpolation_points(V_ode)),
         )
 
         s_arr = s.x.array
@@ -180,7 +181,7 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
 
         s = dolfinx.fem.Function(V_ode)
         s.interpolate(
-            dolfinx.fem.Expression(s_exact_func(x, time), V_ode.element.interpolation_points()),
+            dolfinx.fem.Expression(s_exact_func(x, time), beat.utils.interpolation_points(V_ode)),
         )
 
         s_arr = s.x.array

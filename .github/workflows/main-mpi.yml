@@ -12,14 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10   # Tests shouldn't use more than 10 minutes to run
     container:
-      image: ghcr.io/fenics/dolfinx/dolfinx:v0.9.0
+      image: ghcr.io/fenics/dolfinx/dolfinx:v0.10.0
 
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install package
         run: |
+          python3 -m pip install -r https://raw.githubusercontent.com/scientificcomputing/scifem/refs/heads/main/build-requirements.txt
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install -e .[test]
 
