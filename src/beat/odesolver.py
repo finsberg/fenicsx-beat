@@ -48,7 +48,13 @@ class ODESystemSolver:
     fun: Callable
     states: npt.NDArray
     parameters: npt.NDArray
+    missing_variables: npt.NDArray | None = None
+    _kwargs: dict[str, npt.NDArray] = field(default_factory=dict)
     monitor: BaseMonitor = field(default_factory=NullMonitor)
+
+    def __post_init__(self):
+        if self.missing_variables is not None:
+            self._kwargs["missing_variables"] = self.missing_variables
 
     @property
     def num_points(self) -> int:
@@ -66,6 +72,7 @@ class ODESystemSolver:
                     t=t0,
                     parameters=self.parameters,
                     dt=dt,
+                    **self._kwargs,
                 )
 
             with self.monitor.track_time("ode_state_update"):
@@ -134,6 +141,8 @@ class DolfinODESolver(BaseDolfinODESolver):
     fun: Callable
     num_states: int
     v_index: int = 0
+    missing_variables: npt.NDArray | None = None
+    num_missing_variables: int = 0
     monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self):
@@ -147,6 +156,7 @@ class DolfinODESolver(BaseDolfinODESolver):
             fun=self.fun,
             states=self._values,
             parameters=self.parameters,
+            missing_variables=self.missing_variables,
             monitor=self.monitor,
         )
         self._initialize_metadata()
@@ -170,6 +180,10 @@ class DolfinODESolver(BaseDolfinODESolver):
     @property
     def shape(self) -> tuple[int, int]:
         return (self.num_states, self.num_points)
+
+    @property
+    def shape_missing_values(self) -> tuple[int, int]:
+        return (self.num_missing_variables, self.num_points)
 
     @property
     def num_points(self) -> int:
