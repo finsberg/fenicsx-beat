@@ -12,7 +12,7 @@ from .stimulation import Stimulus
 logger = logging.getLogger(__name__)
 
 
-class IrksomeMonodomainModel:
+class IrksomeMonodomainModel(MonodomainModel):
     r"""Solve Monodomain model using Irksome for Runge-Kutta time stepping."""
 
     def __init__(
