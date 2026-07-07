@@ -23,6 +23,7 @@ jobs:
           python3 -m pip install -r https://raw.githubusercontent.com/scientificcomputing/scifem/refs/heads/main/build-requirements.txt
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install -e .[test]
+          python3 -m pip install git+https://github.com/firedrakeproject/Irksome.git
 
       - name: Run tests
         run: mpirun -n 2 python3 -m pytest -v  -m "not skip_in_parallel"

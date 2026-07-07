@@ -38,6 +38,7 @@ Tracker = "https://github.com/finsberg/fenicsx-beat/issues"
 test = [
     "pytest",
     "pytest-cov",
+    "fenicsx-beat[irksome]",
 ]
 dev = [
     "pre-commit",
@@ -45,6 +46,9 @@ dev = [
 pypi = [
     "twine",
     "build"
+]
+irksome = [
+    "irksome[dolfinx]",
 ]
 demos = [
    "cardiac-geometriesx",

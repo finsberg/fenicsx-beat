@@ -4,7 +4,6 @@ from typing import Protocol
 
 import numpy as np
 
-from .monodomain_model import MonodomainModel
 from .telemetry import BaseMonitor, NullMonitor
 
 logger = logging.getLogger(__name__)
@@ -21,6 +20,12 @@ class ODESolver(Protocol):
     def pde_to_ode(self) -> None: ...
 
     def step(self, t0: float, dt: float) -> None: ...
+
+
+class MonodomainModel(Protocol):
+    def assign_previous(self) -> None: ...
+
+    def step(self, interval: tuple[float, float]) -> None: ...
 
 
 @dataclass

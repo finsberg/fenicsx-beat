@@ -42,6 +42,7 @@ jobs:
         run: |
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install .[test]
+          python3 -m pip install git+https://github.com/firedrakeproject/Irksome.git
 
 
       - name: Run tests
