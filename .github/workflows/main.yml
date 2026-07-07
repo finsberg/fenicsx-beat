@@ -18,7 +18,6 @@ jobs:
       fail-fast: false
       matrix:
         container: [
-          "ghcr.io/fenics/dolfinx/dolfinx:v0.9.0",
           "ghcr.io/fenics/dolfinx/dolfinx:stable",
           "ghcr.io/fenics/dolfinx/dolfinx:nightly"
         ]
