@@ -1,3 +1,5 @@
+import gc
+
 from mpi4py import MPI
 
 import dolfinx
@@ -212,3 +214,86 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
 
     # Should be 1
     assert cvg_rate > 1.0
+
+
+@pytest.mark.parametrize(
+    "odespace",
+    [
+        "P_1",
+        "P_2",
+        "DG_1",
+    ],
+)
+def test_irksome_monodomain_splitting_analytic(odespace):
+    irksome = pytest.importorskip("irksome")
+    from beat.irksome_model import IrksomeMonodomainModel
+
+    N = 50
+
+    M = 1.0
+    dt = 0.01
+    T = 1.0
+    t0 = 0.0
+
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    x = ufl.SpatialCoordinate(mesh)
+
+    I_s = ac_func(x, time)
+
+    # Use Backward Euler to match the first-order Godunov splitting
+    tableau = irksome.BackwardEuler()
+    params = dict(petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+
+    pde = IrksomeMonodomainModel(
+        time=time,
+        mesh=mesh,
+        M=M,
+        butcher_tableau=tableau,
+        I_s=I_s,
+        params=params,
+    )
+
+    V_ode = beat.utils.space_from_string(odespace, mesh, dim=1)
+    v_ode = dolfinx.fem.Function(V_ode)
+
+    s = dolfinx.fem.Function(V_ode)
+
+    s.interpolate(
+        dolfinx.fem.Expression(s_exact_func(x, time), beat.utils.interpolation_points(V_ode)),
+    )
+
+    s_arr = s.x.array
+    init_states = np.zeros((2, s_arr.size))
+    init_states[1, :] = s_arr
+
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=v_ode,
+        v_pde=pde.state,
+        fun=simple_ode_forward_euler,
+        init_states=init_states,
+        parameters=None,
+        num_states=2,
+        v_index=0,
+    )
+
+    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver.solve((t0, T), dt=dt)
+
+    v_exact = v_exact_func(x, time)
+    error = dolfinx.fem.form((pde.state - v_exact) ** 2 * ufl.dx)
+    E = np.sqrt(comm.allreduce(dolfinx.fem.assemble_scalar(error), MPI.SUM))
+
+    print("Error: ", E, odespace)
+
+    # Clean up to prevent MPI hangs
+    mesh.comm.Barrier()
+    del solver
+    del pde
+    del ode
+    mesh.comm.Barrier()
+    gc.collect()
+    mesh.comm.Barrier()
+
+    assert E < 0.002

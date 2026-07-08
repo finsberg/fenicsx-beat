@@ -18,7 +18,6 @@ jobs:
       fail-fast: false
       matrix:
         container: [
-          "ghcr.io/fenics/dolfinx/dolfinx:v0.9.0",
           "ghcr.io/fenics/dolfinx/dolfinx:stable",
           "ghcr.io/fenics/dolfinx/dolfinx:nightly"
         ]
@@ -42,6 +41,7 @@ jobs:
         run: |
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install .[test]
+          python3 -m pip install git+https://github.com/firedrakeproject/Irksome.git
 
 
       - name: Run tests
