@@ -44,7 +44,7 @@ def make_ischemia_parameters(model, cellType, severity):
         return p
 
     if severity == "core":
-        set_param(model, p, "ko", 10.0)               # Severe Hyperkalemia             
+        set_param(model, p, "ko", 10.0)               # Severe Hyperkalemia
         set_param(model, p, "GNa", 8.83515)           # 75% Sodium Conductance
         set_param(model, p, "PCa_b", 6.281775e-05)    # 75% Calcium Permeability
         return p
@@ -124,7 +124,7 @@ def parse_named_values(ode, block_name, index_function):
     names = []
     for block in pattern.findall(text):
         names.extend(
-            re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", block, re.MULTILINE)
+            re.findall(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=", block, re.MULTILINE),
         )
 
     indexed = []
@@ -139,24 +139,24 @@ def parse_named_values(ode, block_name, index_function):
 
 def main():
 
-    demo_directory = Path(__file__).resolve().parent
-    repository_root = demo_directory.parent
+    here = Path.cwd()
 
-    outdir = Path("results")
+    outdir = here / "results"
     outdir.mkdir(parents=True, exist_ok=True)
 
     print("Running model")
     # Load the model
-    model_path = demo_directory / "ToRORd_dynCl_endo.py"
+    model_path = here / "ToRORd_dynCl_endo.py"
+
     ode_file = (
-        repository_root
+        here.parent
         / "odes"
         / "torord"
         / "ToRORd_dynCl_endo.ode"
     )
     if not model_path.is_file():
         print("Generate code for cell model")
-        
+
         ode = gotranx.load_ode(ode_file)
         code = gotranx.cli.gotran2py.get_code(
             ode,
@@ -167,7 +167,7 @@ def main():
     import ToRORd_dynCl_endo
 
     model = ToRORd_dynCl_endo.__dict__
-    
+
 
 
 
@@ -192,7 +192,7 @@ def main():
     # ------------------------------------------------------------
     celltypes_to_run = {
         "endo": 0,
-       
+
     }
 
     # ------------------------------------------------------------
@@ -200,7 +200,7 @@ def main():
     # ------------------------------------------------------------
     V_index = model["state_index"]("v")
     Ca_index = model["state_index"]("cai")
-    
+
 
     rhs = numba.njit(model["rhs"])
 
@@ -313,7 +313,7 @@ def main():
                     }
 
                     checkpoint_is_compatible = required_keys.issubset(
-                        checkpoint.files
+                        checkpoint.files,
                     )
 
                     if checkpoint_is_compatible:
@@ -431,7 +431,7 @@ def main():
                             f"Conditioning failed for "
                             f"{celltype_name} {severity}, "
                             f"beat {beat + 1}: "
-                            f"{result.message}"
+                            f"{result.message}",
                         )
 
                     if save_all_beats:
@@ -469,7 +469,7 @@ def main():
                         dtype=str,
                     ),
                     conditioning_beats=np.asarray(
-                        conditioning_beats
+                        conditioning_beats,
                     ),
                     BCL=np.asarray(BCL),
                     dt=np.asarray(dt),
@@ -516,10 +516,10 @@ def main():
                     del all_beats_time
 
                     temporary_states_file.unlink(
-                        missing_ok=True
+                        missing_ok=True,
                     )
                     temporary_time_file.unlink(
-                        missing_ok=True
+                        missing_ok=True,
                     )
 
                     print(
@@ -546,7 +546,7 @@ def main():
                 raise RuntimeError(
                     f"Detailed beat failed for "
                     f"{celltype_name} {severity}: "
-                    f"{result.message}"
+                    f"{result.message}",
                 )
 
             last_beat_time = result.t[:-1].copy()
@@ -660,10 +660,10 @@ def main():
                 "dt": dt,
                 "nbeats": 1,
                 "current_names": list(
-                    current_traces.keys()
+                    current_traces.keys(),
                 ),
                 "monitor_names_found": list(
-                    monitor_indices.keys()
+                    monitor_indices.keys(),
                 ),
             }
 
@@ -716,7 +716,7 @@ def main():
             missing = expected_severities - available_severities
             raise RuntimeError(
                 "Cannot create the voltage comparison plot. "
-                f"Missing traces: {sorted(missing)}"
+                f"Missing traces: {sorted(missing)}",
             )
 
         fig, ax = plt.subplots(figsize=(8, 5))
@@ -733,7 +733,7 @@ def main():
         ax.set_xlabel("Time (ms)")
         ax.set_ylabel("Membrane potential (mV)")
         ax.set_title(
-            "Effect of ischemia on the action potential"
+            "Effect of ischemia on the action potential",
         )
         ax.legend()
         ax.grid(alpha=0.3)
