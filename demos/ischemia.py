@@ -10,20 +10,6 @@
 # - **Ischemic core:** more severe extracellular hyperkalemia and stronger
 #   reductions in sodium conductance and calcium permeability.
 #
-# ## Simulation workflow
-#
-# The simulation is divided into two stages:
-#
-# 1. ``checkpoint`` mode conditions each cellular model for a specified
-#    number of pacing cycles and stores the final ODE state.
-# 2. ``last_beat`` mode loads the corresponding checkpoint, simulates one
-#    additional beat, stores the complete state trajectory and selected
-#    membrane-current traces, and compares the action potentials.
-#3. ``save_all_beats`` mode simulates a specified number of beats
-#    starting from the initial state, recording and saving the complete
-#    state trajectory and membrane currents for *every* single beat,
-#    allowing to study transient conditioning dynamics.
-#
 
 from pathlib import Path
 import time
@@ -259,405 +245,236 @@ def main():
 
     monitor_indices = get_monitor_indices(model, monitor_names)
     # ------------------------------------------------------------
-    # Simulation settings & Choose run mode
+    # Simulation settings
     # ------------------------------------------------------------
-    
-    # Save the complete time history of every ODE state for all
-    # conditioning beats. The final state is also stored separately
-    # in the compact checkpoint file.
-
-    save_all_beats = False  # or True 
-
-    # First run: create conditioned checkpoint
-    run_mode = "checkpoint"
-
-    # Second run: load checkpoint and save one detailed beat
-
-    # run_mode = "last_beat"
+    save_all_beats = False
+    reuse_checkpoint = True
 
     conditioning_beats = 10
-    
     BCL = 1000.0
     dt = 0.01
     save_frequency = 1
 
-    if run_mode == "checkpoint":
-        nbeats = conditioning_beats
-    elif run_mode == "last_beat":
-        nbeats = 1
-    else:
-        raise ValueError(
-            f"Unknown run_mode: {run_mode}"
-        )
-
-    # Time points stored in output trajectories. The exact BCL endpoint is
-    # excluded to prevent duplication between consecutive beats.
-
+    # Store 0 <= t < BCL. Include exactly BCL only in the solver output
+    # so the final column can be used as the restart state.
     times = np.arange(0.0, BCL, dt * save_frequency)
-
-    # Include the exact beat endpoint when solving so that the restart state
-    # corresponds to t = BCL.
-
     solver_times = np.append(times, BCL)
 
-    all_times = np.arange(0.0, BCL * nbeats, dt * save_frequency)
     t0_all = time.perf_counter()
 
     for celltype_name, cell_type in celltypes_to_run.items():
+        # This dictionary must persist while healthy, border and core run.
         voltage_traces = {}
 
-        for severity in ["healthy", "border", "core"]:
-        # for severity in ["healthy"]:
+        for severity in ("healthy", "border", "core"):
             print("=" * 70, flush=True)
-            print(f"Running celltype: {celltype_name}, severity: {severity}", flush=True)
+            print(
+                f"Running celltype: {celltype_name}, severity: {severity}",
+                flush=True,
+            )
             print("=" * 70, flush=True)
+
+            t0_severity = time.perf_counter()
 
             checkpoint_file = (
                 outdir
                 / f"Torord_checkpoint_{celltype_name}_{severity}"
+                f"_nbeats{conditioning_beats}"
                 f"_BCL{BCL}_dt{dt}.npz"
             )
 
-            if run_mode == "last_beat":
-                if not checkpoint_file.is_file():
-                    raise FileNotFoundError(
-                        f"Checkpoint not found: {checkpoint_file}\n"
-                        "Run once with run_mode = 'checkpoint'."
-                    )
+            all_beats_file = (
+                outdir
+                / f"Torord_all_beats_all_states_"
+                f"{celltype_name}_{severity}"
+                f"_nbeats{conditioning_beats}"
+                f"_BCL{BCL}_dt{dt}.npy"
+            )
 
-                checkpoint = np.load(
+            y = None
+            p = None
+
+            # --------------------------------------------------------
+            # Load a compatible checkpoint when available
+            # --------------------------------------------------------
+            if reuse_checkpoint and checkpoint_file.is_file():
+                with np.load(
                     checkpoint_file,
                     allow_pickle=False,
-                )
+                ) as checkpoint:
+                    required_keys = {
+                        "final_state",
+                        "parameters",
+                        "conditioning_beats",
+                        "BCL",
+                        "dt",
+                        "celltype",
+                        "severity",
+                    }
 
-                y = checkpoint["final_state"].copy()
-                p = checkpoint["parameters"].copy()
+                    checkpoint_is_compatible = required_keys.issubset(
+                        checkpoint.files
+                    )
 
+                    if checkpoint_is_compatible:
+                        checkpoint_is_compatible = (
+                            int(checkpoint["conditioning_beats"])
+                            == conditioning_beats
+                            and np.isclose(
+                                float(checkpoint["BCL"]),
+                                BCL,
+                            )
+                            and np.isclose(
+                                float(checkpoint["dt"]),
+                                dt,
+                            )
+                            and str(checkpoint["celltype"].item())
+                            == celltype_name
+                            and str(checkpoint["severity"].item())
+                            == severity
+                        )
+
+                    if checkpoint_is_compatible:
+                        y = checkpoint["final_state"].copy()
+                        p = checkpoint["parameters"].copy()
+
+                        print(
+                            f"Loaded compatible checkpoint: "
+                            f"{checkpoint_file}",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            "Checkpoint exists but is incompatible; "
+                            f"regenerating: {checkpoint_file}",
+                            flush=True,
+                        )
+
+            # A final-state checkpoint cannot reconstruct the full history.
+            # If that history is requested and absent, conditioning must run.
+            need_all_beats_history = (
+                save_all_beats and not all_beats_file.is_file()
+            )
+
+            if need_all_beats_history and y is not None:
                 print(
-                    f"Loaded checkpoint: {checkpoint_file}",
+                    "The checkpoint is reusable, but the all-beats archive "
+                    "is missing. Conditioning will run again to record it.",
                     flush=True,
                 )
 
-            else:
+            # --------------------------------------------------------
+            # Condition only when no valid checkpoint is available
+            # --------------------------------------------------------
+            if y is None or need_all_beats_history:
                 y = model["init_state_values"]()
-
                 p = make_ischemia_parameters(
                     model,
                     cell_type,
                     severity,
                 )
 
-            last_beat_all_states = None
-            last_beat_time = None
-            restart_state = None
+                all_beats_states = None
+                all_beats_time = None
+                temporary_states_file = None
+                temporary_time_file = None
 
-            Vs = None
-            Cais = None
-            A_atp = None
-            MgATP = None
-            MgADP = None
-            monitor_traces = None
-            beat_summary = []
-  
-            if run_mode == "last_beat":
-                n_total = len(times) * nbeats
-     
-                Vs = np.zeros(len(times) * nbeats)
-                Cais = np.zeros(len(times) * nbeats)
-            
-                A_atp_value = get_param_value(model, p, "A_atp", np.nan)
-                MgATP_value = get_param_value(model, p, "MgATP", np.nan)
-                MgADP_value = get_param_value(model, p, "MgADP", np.nan)
+                if save_all_beats:
+                    samples_per_beat = len(times)
+                    total_samples = (
+                        conditioning_beats * samples_per_beat
+                    )
+                    number_of_states = len(state_names_all)
 
-                A_atp = np.full(n_total, A_atp_value)
-                MgATP = np.full(n_total, MgATP_value)
-                MgADP = np.full(n_total, MgADP_value)
+                    temporary_states_file = (
+                        outdir
+                        / f".temporary_all_states_"
+                        f"{celltype_name}_{severity}.npy"
+                    )
+                    temporary_time_file = (
+                        outdir
+                        / f".temporary_all_times_"
+                        f"{celltype_name}_{severity}.npy"
+                    )
 
-                monitor_traces = {
-                    name: np.zeros(n_total)
-                    for name in monitor_indices
-                }
-                       
-            t0 = time.perf_counter()
+                    all_beats_states = np.lib.format.open_memmap(
+                        temporary_states_file,
+                        mode="w+",
+                        dtype=np.float64,
+                        shape=(number_of_states, total_samples),
+                    )
+                    all_beats_time = np.lib.format.open_memmap(
+                        temporary_time_file,
+                        mode="w+",
+                        dtype=np.float64,
+                        shape=(total_samples,),
+                    )
 
-            all_beats_states = None
-            all_beats_time = None
-            all_beats_file = None
-
-            if run_mode == "checkpoint" and save_all_beats:
-                samples_per_beat = len(times)
-                total_samples = nbeats * samples_per_beat
-                number_of_states = len(state_names_all)
-
-                all_beats_file = (
-                    outdir
-                    / f"Torord_all_beats_all_states_"
-                    f"{celltype_name}_{severity}"
-                    f"_nbeats{nbeats}_BCL{BCL}_dt{dt}.npy"
-                )
-
-                temporary_states_file = (
-                    outdir
-                    / f".temporary_all_states_"
-                    f"{celltype_name}_{severity}.npy"
-                )
-
-                temporary_time_file = (
-                    outdir
-                    / f".temporary_all_times_"
-                    f"{celltype_name}_{severity}.npy"
-                )
-
-                all_beats_states = np.lib.format.open_memmap(
-                    temporary_states_file,
-                    mode="w+",
-                    dtype=np.float64,
-                    shape=(number_of_states, total_samples),
-                )
-
-                all_beats_time = np.lib.format.open_memmap(
-                    temporary_time_file,
-                    mode="w+",
-                    dtype=np.float64,
-                    shape=(total_samples,),
-                )
-
-                print(
-                    f"Recording all states for {nbeats} beats",
-                    flush=True,
-                )
-            for beat in range(nbeats):
-
-                # ============================================================
-                # FAST CHECKPOINT MODE
-                # ============================================================
-                if run_mode == "checkpoint":
+                for beat in range(conditioning_beats):
                     t1 = time.perf_counter()
 
-                    # Include BCL so that the restart state corresponds exactly to
-                    # the end of the beat. The endpoint is not duplicated in the
-                    # saved all-beats trajectory.
-                   
-
-                    res = solve_ivp(
+                    result = solve_ivp(
                         rhs,
                         (0.0, BCL),
                         y,
-                        t_eval=solver_times if save_all_beats else [BCL],
+                        t_eval=(
+                            solver_times
+                            if save_all_beats
+                            else [BCL]
+                        ),
                         method="BDF",
                         args=(p,),
                     )
 
-                    if not res.success:
+                    if not result.success:
                         raise RuntimeError(
-                            f"solve_ivp failed for "
+                            f"Conditioning failed for "
                             f"{celltype_name} {severity}, "
-                            f"beat {beat + 1}: {res.message}"
+                            f"beat {beat + 1}: "
+                            f"{result.message}"
                         )
 
-                    
                     if save_all_beats:
-                        # The final column corresponds to exactly BCL and is used as
-                        # the restart state. It is excluded from the stored trajectory
-                        # because the next beat starts at the same physical time.
-
-                        beat_states = res.y[:, :-1]
-
                         start = beat * samples_per_beat
                         stop = start + samples_per_beat
 
                         all_beats_time[start:stop] = (
                             beat * BCL + times
                         )
+                        all_beats_states[:, start:stop] = (
+                            result.y[:, :-1]
+                        )
 
-                        all_beats_states[:, start:stop] = beat_states
-                    # Restart from the state at exactly t = BCL.
-                    
-                    y = res.y[:, -1].copy()
-
-            
+                    y = result.y[:, -1].copy()
 
                     print(
                         f"{celltype_name} | {severity} | "
-                        f"checkpoint beat {beat + 1}/{nbeats} | "
+                        f"conditioning beat "
+                        f"{beat + 1}/{conditioning_beats} | "
                         f"elapsed = "
                         f"{time.perf_counter() - t1:.2f} s",
                         flush=True,
                     )
-                    continue
-          
-                # ============================================================
-                # ONE DETAILED BEAT
-                # ============================================================
-                t1 = time.perf_counter()
-
-                res = solve_ivp(
-                    rhs,
-                    (0.0, BCL),
-                    y,
-                    t_eval=solver_times,
-                    method="BDF",
-                    args=(p,),
-                )
-
-                if not res.success:
-                    raise RuntimeError(
-                        f"solve_ivp failed for "
-                        f"{celltype_name} {severity}, "
-                        f"beat {beat + 1}: {res.message}"
-                    )
-
-                # Saved trajectory excludes the duplicate endpoint
-
-                last_beat_time = res.t[:-1].copy()
-                last_beat_all_states = res.y[:, :-1].copy()
-
-
-                # Save the state from which another beat can start
-
-                restart_state = res.y[:, -1].copy()
-
-                Vs[:] = last_beat_all_states[V_index, :]
-                Cais[:] = last_beat_all_states[Ca_index, :]
-
-                voltage_traces[severity] = {
-                    "time_ms": last_beat_time.copy(),
-                    "V": last_beat_all_states[V_index, :].copy(),
-                }
-
-
-                monitor_data, monitor_time = evaluate_monitors(
-                    model,
-                    last_beat_time,
-                    last_beat_all_states,
-                    p,
-                    monitor_indices,
-                    stride=1,
-                )
-
-                for name, arr in monitor_data.items():
-                    monitor_traces[name][:] = arr
-
-                y = restart_state.copy()
-
-                print(
-                    f"{celltype_name:5s} | "
-                    f"{severity:8s} | "
-                    f"beat {beat + 1}/{nbeats} | "
-                    f"elapsed = "
-                    f"{time.perf_counter() - t1:.2f} s",
-                    flush=True,
-                )           
-
-            # ================================================================
-            # SAVE ALL CONDITIONING BEATS
-            # ================================================================
-            if (
-                run_mode == "checkpoint"
-                and save_all_beats
-                and all_beats_states is not None
-                and all_beats_time is not None
-            ):
-                all_beats_states.flush()
-                all_beats_time.flush()
-
-                print(
-                    f"Writing complete all-beats archive: "
-                    f"{all_beats_file}",
-                    flush=True,
-                )
-
-                all_beats_result = {
-                    # Complete time vector for all conditioning beats
-                    "time_ms": np.asarray(all_beats_time),
-
-                    # Every ODE state at every saved time point
-                    "states": np.asarray(all_beats_states),
-
-                    # State names corresponding to rows of `states`
-                    "state_names": np.asarray(
-                        state_names_all,
-                        dtype=str,
-                    ),
-
-                    # State at the exact end of the final conditioning beat
-                    "final_state": y.copy(),
-
-                    # Complete parameter vector and parameter names
-                    "parameters": p.copy(),
-
-                    "parameter_names": np.asarray(
-                        parameter_names_all,
-                        dtype=str,
-                    ),
-
-                    # Simulation metadata
-                    "BCL": BCL,
-                    "dt": dt,
-                    "nbeats": nbeats,
-                    "celltype": celltype_name,
-                    "severity": severity,
-                }
-
-                np.save(
-                    all_beats_file,
-                    all_beats_result,
-                    allow_pickle=True,
-                )
-
-                del all_beats_states
-                del all_beats_time
-
-                all_beats_states = None
-                all_beats_time = None
-
-                temporary_states_file.unlink(missing_ok=True)
-                temporary_time_file.unlink(missing_ok=True)
-
-                print(
-                    f"Complete all-beats archive saved: "
-                    f"{all_beats_file}",
-                    flush=True,
-                )
-
-            print(
-                f"{celltype_name} {severity} total elapsed: "
-                f"{time.perf_counter() - t0:.2f} s",
-                flush=True,
-            )      
-
-            # ================================================================
-            # SAVE CONDITIONING CHECKPOINT
-            # ================================================================
-            if run_mode == "checkpoint":
 
                 np.savez_compressed(
                     checkpoint_file,
-
-                    # Complete final ODE state
                     final_state=y.copy(),
-
-                    # Complete parameter vector
                     parameters=p.copy(),
-
-                    # State and parameter names
-                    state_names=np.array(
+                    state_names=np.asarray(
                         state_names_all,
                         dtype=str,
                     ),
-
-                    parameter_names=np.array(
+                    parameter_names=np.asarray(
                         parameter_names_all,
                         dtype=str,
                     ),
-
-                    BCL=np.array(BCL),
-                    dt=np.array(dt),
-                    conditioning_beats=np.array(
+                    conditioning_beats=np.asarray(
                         conditioning_beats
                     ),
-                    celltype=np.array(celltype_name),
-                    severity=np.array(severity),
+                    BCL=np.asarray(BCL),
+                    dt=np.asarray(dt),
+                    celltype=np.asarray(celltype_name),
+                    severity=np.asarray(severity),
                 )
 
                 print(
@@ -665,182 +482,287 @@ def main():
                     flush=True,
                 )
 
-            # ================================================================
-            # SAVE ONE COMPLETE DETAILED BEAT
-            # ================================================================
-            elif run_mode == "last_beat":
+                if save_all_beats:
+                    all_beats_states.flush()
+                    all_beats_time.flush()
 
-                if (
-                    last_beat_all_states is None
-                    or last_beat_time is None
-                    or restart_state is None
-                ):
-                    raise RuntimeError(
-                        "Detailed beat was not recorded."
+                    all_beats_result = {
+                        "time_ms": np.asarray(all_beats_time),
+                        "states": np.asarray(all_beats_states),
+                        "state_names": np.asarray(
+                            state_names_all,
+                            dtype=str,
+                        ),
+                        "final_state": y.copy(),
+                        "parameters": p.copy(),
+                        "parameter_names": np.asarray(
+                            parameter_names_all,
+                            dtype=str,
+                        ),
+                        "BCL": BCL,
+                        "dt": dt,
+                        "nbeats": conditioning_beats,
+                        "celltype": celltype_name,
+                        "severity": severity,
+                    }
+
+                    np.save(
+                        all_beats_file,
+                        all_beats_result,
+                        allow_pickle=True,
                     )
 
-                last_beat_file = (
-                    outdir
-                    / f"Torord_last_beat_all_states_"
-                    f"{celltype_name}_{severity}"
-                    f"_BCL{BCL}_dt{dt}.npz"
-                )
+                    del all_beats_states
+                    del all_beats_time
 
-                np.savez_compressed(
-                    last_beat_file,
+                    temporary_states_file.unlink(
+                        missing_ok=True
+                    )
+                    temporary_time_file.unlink(
+                        missing_ok=True
+                    )
 
-                    # Complete time vector
-                    time_ms=last_beat_time,
+                    print(
+                        f"Complete all-beats archive saved: "
+                        f"{all_beats_file}",
+                        flush=True,
+                    )
 
-                    # Every ODE state at every time point
-                    states=last_beat_all_states,
+            # --------------------------------------------------------
+            # Record one additional detailed beat for THIS severity
+            # --------------------------------------------------------
+            t1 = time.perf_counter()
 
-                    # Names corresponding to state matrix rows
-                    state_names=np.array(
-                        state_names_all,
-                        dtype=str,
-                    ),
+            result = solve_ivp(
+                rhs,
+                (0.0, BCL),
+                y,
+                t_eval=solver_times,
+                method="BDF",
+                args=(p,),
+            )
 
-                    # State to restart another beat
-                    final_state=restart_state,
-
-                    # Complete parameter vector and names
-                    parameters=p.copy(),
-
-                    parameter_names=np.array(
-                        parameter_names_all,
-                        dtype=str,
-                    ),
-
-                    BCL=np.array(BCL),
-                    dt=np.array(dt),
-                    nbeats=np.array(1),
-                    celltype=np.array(celltype_name),
-                    severity=np.array(severity),
-                )
-
-                print(
-                    f"Saved complete last beat: "
-                    f"{last_beat_file}",
-                    flush=True,
-                )
-
-                # Keep membrane currents in their own dictionary
-                current_traces = {
-                    name: monitor_traces[name]
-                    for name in current_names
-                    if name in monitor_traces
-                }
-
-                trace_result = {
-                    "time_ms": all_times,
-                    "V": Vs,
-                    "cai": Cais,
-
-                    # Constant ATP-related ToR-ORd parameters
-                    "A_atp": A_atp,
-                    "MgATP": MgATP,
-                    "MgADP": MgADP,
-
-                    # All membrane currents from dv_dt
-                    "currents": current_traces,
-
-                    # Includes currents plus Jup
-                    "monitors": monitor_traces,
-
-                    # Estimated ATP demands
-                    "beat_summary": beat_summary,
-
-                    # Complete final state and parameters
-                    "final_state": restart_state,
-                    "parameters": p.copy(),
-
-                    "celltype": celltype_name,
-                    "severity": severity,
-                    "BCL": BCL,
-                    "dt": dt,
-                    "nbeats": 1,
-
-                    "current_names": list(
-                        current_traces.keys()
-                    ),
-
-                    "monitor_names_found": list(
-                        monitor_indices.keys()
-                    ),
-
-                    # "atp_term_names": atp_term_names,
-                }
-
-                trace_file = (
-                    outdir
-                    / f"Torord_trace_{celltype_name}_{severity}"
-                    f"_nbeats1_BCL{BCL}.npy"
-                )
-
-                np.save(
-                    trace_file,
-                    trace_result,
-                    allow_pickle=True,
-                )
-
-                print(
-                    f"Trace saved: {trace_file}",
-                    flush=True,
-                )
-
-        #Plotting voltage traces for all severities
-        if run_mode == "last_beat":
-            expected_severities = {"healthy", "border", "core"}
-            available_severities = set(voltage_traces)
-
-            if available_severities != expected_severities:
-                missing = expected_severities - available_severities
+            if not result.success:
                 raise RuntimeError(
-                    "Cannot create the voltage comparison plot. "
-                    f"Missing traces: {sorted(missing)}"
+                    f"Detailed beat failed for "
+                    f"{celltype_name} {severity}: "
+                    f"{result.message}"
                 )
 
-            fig, ax = plt.subplots(figsize=(8, 5))
+            last_beat_time = result.t[:-1].copy()
+            last_beat_all_states = result.y[:, :-1].copy()
+            restart_state = result.y[:, -1].copy()
 
-            for severity in ("healthy", "border", "core"):
-            # for severity in ["healthy"]:
-                trace = voltage_traces[severity]
+            Vs = last_beat_all_states[V_index, :].copy()
+            Cais = last_beat_all_states[Ca_index, :].copy()
 
-                ax.plot(
-                    trace["time_ms"],
-                    trace["V"],
-                    linewidth=2.0,
-                    label=severity.capitalize(),
-                )
-
-            ax.set_xlabel("Time (ms)")
-            ax.set_ylabel("Membrane potential (mV)")
-            ax.set_title("Effect of ischemia on the action potential")
-            ax.legend()
-            ax.grid(alpha=0.3)
-
-            fig.tight_layout()
-
-            voltage_figure = (
-                outdir
-                / f"Torord_voltage_comparison_{celltype_name}"
-                f"_BCL{BCL}_dt{dt}.png"
-            )
-
-            fig.savefig(
-                voltage_figure,
-                dpi=300,
-                bbox_inches="tight",
-            )
-
-            # plt.show()
-            plt.close(fig)
+            # This assignment is inside the severity loop and therefore
+            # executes once for healthy, border and core.
+            voltage_traces[severity] = {
+                "time_ms": last_beat_time.copy(),
+                "V": Vs.copy(),
+            }
 
             print(
-                f"Voltage comparison saved: {voltage_figure}",
+                f"Stored voltage trace for {severity}. "
+                f"Available traces: {list(voltage_traces)}",
                 flush=True,
             )
 
+            monitor_data, monitor_time = evaluate_monitors(
+                model,
+                last_beat_time,
+                last_beat_all_states,
+                p,
+                monitor_indices,
+                stride=1,
+            )
+
+            current_traces = {
+                name: monitor_data[name]
+                for name in current_names
+                if name in monitor_data
+            }
+
+            n_total = len(last_beat_time)
+            A_atp = np.full(
+                n_total,
+                get_param_value(
+                    model,
+                    p,
+                    "A_atp",
+                    np.nan,
+                ),
+            )
+            MgATP = np.full(
+                n_total,
+                get_param_value(
+                    model,
+                    p,
+                    "MgATP",
+                    np.nan,
+                ),
+            )
+            MgADP = np.full(
+                n_total,
+                get_param_value(
+                    model,
+                    p,
+                    "MgADP",
+                    np.nan,
+                ),
+            )
+
+            last_beat_file = (
+                outdir
+                / f"Torord_last_beat_all_states_"
+                f"{celltype_name}_{severity}"
+                f"_BCL{BCL}_dt{dt}.npz"
+            )
+
+            np.savez_compressed(
+                last_beat_file,
+                time_ms=last_beat_time,
+                states=last_beat_all_states,
+                state_names=np.asarray(
+                    state_names_all,
+                    dtype=str,
+                ),
+                final_state=restart_state,
+                parameters=p.copy(),
+                parameter_names=np.asarray(
+                    parameter_names_all,
+                    dtype=str,
+                ),
+                BCL=np.asarray(BCL),
+                dt=np.asarray(dt),
+                nbeats=np.asarray(1),
+                celltype=np.asarray(celltype_name),
+                severity=np.asarray(severity),
+            )
+
+            trace_result = {
+                "time_ms": last_beat_time,
+                "V": Vs,
+                "cai": Cais,
+                "A_atp": A_atp,
+                "MgATP": MgATP,
+                "MgADP": MgADP,
+                "currents": current_traces,
+                "monitors": monitor_data,
+                "monitor_time_ms": monitor_time,
+                "beat_summary": [],
+                "final_state": restart_state,
+                "parameters": p.copy(),
+                "celltype": celltype_name,
+                "severity": severity,
+                "BCL": BCL,
+                "dt": dt,
+                "nbeats": 1,
+                "current_names": list(
+                    current_traces.keys()
+                ),
+                "monitor_names_found": list(
+                    monitor_indices.keys()
+                ),
+            }
+
+            trace_file = (
+                outdir
+                / f"Torord_trace_{celltype_name}_{severity}"
+                f"_nbeats1_BCL{BCL}.npy"
+            )
+
+            np.save(
+                trace_file,
+                trace_result,
+                allow_pickle=True,
+            )
+
+            print(
+                f"Saved complete last beat: "
+                f"{last_beat_file}",
+                flush=True,
+            )
+            print(
+                f"Trace saved: {trace_file}",
+                flush=True,
+            )
+            print(
+                f"{celltype_name} | {severity} | "
+                f"detailed beat elapsed = "
+                f"{time.perf_counter() - t1:.2f} s",
+                flush=True,
+            )
+            print(
+                f"{celltype_name} {severity} total elapsed: "
+                f"{time.perf_counter() - t0_severity:.2f} s",
+                flush=True,
+            )
+
+        # ------------------------------------------------------------
+        # Plot only after all three severity loops have finished
+        # ------------------------------------------------------------
+        expected_severities = {"healthy", "border", "core"}
+        available_severities = set(voltage_traces)
+
+        print(
+            f"Voltage traces ready for plotting: "
+            f"{list(voltage_traces)}",
+            flush=True,
+        )
+
+        if available_severities != expected_severities:
+            missing = expected_severities - available_severities
+            raise RuntimeError(
+                "Cannot create the voltage comparison plot. "
+                f"Missing traces: {sorted(missing)}"
+            )
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+        for severity in ("healthy", "border", "core"):
+            trace = voltage_traces[severity]
+            ax.plot(
+                trace["time_ms"],
+                trace["V"],
+                linewidth=2.0,
+                label=severity.capitalize(),
+            )
+
+        ax.set_xlabel("Time (ms)")
+        ax.set_ylabel("Membrane potential (mV)")
+        ax.set_title(
+            "Effect of ischemia on the action potential"
+        )
+        ax.legend()
+        ax.grid(alpha=0.3)
+        fig.tight_layout()
+
+        voltage_figure = (
+            outdir
+            / f"Torord_voltage_comparison_{celltype_name}"
+            f"_BCL{BCL}_dt{dt}.png"
+        )
+
+        fig.savefig(
+            voltage_figure,
+            dpi=300,
+            bbox_inches="tight",
+        )
+
+        # plt.show()
+        plt.close(fig)
+
+        print(
+            f"Voltage comparison saved: {voltage_figure}",
+            flush=True,
+        )
+
+    print(
+        f"Total simulation elapsed: "
+        f"{time.perf_counter() - t0_all:.2f} s",
+        flush=True,
+    )
 if __name__ == "__main__":
     main()
