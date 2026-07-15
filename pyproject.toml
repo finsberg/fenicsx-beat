@@ -50,6 +50,7 @@ demos = [
    "cardiac-geometriesx",
    "fenicsx-ldrb",
    "gotranx",
+   "numba",
    "ukb-atlas",
    "io4dolfinx",
 ]
