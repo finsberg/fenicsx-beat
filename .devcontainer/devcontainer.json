@@ -1,0 +1,41 @@
+{
+  "name": "fenicsx-beat",
+  "image": "ghcr.io/fenics/dolfinx/dolfinx:stable",
+  "workspaceFolder": "/home/shared",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/shared,type=bind",
+
+  "runArgs": [
+    "--name", "fenicsx-beat",
+  ],
+
+  // Install Zsh as the default shell inside the container
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true
+    }
+  },
+
+  // Automatically run your editable install every time the container is built/started
+  "postCreateCommand": ".devcontainer/setup.sh",
+
+  // Recommended VS Code extensions to run inside the container
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  },
+
+  // Mount local Zsh configs into the container
+  "mounts": [
+    "source=${localEnv:HOME}/.zshrc,target=/root/.zshrc,type=bind,readonly",
+    "source=${localEnv:HOME}/.oh-my-zsh,target=/root/.oh-my-zsh,type=bind,readonly",
+    "source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind,readonly"
+  ],
+
+  "remoteUser": "root"
+}
