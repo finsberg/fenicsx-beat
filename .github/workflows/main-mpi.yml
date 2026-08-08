@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10   # Tests shouldn't use more than 10 minutes to run
     container:
-      image: ghcr.io/fenics/dolfinx/dolfinx:v0.10.0
+      image: ghcr.io/fenics/dolfinx/dolfinx:stable
 
 
     steps:
@@ -23,6 +23,11 @@ jobs:
           python3 -m pip install -r https://raw.githubusercontent.com/scientificcomputing/scifem/refs/heads/main/build-requirements.txt
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install -e .[test]
+          # PyPI's irksome release has a bug in its dolfinx backend (it always
+          # resolves to the firedrake backend internally), so pull the fix from
+          # git HEAD. Keep the [dolfinx] extra so firedrake-fiat (required by
+          # irksome, even with the dolfinx backend) is installed alongside it.
+          python3 -m pip install "irksome[dolfinx] @ git+https://github.com/firedrakeproject/Irksome.git"
 
       - name: Run tests
         run: mpirun -n 2 python3 -m pytest -v  -m "not skip_in_parallel"

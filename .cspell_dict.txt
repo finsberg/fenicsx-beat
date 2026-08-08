@@ -20,6 +20,7 @@ Bestel
 bibtex
 bidomain
 biophysically
+bjacobi
 booktitle
 boomeramg
 Britton
@@ -88,6 +89,7 @@ Istim
 Jakub
 Joakim
 Kluwer
+Kutta
 Laszlo
 levelname
 libgl
@@ -140,6 +142,7 @@ preonly
 pyplot
 PYVISTA
 Quarteroni
+Radau
 randn
 regazzoni
 Regazzoni
@@ -149,6 +152,7 @@ rint
 rique
 rmtree
 rtol
+Runge
 savefig
 scifem
 setrecursionlimit

@@ -18,5 +18,11 @@ FEniCSx-Beat
 .. automodule:: beat.odesolver
     :members:
 
+.. automodule:: beat.irksome_model
+    :members:
+
+.. automodule:: beat.irksome_odesolver
+    :members:
+
 .. automodule:: beat.utils
     :members:
