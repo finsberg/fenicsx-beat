@@ -3,6 +3,8 @@
 #
 # This demo details the process, challenges, and final mathematical formulation used to verify the second-order temporal convergence ($\mathcal{O}(\Delta t^2)$) of the operator splitting scheme in the `fenicsx-beat` cardiac electrophysiology library.
 #
+# See the [mathematical background](../docs/math_background.md) page for a general derivation of the equations and the splitting scheme summarized below, and the [convergence demo](monodomain_convergence.py) for the companion check of the (first-order) spatial and Godunov-splitting convergence rates.
+#
 # ## Background
 #
 # The `fenicsx-beat` library solves the Monodomain model coupled with cellular ODEs. The continuous problem is given by:
@@ -135,7 +137,7 @@ odespace = "CG_2"  # P2 elements to drop the spatial error floor
 
 N = 150
 mesh = dolfinx.mesh.create_unit_square(
-    comm, N, N, dolfinx.cpp.mesh.CellType.triangle,
+    comm, N, N, dolfinx.mesh.CellType.triangle,
 )
 V_ode = beat.utils.space_from_string(odespace, mesh, dim=1)
 

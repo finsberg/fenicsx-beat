@@ -14,9 +14,12 @@ Bartolucci
 basix
 bazett
 bcast
+behaviour
 bestel
 Bestel
 bibtex
+bidomain
+biophysically
 booktitle
 boomeramg
 Britton
@@ -112,6 +115,7 @@ Nagumo
 Nattel
 nbeats
 ndarray
+Neighbouring
 neohookean
 Neumann
 Niederer
@@ -124,6 +128,7 @@ opencarp
 Oreste
 Orovio
 outdir
+Panfilov
 Paraview
 Passini
 pendo
@@ -141,6 +146,7 @@ randn
 regazzoni
 Regazzoni
 Remedios
+repolarization
 rint
 rique
 rmtree
@@ -160,6 +166,7 @@ Sorine
 spatio
 Stefano
 stim
+Strang
 subplus
 Sundnes
 Terje
@@ -167,6 +174,8 @@ timestep
 tomek
 Tomek
 TRAME
+transmembrane
+Tusscher
 Tveito
 unpreconditioned
 ureg

@@ -1,5 +1,12 @@
 # # Niederer benchmark
 # In this example we will use the same setup as in the Niederer benchmark {cite}`land2015verification`.
+# It is a standard convergence/cross-code benchmark for monodomain solvers: a small cuboid slab of
+# tissue with a detailed ionic current model (the ten Tusscher–Panfilov 2006 epicardial model), a
+# conductivity tensor $M$ built from the "Niederer" literature conductivity values, and a stimulus
+# $I_{stim}$ applied in one corner. The quantity of interest is the local activation time — the first
+# time $v$ crosses $0$ mV — at nine fixed points in the slab, for a range of spatial and temporal
+# resolutions $dx$, $dt$. See the [mathematical background](../docs/math_background.md) page for the
+# underlying monodomain model and notation used below.
 
 from pathlib import Path
 import json
@@ -122,9 +129,10 @@ if pyvista is not None:
         figure = plotter.screenshot("niederer_mesh.png")
 
 # +
-# Surface to volume ratio
+# Literature values for the intracellular/extracellular conductivities and the surface to volume
+# ratio $\chi$, used below to build the conductivity tensor $M$.
 conductivities = beat.conductivities.default_conductivities("Niederer")
-# # Membrane capacitance
+# Membrane capacitance $C_m$
 C_m = 1.0 * beat.units.ureg("uF/cm**2")
 
 time_constant = dolfinx.fem.Constant(geo.mesh, 0.0)
@@ -151,6 +159,8 @@ S1_markers = dolfinx.mesh.meshtags(
     np.full(len(cells), S1_marker, dtype=np.int32),
 )
 
+# The stimulus current $I_{stim}$, applied to the S1 corner subdomain defined above.
+
 I_s = beat.stimulation.define_stimulus(
     mesh=geo.mesh,
     chi=conductivities["chi"],
@@ -160,6 +170,8 @@ I_s = beat.stimulation.define_stimulus(
     mesh_unit=mesh_unit,
     amplitude=50_000.0,
 )
+
+# The conductivity tensor $M$, built from the fibre direction `geo.f0` and the conductivities above.
 
 assert geo.f0 is not None
 M = beat.conductivities.define_conductivity_tensor(
@@ -200,6 +212,8 @@ ode = beat.odesolver.DolfinODESolver(
     v_index=model.state_index("V"),
     monitor=monitor,
 )
+
+# Combine the PDE and ODE solver, using the default $\theta = 1$ (Godunov splitting).
 
 # +
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, monitor=monitor)
