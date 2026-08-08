@@ -2,7 +2,7 @@
 
 This page gives a self-contained introduction to the mathematical models
 that `fenicsx-beat` solves, and fixes the notation used consistently
-throughout the [demos](../demos/fitzhughnagumo.py). It is a condensed version of
+throughout the [demos](../demos/index.md). It is a condensed version of
 the material in Sundnes, Lines, Cai, Nielsen, Mardal and Tveito,
 *Computing the Electrical Activity in the Heart* {cite}`sundnes2007computing`,
 which is the standard reference for this field and the source we follow
@@ -224,6 +224,7 @@ numerically using the method of manufactured solutions.
 
 ## 7. Where to go from here
 
+- The [demos index](../demos/index.md) lists every demo in this repository, grouped by topic.
 - The [FitzHugh–Nagumo demo](../demos/fitzhughnagumo.py) is the best starting
   point: it solves the monodomain model with the simplest possible ionic
   current model, both as a single-cell ODE and as a full 2D tissue
