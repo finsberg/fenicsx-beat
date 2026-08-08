@@ -1,6 +1,17 @@
 # # Premature Ventricular Complexes (PVCs)
 # In this demo we try to replicate the experimental setup conducted in {cite}`zhang2021mechanisms`
 #
+# We simulate a 1D "cable" of tissue with a detailed ionic current model (ten Tusscher–Panfilov 2006),
+# a scalar conductivity/diffusion coefficient $M$, and a region of reduced repolarization reserve (the
+# rapid delayed rectifier and slow delayed rectifier conductances $g_{Kr}$ and $g_{Ks}$ are set to zero
+# in the right half of the cable). When all cells are stimulated simultaneously with a periodic
+# stimulus $I_{stim}$, the heterogeneity in repolarization can, under the right conditions, give rise
+# to a premature ventricular complex (PVC) — an ectopic beat originating from the heterogeneous region
+# rather than from the (here, simultaneous) normal activation. See the
+# [mathematical background](../docs/math_background.md) page for the monodomain model and notation
+# used below, and the [pacing train demo](pace_train.py) for the same tissue setup with a different
+# (single-point, rapid) pacing protocol.
+#
 # First we do the necessary imports
 #
 
@@ -53,7 +64,8 @@ model = tentusscher_panfilov_2006_epi_cell.__dict__
 # Change this to run the simulations for longer
 end_time = 1000.0
 
-# We specify a diffusion coefficient and a membrane capacitance
+# We specify a diffusion coefficient $D$ and a membrane capacitance $C_m$. Since the cable is 1D we
+# use $D$ directly as the (scalar) conductivity $M$ below.
 
 D = 0.0005 * beat.units.ureg("cm**2 / ms")
 Cm = 1.0 * beat.units.ureg("uF/cm**2")
@@ -137,7 +149,8 @@ g_Ks.interpolate(
 )
 parameters_ode[g_Ks_index, :] = g_Ks.x.array
 
-# Finally we set up the models
+# Finally we set up the PDE and ODE models and combine them with the (default $\theta = 1$,
+# Godunov-split) splitting solver.
 
 # +
 pde = beat.MonodomainModel(

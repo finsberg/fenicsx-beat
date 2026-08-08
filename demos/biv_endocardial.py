@@ -1,6 +1,14 @@
 # # Endocardial stimulation of a Bi-ventricular ellipsoid
 # In this example, we will simulate the endocardial stimulation of a bi-ventricle ellipsoid. The geometry is created using the cardiac_geometries package. The model is based on the ToRORd model.
 #
+# This follows the same recipe as the [left-ventricle demo](lv_endocardial.py) — a conductivity tensor
+# $M$, a transmurally heterogeneous cell model, and a stimulus current $I_{stim}$ applied to trigger a
+# propagating wave of transmembrane potential $v$ — but on a bi-ventricular geometry, with the left and
+# right ventricle both stimulated. In addition, this demo shows how to recover a 12-lead ECG from the
+# simulated $v$ using `beat.ecg.ECGRecovery`, by evaluating a lead field at electrode positions on the
+# torso surface. See the [mathematical background](../docs/math_background.md) page for the underlying
+# model and notation used below.
+#
 
 from pathlib import Path
 import shutil
@@ -214,13 +222,15 @@ v_index = {
 }
 
 
-# Now let us specify the conductivities and membrane capacitance. The conductivities are set to the default values for the Bishop model. The membrane capacitance is set to 1 uF/cm^2.
+# Now let us specify the conductivities, surface to volume ratio $\chi$, and membrane capacitance
+# $C_m$. The conductivities are set to the default values for the Bishop model. The membrane
+# capacitance is set to 1 uF/cm^2.
 
 conductivities = beat.conductivities.default_conductivities("Bishop")
 C_m = 1.0 * beat.units.ureg("uF/cm**2")
 print(conductivities)
 
-# From this we can create the conductivity tensor given the fiber orientations.
+# From this we can create the conductivity tensor $M$ given the fiber orientations.
 
 M = beat.conductivities.define_conductivity_tensor(
     f0=geo.f0,
@@ -228,7 +238,7 @@ M = beat.conductivities.define_conductivity_tensor(
 )
 
 
-# Now let us create the stimulus current which will initiate the action potential. We will use a stimulus amplitude of 2000 uA/cm^2 and apply it to the endocardial layer at the beginning of the simulation for 1 ms.
+# Now let us create the stimulus current $I_{stim}$ which will initiate the action potential. We will use a stimulus amplitude of 2000 uA/cm^2 and apply it to the endocardial layer at the beginning of the simulation for 1 ms.
 # We also crate a variable for the time which will be used in the PDE solver.
 # Note that we now want to stimulate both the left and right ventricle so we will create two stimulus currents.
 
@@ -271,7 +281,8 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 
-# We will the the ODE and PDE using a Godunov splitting scheme. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
+# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)

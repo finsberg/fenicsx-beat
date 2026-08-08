@@ -1,6 +1,14 @@
 # # Purkinje like stimulation of a realistic BiV geometry
 # In this example we will use a realistic geometry generated from the mean shape of an   [atlas from the UK Biobank](https://computationalphysiology.github.io/ukb-atlas) of 630 healthy subjects.
 # We will also stimulate it using a random activation pattern on the endocardial layer of the left and right ventricle.
+#
+# This is the most realistic geometry demo in this repository, and it replaces the single, localized
+# stimulus current $I_{stim}$ used in the [left](lv_endocardial.py)/[bi-ventricular](biv_endocardial.py)
+# ellipsoid demos with many small, randomly timed and positioned stimuli spread across the endocardial
+# surface. This mimics the effect of the Purkinje fibre network, which activates the endocardium at
+# many points nearly simultaneously rather than through slow cell-to-cell propagation from a single
+# site. See the [mathematical background](../docs/math_background.md) page for the monodomain model
+# and notation ($v$, $M$, $\chi$, $C_m$, $I_{ion}$, $I_{stim}$, $\theta$) used below.
 
 import logging
 from pathlib import Path
@@ -211,7 +219,12 @@ v_index = {
 }
 
 
-# Now let us specify the conductivities and membrane capacitance. The conductivities are set to the default values for the Bishop model. The membrane capacitance is set to 1 uF/cm^2.
+# Now let us specify the conductivities, surface to volume ratio $\chi$, and membrane capacitance
+# $C_m$. Here we build the conductivity tensor $M$ by hand instead of using
+# `beat.conductivities.define_conductivity_tensor` (as in the other ventricle demos): we divide the
+# along-fibre and cross-fibre conductivities $s_l$, $s_t$ by $\chi$, then form the transversely
+# isotropic tensor $M = s_l\, f_0 \otimes f_0 + s_t\, (I - f_0 \otimes f_0)$, which is aligned with the
+# local fibre direction $f_0$ and isotropic in the plane perpendicular to it.
 
 chi = 1400.0 * beat.units.ureg("cm**-1")
 s_l = 0.24 * beat.units.ureg("S/cm")
@@ -355,7 +368,8 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 
-# We will the the ODE and PDE using a Godunov splitting scheme. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
+# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
