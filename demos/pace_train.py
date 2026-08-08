@@ -1,6 +1,15 @@
 # # Pacing traing
 #
-# In this demo we will repeat the same setup as in the [PVC demo](pvc) but we will stimulate the cells on the left boundary of the cable and a rapid pace.
+# In this demo we will repeat the same setup as in the [PVC demo](pvc.py) but we will stimulate the cells on the left boundary of the cable and a rapid pace.
+#
+# As in the PVC demo, this is a 1D "cable" of tissue (rather than a 2D or 3D slab) with a detailed
+# ionic current model (ten Tusscher–Panfilov 2006), a scalar conductivity/diffusion coefficient $M$
+# derived from a physical diffusion coefficient $D$, and heterogeneous cell parameters ($g_{Kr}$,
+# $g_{Ks}$ are set to zero in the right half of the cable, mimicking a region of reduced repolarization
+# reserve). Here we pace the left end of the cable repeatedly at a fixed period (a "pacing train")
+# rather than triggering a single premature beat, and look at how the propagating wave is affected by
+# the heterogeneity. See the [mathematical background](../docs/math_background.md) page for the
+# monodomain model and notation used below.
 # First we do the necceary imports
 #
 
@@ -56,7 +65,9 @@ model = tentusscher_panfilov_2006_epi_cell.__dict__
 # Change this to run the simulations for longer
 end_time = 500.0
 
-# We specify a diffusion coefficient and a membrane capacitance
+# We specify a diffusion coefficient $D$ and a membrane capacitance $C_m$. Since the cable is 1D we
+# use $D$ directly as the (scalar) conductivity $M$ below, rather than building a tensor from fibre
+# directions as in the ventricle demos.
 
 D = 0.0005 * beat.units.ureg("cm**2 / ms")
 Cm = 1.0 * beat.units.ureg("uF/cm**2")
@@ -155,7 +166,8 @@ g_Ks.interpolate(
 )
 parameters_ode[g_Ks_index, :] = g_Ks.x.array
 
-# Finally we set up the models
+# Finally we set up the PDE and ODE models and combine them with the (default $\theta = 1$,
+# Godunov-split) splitting solver.
 
 # +
 pde = beat.MonodomainModel(

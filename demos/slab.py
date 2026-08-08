@@ -1,6 +1,19 @@
 # # Conduction velocity and ECG for slabs
 # In this demo we will show how to compute conduction velocity and ECG for a Slab geometry.
 #
+# This demo introduces the full "realistic" workflow used by most of the other tissue-level demos in
+# this repository: a detailed ionic current model (here ToR-ORd) with different parameters for the
+# endocardial, mid-myocardial and epicardial layers of the tissue, a physically motivated conductivity
+# tensor $M$ built from fibre directions and literature conductivity values, and a stimulus current
+# $I_{stim}$ applied at one end of a thin slab of tissue to trigger a propagating wave. Once we have
+# simulated the transmembrane potential $v$ over time, we measure how fast the depolarization wave
+# travels (the conduction velocity) and recover a pseudo-ECG signal from the simulated $v$ using
+# `beat.ecg.ECGRecovery`. See the [mathematical background](../docs/math_background.md) page for the
+# monodomain model and notation used below, and the
+# [left-ventricle demo](lv_endocardial.py) for a more detailed walk-through of the same building
+# blocks (steady-state initial conditions, multi-layer cell models, conductivity tensors, and the
+# splitting solver).
+#
 
 from pathlib import Path
 import shutil
@@ -139,11 +152,11 @@ import ToRORd_dynCl_endo
 
 model = ToRORd_dynCl_endo.__dict__
 
-# Surface to volume ratio
+# Surface to volume ratio $\chi$
 
 chi = 1400.0 * beat.units.ureg("cm**-1")
 
-# Membrane capacitance
+# Membrane capacitance $C_m$
 
 C_m = 1.0 * beat.units.ureg("uF/cm**2")
 
@@ -203,6 +216,11 @@ v_index = {
     2: model["state_index"]("v"),
 }
 
+# The stimulus current $I_{stim}$ is applied at the endocardial (`ENDO`) face of the slab, and is
+# already divided by $\chi$ internally by `define_stimulus` so that it can be added directly to the
+# right-hand side of the monodomain equation, see the
+# [mathematical background](../docs/math_background.md) page.
+
 time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
 assert data.ffun is not None
 I_s = beat.stimulation.define_stimulus(
@@ -217,6 +235,10 @@ I_s = beat.stimulation.define_stimulus(
 
 fiber_direction = data.f0
 assert fiber_direction is not None
+
+# The effective (monodomain) conductivity tensor $M$ is built from the intracellular/extracellular
+# conductivities `g_il`, `g_it`, `g_el`, `g_et` along and across the fibre direction, harmonic-averaged
+# and divided by $\chi$ so that it matches the equation in the mathematical background page.
 
 M = beat.conductivities.define_conductivity_tensor(
     chi,
@@ -248,6 +270,9 @@ ode = beat.odesolver.DolfinMultiODESolver(
     parameters=parameters,
     v_index=v_index,
 )
+# Combine the PDE and (multi-region) ODE solver with a splitting solver. We use the default
+# $\theta = 1$, i.e. (first-order) Godunov splitting.
+
 t = 0.0
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 

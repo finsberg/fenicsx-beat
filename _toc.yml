@@ -4,6 +4,7 @@ root: README
 parts:
   - caption: Getting started
     chapters:
+    - file: docs/math_background.md
     - file: demos/fitzhughnagumo.py
   - caption: Examples
     chapters:

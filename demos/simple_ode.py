@@ -4,6 +4,19 @@
 # ODE solver in `beat`. While this is not the main purpose of the
 # package it might be useful to solve the single cell models.
 #
+# In the context of the [mathematical background](../docs/math_background.md) page, this demo solves
+# only the ODE part of the coupled cell-model system,
+#
+# $$
+# \frac{dv}{dt} = -I_{ion}(v, s), \qquad \frac{ds}{dt} = f(v, s),
+# $$
+#
+# for a toy right-hand side (a simple undamped oscillator with $I_{ion}(v, s) = s$ and
+# $f(v, s) = -v$), at `num_points` independent points at once, using
+# `beat.odesolver.solve` with a forward Euler scheme. This is exactly the kind of ODE step that
+# `beat.MonodomainSplittingSolver` performs at every mesh point during steps 1 and 3 of the operator
+# splitting scheme — here without any PDE step or diffusion coupling in between.
+#
 # First we import the necessary packages
 
 import numpy as np

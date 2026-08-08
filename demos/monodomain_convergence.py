@@ -1,5 +1,23 @@
 # # Monodomain convergence test
 # In this example, we will demonstrate how to perform a convergence test for the monodomain model using the forward Euler method for the ODE solver. We will use the same test case as in the tests/test_monodomain.py file. We will compare the error in the solution for different spatial and temporal resolutions. We will use the L2 norm of the error as the error measure.
+#
+# We use the method of manufactured solutions: rather than starting from a cell model, we pick a
+# transmembrane potential $v$ and a gating variable $s$ ourselves (`v_exact_func` and `s_exact_func`
+# below), and derive the stimulus current $I_{stim}$ (`ac_func`) that makes the monodomain equation
+#
+# $$
+# \frac{\partial v}{\partial t} = \nabla \cdot (M \nabla v) - I_{ion}(v, s) + I_{stim}, \qquad
+# \frac{\partial s}{\partial t} = f(v, s),
+# $$
+#
+# (with $C_m = 1$ and constant $M$) exactly satisfied by our chosen $v$ and $s$. Since we then know the
+# exact solution, we can measure the $L^2$ error of the numerical solution produced by
+# `beat.MonodomainSplittingSolver` for decreasing mesh size $h = 1/N$ and time step $\Delta t$, and
+# check that it decreases at the expected rate — second order in space (from the finite element
+# discretization) and first order in time for Godunov splitting ($\theta = 1$, the solver's default).
+# See the [verification demo](verification.py) for the corresponding second-order-in-time check using
+# Strang splitting, and the [mathematical background](../docs/math_background.md) page for where the
+# operator splitting scheme comes from.
 
 from collections import defaultdict
 import ufl

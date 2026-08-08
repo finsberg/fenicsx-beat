@@ -5,8 +5,16 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/home/shared,type=bind",
 
   "runArgs": [
-    "--name", "fenicsx-beat",
+    "--name", "fenicsx-beat"
   ],
+
+  "containerEnv": {
+    "PYVISTA_OFF_SCREEN": "false",
+    "PYVISTA_JUPYTER_BACKEND": "html",
+    "CI": "0",
+    "DISPLAY": ":99.0",
+    "LIBGL_ALWAYS_SOFTWARE": "1"
+  },
 
   // Install Zsh as the default shell inside the container
   "features": {
@@ -25,7 +33,8 @@
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "streetsidesoftware.code-spell-checker"
       ]
     }
   },
