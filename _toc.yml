@@ -23,6 +23,10 @@ parts:
     - file: demos/verification.py
     - file: demos/monodomain_convergence.py
 
+  - caption: Advanced topics
+    chapters:
+    - file: demos/irksome_model_gotranx.py
+
   - caption: API documentation
     chapters:
     - file: CONTRIBUTING

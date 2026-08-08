@@ -41,7 +41,11 @@ jobs:
         run: |
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install .[test]
-          python3 -m pip install git+https://github.com/firedrakeproject/Irksome.git
+          # PyPI's irksome release has a bug in its dolfinx backend (it always
+          # resolves to the firedrake backend internally), so pull the fix from
+          # git HEAD. Keep the [dolfinx] extra so firedrake-fiat (required by
+          # irksome, even with the dolfinx backend) is installed alongside it.
+          python3 -m pip install "irksome[dolfinx] @ git+https://github.com/firedrakeproject/Irksome.git"
 
 
       - name: Run tests

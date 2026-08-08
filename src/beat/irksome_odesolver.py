@@ -1,3 +1,5 @@
+from typing import Callable
+
 import basix
 import dolfinx
 import numpy as np
@@ -14,14 +16,14 @@ class IrksomeODESolver(BaseDolfinODESolver):
         self,
         v_ode: dolfinx.fem.Function,
         v_pde: dolfinx.fem.Function,
-        fun: callable,
+        fun: Callable,
         init_states: np.ndarray,
         butcher_tableau,
         time: dolfinx.fem.Constant,
         num_states: int,
         v_index: int = 0,
-        parameters: dict = None,
-        monitor: BaseMonitor = None,
+        parameters: dict | None = None,
+        monitor: BaseMonitor | None = None,
     ):
         import irksome
 

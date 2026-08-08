@@ -5,6 +5,8 @@ from . import (
     conductivities,
     ecg,
     geometry,
+    irksome_model,
+    irksome_odesolver,
     monodomain_model,
     monodomain_solver,
     odesolver,
@@ -14,6 +16,8 @@ from . import (
     utils,
 )
 from .ecg import ECGRecovery
+from .irksome_model import IrksomeMonodomainModel
+from .irksome_odesolver import IrksomeODESolver
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
 from .stimulation import Stimulus
@@ -46,4 +50,8 @@ __all__ = [
     "BaseMonitor",
     "NullMonitor",
     "PerformanceMonitor",
+    "irksome_model",
+    "IrksomeMonodomainModel",
+    "irksome_odesolver",
+    "IrksomeODESolver",
 ]

@@ -222,7 +222,30 @@ respectively. The [convergence](../demos/monodomain_convergence.py) and
 [verification](../demos/verification.py) demos check this second-order behaviour
 numerically using the method of manufactured solutions.
 
-## 7. Where to go from here
+## 7. An alternative to the $\theta$-rule: fully implicit Runge–Kutta stepping
+
+The $\theta$-rule used in Section 6 gives at most second-order accuracy in time (at $\theta = 1/2$),
+and the explicit or Rush–Larsen schemes typically used for the ODE step in step 1/3 can struggle with
+very stiff cell models. `beat.IrksomeMonodomainModel` and `beat.IrksomeODESolver` are alternative
+implementations of the `pde` and `ode` roles in `beat.MonodomainSplittingSolver`, built on top of the
+[Irksome](https://firedrakeproject.org/Irksome) library, that instead advance $v$ (and, for the ODE
+step, $s$) with a fully implicit Runge–Kutta method specified by a *Butcher tableau* — for example
+`irksome.BackwardEuler()` (first order, matching Godunov splitting) or `irksome.GaussLegendre(2)`
+(fourth order). Because they implement the same interface as `MonodomainModel` and
+`beat.odesolver.DolfinODESolver`, an `IrksomeMonodomainModel` PDE step can be freely combined with a
+plain `DolfinODESolver` ODE step, or vice versa, inside the same splitting solver.
+`IrksomeMonodomainModel` can also be used entirely on its own, without any splitting at all, to solve a
+pure diffusion-plus-stimulus problem implicitly and with high-order accuracy in time — useful when
+there is no reaction term to split against, and hence no splitting error to bound the overall accuracy.
+
+This comes at a cost: each implicit Runge–Kutta stage requires solving a (in general nonlinear) system
+over the whole mesh, so it is more expensive per time step than the explicit/$\theta$-rule schemes used
+elsewhere in this repository. `irksome` is therefore an optional dependency (the `irksome` extra,
+`python3 -m pip install fenicsx-beat[irksome]`), and the
+[Irksome demo](../demos/irksome_model_gotranx.py) shows it in combination with a
+`gotranx`-generated cell model.
+
+## 8. Where to go from here
 
 - The [demos index](../demos/index.md) lists every demo in this repository, grouped by topic.
 - The [FitzHugh–Nagumo demo](../demos/fitzhughnagumo.py) is the best starting
@@ -240,6 +263,8 @@ numerically using the method of manufactured solutions.
   ventricular complexes on a 1D cable, and full biophysically detailed
   simulations on left- and bi-ventricular geometries, including 12-lead ECG
   recovery.
+- The [Irksome demo](../demos/irksome_model_gotranx.py) shows the fully implicit, high-order time
+  stepping described in Section 7.
 - For the full derivation of the bidomain and monodomain models, the
   physiology of the cell membrane, the Hodgkin–Huxley and Nernst–Planck
   formalisms, and a rigorous treatment of operator splitting and its order

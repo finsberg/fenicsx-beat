@@ -42,6 +42,14 @@ model and notation used throughout, then work through the
 - [Monodomain convergence test](monodomain_convergence.py) — the companion check of the (first-order)
   spatial and Godunov-splitting convergence rates.
 
+## Advanced topics
+
+- [Fully implicit high-order time stepping with Irksome](irksome_model_gotranx.py) — replaces the
+  default explicit/$\theta$-rule time stepping with fully implicit, high-order Runge–Kutta methods
+  (via the optional [Irksome](https://firedrakeproject.org/Irksome) dependency) for the PDE and/or ODE
+  step, demonstrated on a `gotranx`-generated cell model and a strongly heterogeneous conductivity
+  field.
+
 ```{bibliography}
 :filter: docname in docnames
 ```
