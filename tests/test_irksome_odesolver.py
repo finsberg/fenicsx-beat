@@ -5,8 +5,10 @@ from mpi4py import MPI
 import dolfinx
 import numpy as np
 import pytest
+import ufl
 
-from beat.irksome_odesolver import IrksomeODESolver
+import beat.utils
+from beat.irksome_odesolver import IrksomeMultiODESolver, IrksomeODESolver
 
 # Skip all tests in this file if irksome is not installed
 irksome = pytest.importorskip("irksome")
@@ -180,3 +182,199 @@ def test_irksome_odesolver_mappings():
     mesh.comm.Barrier()
     gc.collect()
     mesh.comm.Barrier()
+
+
+def test_irksome_multi_odesolver_mappings():
+    """Test that data maps correctly for a two-region IrksomeMultiODESolver, mirroring
+    test_irksome_odesolver_mappings (single region) and test_DolfinMultiODESolver
+    (plain-numpy multi region)."""
+    comm = MPI.COMM_WORLD
+    N = 5
+    mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
+
+    V_pde = dolfinx.fem.functionspace(mesh, ("P", 1))
+    v_pde = dolfinx.fem.Function(V_pde)
+
+    V_ode = dolfinx.fem.functionspace(mesh, ("P", 1))
+    v_ode = dolfinx.fem.Function(V_ode)
+
+    markers = dolfinx.fem.Function(V_ode)
+    X = ufl.SpatialCoordinate(mesh)
+    expr = ufl.conditional(ufl.lt(X[0], 0.5), 1, 2)
+    markers.interpolate(dolfinx.fem.Expression(expr, beat.utils.interpolation_points(V_ode)))
+
+    N_ode = V_ode.dofmap.index_map.size_local + V_ode.dofmap.index_map.num_ghosts
+
+    first_v0, first_s0 = 1.0, 2.0
+    second_v0, second_s0 = 3.0, 4.0
+    init_states = {
+        1: np.array([first_v0, first_s0]),
+        2: np.array([second_v0, second_s0]),
+    }
+    first_p0, second_p0 = 1.0, 2.0
+    parameters = {
+        1: np.array([first_p0, first_p0]),
+        2: np.array([second_p0, second_p0]),
+    }
+
+    time = dolfinx.fem.Constant(mesh, 0.0)
+    tableau = irksome.BackwardEuler()
+
+    ode = IrksomeMultiODESolver(
+        v_ode=v_ode,
+        v_pde=v_pde,
+        markers=markers,
+        fun={1: simple_ode_ufl, 2: simple_ode_ufl},
+        init_states=init_states,
+        butcher_tableau=tableau,
+        time=time,
+        num_states={1: 2, 2: 2},
+        v_index={1: 0, 2: 0},
+        parameters=parameters,
+    )
+
+    # 1. Initial state assignment verification
+    assert ode.full_values.shape == (2, N_ode)
+    assert ode.values(1).shape == (2, int((markers.x.array == 1).sum()))
+    assert ode.values(2).shape == (2, int((markers.x.array == 2).sum()))
+    assert np.allclose(ode.values(1)[0, :], first_v0)
+    assert np.allclose(ode.values(1)[1, :], first_s0)
+    assert np.allclose(ode.values(2)[0, :], second_v0)
+    assert np.allclose(ode.values(2)[1, :], second_s0)
+
+    # 2. Step the ODEs using Backward Euler
+    dt = 0.1
+    ode.step(0.0, dt)
+
+    # Exact discrete step for fully implicit backward Euler, per region:
+    # v1 = v0 - dt*a*s1, s1 = s0 + dt*a*v1
+    # => v1 (1 + dt^2 a^2) = v0 - dt*a*s0
+    def backward_euler_step(v0, s0, a, dt):
+        v1 = (v0 - dt * a * s0) / (1 + dt**2 * a * a)
+        s1 = s0 + dt * a * v1
+        return v1, s1
+
+    v1_first, s1_first = backward_euler_step(first_v0, first_s0, first_p0, dt)
+    v1_second, s1_second = backward_euler_step(second_v0, second_s0, second_p0, dt)
+
+    assert np.allclose(ode.values(1)[0, :], v1_first)
+    assert np.allclose(ode.values(1)[1, :], s1_first)
+    assert np.allclose(ode.values(2)[0, :], v1_second)
+    assert np.allclose(ode.values(2)[1, :], s1_second)
+
+    # 3. Check mapping: the standard dolfin Function should not be updated automatically
+    assert np.allclose(v_ode.x.array, 0.0)
+
+    # Check to_dolfin() pushes each region's mixed ODE space -> v_ode
+    ode.to_dolfin()
+    assert np.allclose(v_ode.x.array[markers.x.array == 1], v1_first)
+    assert np.allclose(v_ode.x.array[markers.x.array == 2], v1_second)
+    assert np.allclose(v_pde.x.array, 0.0)
+
+    # Check ode_to_pde() local projection
+    ode.ode_to_pde()
+    assert np.allclose(v_pde.x.array[markers.x.array == 1], v1_first)
+    assert np.allclose(v_pde.x.array[markers.x.array == 2], v1_second)
+
+    # 4. Check reverse mapping: modifying PDE and pulling back to the ODE spaces
+    v_pde.x.array[:] = 7.0
+    ode.pde_to_ode()
+    assert np.allclose(v_ode.x.array, 7.0)
+
+    ode.from_dolfin()
+    assert np.allclose(ode.values(1)[0, :], 7.0)
+    assert np.allclose(ode.values(2)[0, :], 7.0)
+    # The s state in each region should be untouched
+    assert np.allclose(ode.values(1)[1, :], s1_first)
+    assert np.allclose(ode.values(2)[1, :], s1_second)
+
+    # 5. Extract all states to separate functions
+    states = ode.states_to_dolfin()
+    assert len(states) == 2
+    assert np.allclose(states[0].x.array[markers.x.array == 1], 7.0)
+    assert np.allclose(states[0].x.array[markers.x.array == 2], 7.0)
+    assert np.allclose(states[1].x.array[markers.x.array == 1], s1_first)
+    assert np.allclose(states[1].x.array[markers.x.array == 2], s1_second)
+
+    # Prevent MPI deadlocks during destruction
+    mesh.comm.Barrier()
+    del ode
+    mesh.comm.Barrier()
+    gc.collect()
+    mesh.comm.Barrier()
+
+
+def test_irksome_multi_odesolver_temporal_convergence():
+    """Test that IrksomeMultiODESolver converges at the expected rate in each region,
+    with a different oscillation frequency (parameter `a`) per region."""
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, 0.0)
+
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    v_ode = dolfinx.fem.Function(V)
+    v_pde = dolfinx.fem.Function(V)
+
+    markers = dolfinx.fem.Function(V)
+    X = ufl.SpatialCoordinate(mesh)
+    expr = ufl.conditional(ufl.lt(X[0], 0.5), 1, 2)
+    markers.interpolate(dolfinx.fem.Expression(expr, beat.utils.interpolation_points(V)))
+
+    a_first, a_second = 1.0, 2.0
+    parameters = {1: [a_first, a_first], 2: [a_second, a_second]}
+
+    # Use 2nd-order Implicit Midpoint (Gauss-Legendre 1-stage)
+    tableau = irksome.GaussLegendre(1)
+
+    T = 1.0
+    errors = {1: [], 2: []}
+    dts = [0.1, 0.05, 0.025]
+
+    for dt in dts:
+        time.value = 0.0
+        init_states = {
+            1: np.zeros((2, int((markers.x.array == 1).sum()))),
+            2: np.zeros((2, int((markers.x.array == 2).sum()))),
+        }
+        init_states[1][0, :] = 1.0  # v(0) = 1.0
+        init_states[2][0, :] = 1.0
+
+        ode = IrksomeMultiODESolver(
+            v_ode=v_ode,
+            v_pde=v_pde,
+            markers=markers,
+            fun={1: simple_ode_ufl, 2: simple_ode_ufl},
+            init_states=init_states,
+            butcher_tableau=tableau,
+            time=time,
+            num_states={1: 2, 2: 2},
+            v_index={1: 0, 2: 0},
+            parameters=parameters,
+        )
+
+        t = 0.0
+        while t < T - 1e-8:
+            ode.step(t, dt)
+            t += dt
+
+        # The exact solution for v' = -a*s, s' = a*v, v(0)=1, s(0)=0 is v(t) = cos(a*t)
+        for marker, a in ((1, a_first), (2, a_second)):
+            v_exact = np.cos(a * T)
+            error = np.max(np.abs(ode.values(marker)[0, :] - v_exact))
+            errors[marker].append(comm.allreduce(error, op=MPI.MAX))
+
+        # Prevent MPI deadlocks during destruction
+        mesh.comm.Barrier()
+        del ode
+        mesh.comm.Barrier()
+        gc.collect()
+        mesh.comm.Barrier()
+
+    for marker, marker_errors in errors.items():
+        rates = [
+            np.log(e1 / e2) / np.log(dts[i] / dts[i + 1])
+            for i, (e1, e2) in enumerate(zip(marker_errors[:-1], marker_errors[1:]))
+        ]
+        assert all(
+            rate > 1.9 for rate in rates
+        ), f"Expected 2nd order convergence in region {marker}, got {rates}"

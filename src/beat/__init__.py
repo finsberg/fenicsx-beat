@@ -17,7 +17,7 @@ from . import (
 )
 from .ecg import ECGRecovery
 from .irksome_model import IrksomeMonodomainModel
-from .irksome_odesolver import IrksomeODESolver
+from .irksome_odesolver import IrksomeMultiODESolver, IrksomeODESolver
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
 from .stimulation import Stimulus
@@ -54,4 +54,5 @@ __all__ = [
     "IrksomeMonodomainModel",
     "irksome_odesolver",
     "IrksomeODESolver",
+    "IrksomeMultiODESolver",
 ]

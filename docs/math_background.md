@@ -237,6 +237,9 @@ plain `DolfinODESolver` ODE step, or vice versa, inside the same splitting solve
 `IrksomeMonodomainModel` can also be used entirely on its own, without any splitting at all, to solve a
 pure diffusion-plus-stimulus problem implicitly and with high-order accuracy in time — useful when
 there is no reaction term to split against, and hence no splitting error to bound the overall accuracy.
+`beat.IrksomeMultiODESolver` is the Irksome counterpart to
+`beat.odesolver.DolfinMultiODESolver`, for tissue with a different cell model in different regions (as
+in the multi-layer ventricle demos); it shares one Butcher tableau across all regions.
 
 This comes at a cost: each implicit Runge–Kutta stage requires solving a (in general nonlinear) system
 over the whole mesh, so it is more expensive per time step than the explicit/$\theta$-rule schemes used
