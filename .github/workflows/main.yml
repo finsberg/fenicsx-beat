@@ -47,6 +47,11 @@ jobs:
           # irksome, even with the dolfinx backend) is installed alongside it.
           python3 -m pip install "irksome[dolfinx] @ git+https://github.com/firedrakeproject/Irksome.git"
 
+      - name: Install development versions of dependencies
+        if: ${{ matrix.container == 'ghcr.io/fenics/dolfinx/dolfinx:stable' }}
+        run: |
+          # dolfinx-external-operator does not yet support nightly dolfinx
+          python3 -m pip install .[external_operator]
 
       - name: Run tests
         run: python3 -m pytest --cov=beat --cov-report=html --cov-report=term-missing -v

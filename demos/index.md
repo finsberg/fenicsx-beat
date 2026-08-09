@@ -49,6 +49,15 @@ model and notation used throughout, then work through the
   (via the optional [Irksome](https://firedrakeproject.org/Irksome) dependency) for the PDE and/or ODE
   step, demonstrated on a `gotranx`-generated cell model and a strongly heterogeneous conductivity
   field.
+- [Cell-model stepping via dolfinx-external-operator](external_operator_gotranx.py) — a drop-in
+  alternative ODE step (via the optional
+  [dolfinx-external-operator](https://github.com/a-latyshev/dolfinx-external-operator) dependency)
+  that reuses your existing cell-model function unchanged; cross-checks it against `DolfinODESolver`
+  on a real `gotranx`-generated cell model and reports the current performance trade-off honestly.
+- [Monolithic implicit PDE+ODE coupling with dolfinx-external-operator](monolithic_external_operator.py)
+  — a prototype fully implicit Newton solve of the PDE and cell model *together*, with a
+  JAX-autodifferentiated Jacobian and no operator-splitting error at all; validated against an
+  independent reference and quantitatively compared against `MonodomainSplittingSolver`.
 
 ```{bibliography}
 :filter: docname in docnames

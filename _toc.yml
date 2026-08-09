@@ -26,6 +26,8 @@ parts:
   - caption: Advanced topics
     chapters:
     - file: demos/irksome_model_gotranx.py
+    - file: demos/external_operator_gotranx.py
+    - file: demos/monolithic_external_operator.py
 
   - caption: API documentation
     chapters:

@@ -86,7 +86,9 @@ isclose
 isochoric
 isscalar
 Istim
+jacfwd
 Jakub
+jitted
 Joakim
 Kluwer
 Kutta
@@ -121,6 +123,7 @@ neohookean
 Neumann
 Niederer
 nopython
+Numba
 numpy
 odesolver
 odespace
@@ -187,6 +190,7 @@ Viatcheslav
 Virag
 viscoelastic
 viscoelasticity
+vmap
 Waldman
 XDMF
 Xiaodong
