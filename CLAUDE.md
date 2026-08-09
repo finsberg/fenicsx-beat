@@ -55,6 +55,12 @@ Operator-split PDE/ODE solve per timestep:
   advance the PDE/ODE step with a fully implicit Runge–Kutta Butcher tableau instead of theta-rule/
   explicit; freely mixable with the default classes in `MonodomainSplittingSolver`. See install
   gotcha above.
+- **external-operator ODE backend** (`external_operator_odesolver.py`, `external_operator` extra):
+  `ExternalOperatorODESolver` / `ExternalOperatorMultiODESolver` are drop-in alternatives to
+  `DolfinODESolver`/`DolfinMultiODESolver` built on `dolfinx-external-operator`'s
+  `FEMExternalOperator`. Same scheme/order as today (still calls `fun(states, t, parameters, dt)` by
+  keyword, unchanged) — only *how* it's evaluated/wired changes, not the numerics. No install gotcha:
+  plain `pip install .[test]` is enough (unlike irksome).
 - **Conductivities/units** (`conductivities.py`, `units.py`): `pint` quantities → `M` via
   `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop").
 - **Geometry** (`geometry.py`): `Geometry` NamedTuple + 2D/3D slab helpers; real ventricular geometries

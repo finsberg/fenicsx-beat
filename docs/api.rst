@@ -24,5 +24,8 @@ FEniCSx-Beat
 .. automodule:: beat.irksome_odesolver
     :members:
 
+.. automodule:: beat.external_operator_odesolver
+    :members:
+
 .. automodule:: beat.utils
     :members:

@@ -39,6 +39,7 @@ test = [
     "pytest",
     "pytest-cov",
     "fenicsx-beat[irksome]",
+    "fenicsx-beat[external_operator]",
 ]
 dev = [
     "pre-commit",
@@ -49,6 +50,9 @@ pypi = [
 ]
 irksome = [
     "irksome[dolfinx]",
+]
+external_operator = [
+    "dolfinx-external-operator",
 ]
 demos = [
    "cardiac-geometriesx",

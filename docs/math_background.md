@@ -222,7 +222,13 @@ respectively. The [convergence](../demos/monodomain_convergence.py) and
 [verification](../demos/verification.py) demos check this second-order behaviour
 numerically using the method of manufactured solutions.
 
-## 7. An alternative to the $\theta$-rule: fully implicit Runge–Kutta stepping
+## 7. Alternative backends for the ODE/PDE steps
+
+`beat.MonodomainSplittingSolver` only depends on its `pde` and `ode` objects implementing a small
+interface (`step`, `to_dolfin`/`from_dolfin`, ...), so either half of the split can be swapped out
+independently. Two optional backends are available.
+
+### 7.1 Fully implicit Runge–Kutta stepping (Irksome)
 
 The $\theta$-rule used in Section 6 gives at most second-order accuracy in time (at $\theta = 1/2$),
 and the explicit or Rush–Larsen schemes typically used for the ODE step in step 1/3 can struggle with
@@ -247,6 +253,24 @@ elsewhere in this repository. `irksome` is therefore an optional dependency (the
 `python3 -m pip install fenicsx-beat[irksome]`), and the
 [Irksome demo](../demos/irksome_model_gotranx.py) shows it in combination with a
 `gotranx`-generated cell model.
+
+### 7.2 Cell-model evaluation via `dolfinx-external-operator`
+
+`beat.ExternalOperatorODESolver` and `beat.ExternalOperatorMultiODESolver` are drop-in alternatives to
+`beat.odesolver.DolfinODESolver`/`DolfinMultiODESolver` built on
+[`dolfinx-external-operator`](https://github.com/a-latyshev/dolfinx-external-operator)'s
+`FEMExternalOperator`, which lets an ODE right-hand side be evaluated as a plain NumPy or Numba array
+operation at every mesh point and spliced back into the dolfinx `Function` machinery, instead of
+`DolfinODESolver`'s own hand-rolled loop. Unlike the Irksome classes above, these keep the *same*
+`fun(states, t, parameters, dt)` cell-model convention already used throughout this repository
+unchanged — the same `gotranx`-generated or hand-written functions that work with
+`DolfinODESolver` work here too, with no separate UFL- or Irksome-specific variant needed. The
+numerical scheme (e.g. forward Euler, Rush–Larsen) and its order of accuracy are unchanged; what
+changes is only *how* it is evaluated and wired into the splitting solver, which mainly matters if
+you want to batch the cell-model evaluation on a backend `dolfinx-external-operator` supports (Numba,
+JAX, PyTorch) rather than beat's own optional Numba path in `single_cell.py`/`odesolver.py`.
+`dolfinx-external-operator` is an optional dependency (the `external_operator` extra,
+`python3 -m pip install fenicsx-beat[external_operator]`).
 
 ## 8. Where to go from here
 

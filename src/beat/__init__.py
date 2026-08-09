@@ -4,6 +4,7 @@ from . import (
     base_model,
     conductivities,
     ecg,
+    external_operator_odesolver,
     geometry,
     irksome_model,
     irksome_odesolver,
@@ -16,6 +17,7 @@ from . import (
     utils,
 )
 from .ecg import ECGRecovery
+from .external_operator_odesolver import ExternalOperatorMultiODESolver, ExternalOperatorODESolver
 from .irksome_model import IrksomeMonodomainModel
 from .irksome_odesolver import IrksomeMultiODESolver, IrksomeODESolver
 from .monodomain_model import MonodomainModel
@@ -55,4 +57,7 @@ __all__ = [
     "irksome_odesolver",
     "IrksomeODESolver",
     "IrksomeMultiODESolver",
+    "external_operator_odesolver",
+    "ExternalOperatorODESolver",
+    "ExternalOperatorMultiODESolver",
 ]

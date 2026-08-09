@@ -87,6 +87,7 @@ isochoric
 isscalar
 Istim
 Jakub
+jitted
 Joakim
 Kluwer
 Kutta
@@ -121,6 +122,7 @@ neohookean
 Neumann
 Niederer
 nopython
+Numba
 numpy
 odesolver
 odespace
