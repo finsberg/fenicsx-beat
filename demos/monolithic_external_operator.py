@@ -303,7 +303,7 @@ scipy_ref = scipy.optimize.fsolve(
     xtol=1e-13,
 )
 
-check_mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+check_mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 2, 2, dolfinx.mesh.CellType.triangle)
 M_zero = dolfinx.fem.Constant(check_mesh, 0.0)
 check_problem = MonolithicCellModelProblem(
     check_mesh,

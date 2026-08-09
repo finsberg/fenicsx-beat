@@ -70,7 +70,7 @@ v_index = model.state_index("V")
 
 comm = MPI.COMM_WORLD
 N = 25
-mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
+mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.mesh.CellType.triangle)
 time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
 
 tol = 1.0e-10
@@ -151,8 +151,6 @@ else:
     else:
         plotter.screenshot("external_operator_gotranx.png")
 # -
-
-# ![_](external_operator_gotranx.png)
 
 # ## Checking against DolfinODESolver
 #
