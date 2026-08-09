@@ -137,7 +137,7 @@ if comm.rank == 0:
 ms_ufl = generate_and_import_cell_model()
 
 N = 100
-mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
+mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.mesh.CellType.triangle)
 time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
 
 el_M = basix.ufl.element(family="DG", cell=mesh.basix_cell(), degree=0)

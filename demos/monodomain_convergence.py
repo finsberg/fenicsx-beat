@@ -84,7 +84,7 @@ def main():
                         comm,
                         N,
                         N,
-                        dolfinx.cpp.mesh.CellType.triangle,
+                        dolfinx.mesh.CellType.triangle,
                     )
                     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
                     x = ufl.SpatialCoordinate(mesh)
