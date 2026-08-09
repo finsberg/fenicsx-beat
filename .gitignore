@@ -1,6 +1,11 @@
+demos/mitchell_schaeffer_monolithic.ode
+demos/monolithic_external_operator_error.png
+demos/ms_jax_monolithic.py
+demos/ms_np_monolithic.py
 demos/activation_time_map.png
 demos/mitchell_schaeffer.ode
 demos/ms_cell_model.py
+Computing+the+Electrical+Activity+in+the.pdf
 .vscode
 *.vtu
 *.pvd

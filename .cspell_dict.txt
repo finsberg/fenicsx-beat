@@ -86,6 +86,7 @@ isclose
 isochoric
 isscalar
 Istim
+jacfwd
 Jakub
 jitted
 Joakim
@@ -189,6 +190,7 @@ Viatcheslav
 Virag
 viscoelastic
 viscoelasticity
+vmap
 Waldman
 XDMF
 Xiaodong

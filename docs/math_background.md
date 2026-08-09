@@ -270,7 +270,32 @@ changes is only *how* it is evaluated and wired into the splitting solver, which
 you want to batch the cell-model evaluation on a backend `dolfinx-external-operator` supports (Numba,
 JAX, PyTorch) rather than beat's own optional Numba path in `single_cell.py`/`odesolver.py`.
 `dolfinx-external-operator` is an optional dependency (the `external_operator` extra,
-`python3 -m pip install fenicsx-beat[external_operator]`).
+`python3 -m pip install fenicsx-beat[external_operator]`), and the
+[external-operator demo](../demos/external_operator_gotranx.py) cross-checks it against
+`DolfinODESolver` on a real `gotranx`-generated cell model and reports the current performance
+trade-off honestly.
+
+### 7.3 Removing the splitting error entirely: monolithic implicit coupling
+
+Sections 7.1 and 7.2 both still fit inside the operator-splitting scheme of Section 6 — they change
+*how* the PDE or ODE half-step is computed, not the fact that there are two half-steps with a splitting
+error between them. Because `FEMExternalOperator` can supply a *derivative* as well as a value, it can
+instead be used to solve the PDE and the cell-model ODEs **together**, in one fully implicit Newton
+system per time step, with $v$ and every gating/concentration variable as unknowns simultaneously —
+removing the operator-splitting error altogether (only the usual temporal and spatial discretization
+error remains). This needs a cell model that can supply its own Jacobian; `gotranx`'s JAX code
+generation backend combined with `jax.jacfwd`/`jax.vmap` gives this for free, with no hand-derived
+derivatives, even through the `Conditional`-based branching common in cell models.
+
+This is not currently packaged as a reusable `beat` class the way the classes above are —
+`FEMExternalOperator` does not (yet) support operands built from a mixed-space `Function`, so a
+monolithic coupling has to be built from one separate scalar `Function` per state plus an
+$N \times N$ block Jacobian, which does not scale to large state counts as cleanly as the flat
+`(num_states, num_points)` arrays used everywhere else in this repository. The
+[monolithic coupling demo](../demos/monolithic_external_operator.py) is a validated prototype of the
+pattern (checked against an independent, non-FEM reference) together with a quantitative comparison
+against `MonodomainSplittingSolver`, showing a several-times reduction in error at practical time
+steps — worth knowing the pattern exists even though it is not (yet) a drop-in solver class.
 
 ## 8. Where to go from here
 
@@ -291,7 +316,11 @@ JAX, PyTorch) rather than beat's own optional Numba path in `single_cell.py`/`od
   simulations on left- and bi-ventricular geometries, including 12-lead ECG
   recovery.
 - The [Irksome demo](../demos/irksome_model_gotranx.py) shows the fully implicit, high-order time
-  stepping described in Section 7.
+  stepping described in Section 7.1, the
+  [external-operator demo](../demos/external_operator_gotranx.py) shows the drop-in ODE-step backend
+  described in Section 7.2, and the
+  [monolithic coupling demo](../demos/monolithic_external_operator.py) shows the fully implicit,
+  no-splitting-error prototype described in Section 7.3.
 - For the full derivation of the bidomain and monodomain models, the
   physiology of the cell membrane, the Hodgkin–Huxley and Nernst–Planck
   formalisms, and a rigorous treatment of operator splitting and its order

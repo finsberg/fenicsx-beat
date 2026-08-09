@@ -60,12 +60,14 @@ demos = [
    "gotranx",
    "ukb-atlas",
    "io4dolfinx",
+   "jax[cpu]",
 ]
 docs = [
    "jupyter-book<2.0",
    "jupytext",
    "fenicsx-beat[demos]",
    "fenicsx-beat[irksome]",
+   "fenicsx-beat[external_operator]",
    "ipywidgets",
    "imageio",
    "pyvista[all]>=0.45.0",
