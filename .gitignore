@@ -1,3 +1,6 @@
+demos/activation_time_map.png
+demos/mitchell_schaeffer.ode
+demos/ms_cell_model.py
 .vscode
 *.vtu
 *.pvd
