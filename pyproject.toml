@@ -42,6 +42,7 @@ test = [
 ]
 dev = [
     "pre-commit",
+    "bump-my-version",
 ]
 pypi = [
     "twine",
