@@ -1,12 +1,22 @@
 # # A simple example of excitable tissue: The FitzHugh–Nagumo model
 #
+# This is the best place to start if you are new to `fenicsx-beat`. It walks
+# through the full workflow of the library — from a bare-bones cell model,
+# via a single-cell ODE solve, to a full 2D tissue simulation of the
+# monodomain model — using the simplest possible ionic current model. If you
+# are not yet familiar with the monodomain model, the transmembrane
+# potential $v$, or the operator splitting scheme used by
+# `beat.MonodomainSplittingSolver`, see the
+# [mathematical background](../docs/math_background.md) page first; the notation used
+# below follows that page.
+#
 # The FitzHugh–Nagumo model (FHN), named after Richard FitzHugh (1922–2007) who suggested the system in 1961 and J. Nagumo et al. who created the equivalent circuit the following year, describing a prototype of an excitable system (e.g., a neuron).
 #
 # The FHN Model is an example of a relaxation oscillator because, if the external stimulus exceeds a certain threshold value, the system will exhibit a characteristic excursion in phase space, before the variables and relax back to their rest values.
 #
 # This behaviour is typical for spike generations (a short, nonlinear elevation of membrane voltage, diminished over time by a slower, linear recovery variable) in a neuron after stimulation by an external input current.
 #
-# The equations for this dynamical system read
+# In the notation of the mathematical background page, $V$ here plays the role of the transmembrane potential $v$ (rescaled to physical millivolts, see below), $s$ is the single recovery/gating variable, and the right-hand side of the ODE below *is* $-I_{ion}(V, s)$ (with the stimulus $I_{stim}$ added separately as `i_Stim`). The equations for this dynamical system read
 #
 # $$
 # V_{amp} &= V_{peak} - V_{rest} \\
@@ -122,7 +132,20 @@ ax[1].set_xlabel("Time")
 fig.savefig(Path("fitzhughnagumo_0D.png"))
 # -
 
-# Now, let us solve the FHN model in 2D using FEniCSx and FEniCSx-beat.
+# Now, let us solve the FHN model in 2D using FEniCSx and FEniCSx-beat. Instead of solving the 0D ODE
+# system above at a single point, we now solve the full monodomain model
+#
+# $$
+# C_m \frac{\partial v}{\partial t} = \nabla \cdot (M \nabla v) - I_{ion}(v, s) + I_{stim}, \qquad
+# \frac{\partial s}{\partial t} = f(v, s),
+# $$
+#
+# on a 2D tissue domain, with $I_{ion}$ and $f$ given by the FHN right-hand side `rhs` above, and
+# $C_m = 1$ implicitly (the default in `beat.MonodomainModel`). The conductivity tensor $M$ is passed
+# in directly as a scalar below (rather than being built from fibre directions and physical
+# conductivities, as in the more realistic tissue demos), and the two sub-problems above are combined
+# with a `beat.MonodomainSplittingSolver`, see the
+# [mathematical background](../docs/math_background.md) page for the splitting scheme it implements.
 # Let us first create a unit square mesh of size $10 \times 10$ elements
 #
 
@@ -140,7 +163,7 @@ mesh = dolfinx.mesh.create_unit_square(
     comm,
     N,
     N,
-    dolfinx.cpp.mesh.CellType.triangle,
+    dolfinx.mesh.CellType.triangle,
 )
 
 # We will also create a variables for the time
@@ -246,8 +269,6 @@ except ImportError:
     pyvista = None
 
 else:
-
-    pyvista.start_xvfb()
     plotter = pyvista.Plotter()
     viridis = plt.get_cmap("viridis")
     grid = pyvista.UnstructuredGrid(

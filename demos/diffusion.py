@@ -1,8 +1,20 @@
 # # Diffusion in a square domain with a stimulus in the lower left corner
 #
-# This demo solves the monodomain equation on a square domain with a
-# stimulus in the lower left corner. The stimulus is defined as a
-# constant value in a subdomain.
+# This is the simplest possible tissue-level demo: it solves the monodomain equation with the ionic
+# current $I_{ion}$ switched off entirely, so only diffusion driven by a stimulus current remains,
+#
+# $$
+# C_m \frac{\partial v}{\partial t} = \nabla \cdot (M \nabla v) + I_{stim},
+# $$
+#
+# on a unit square domain, using $C_m = 1$ (the default) and a constant, scalar conductivity $M = 1$.
+# The stimulus $I_{stim}$ is a constant value of $1$, applied only in the lower left corner of the
+# domain for the first $2.5$ ms of a simulation with time step $\Delta t = 0.1$ ms. Since there is no
+# `beat.MonodomainSplittingSolver` involved here (there is no ODE system to split against), this demo
+# only exercises `beat.MonodomainModel` directly. See the
+# [mathematical background](../docs/math_background.md) page for where this equation comes from, and
+# the [FitzHugh–Nagumo demo](fitzhughnagumo.py) for the same equation with a non-trivial $I_{ion}$
+# added back in.
 #
 
 from mpi4py import MPI
@@ -16,7 +28,7 @@ import ufl
 
 comm = MPI.COMM_WORLD
 N = 20
-mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
+mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.mesh.CellType.triangle)
 
 
 tol = 1.0e-10

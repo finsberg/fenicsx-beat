@@ -1,12 +1,17 @@
-[build-system] # Require setuptool version due to https://github.com/pypa/setuptools/issues/2938
-requires = ["setuptools>=61.0.0", "wheel"]
+[build-system]
+requires = [
+    "setuptools>=77.0.3",
+    "wheel",
+
+]
 
 [project]
 name = "fenicsx-beat"
-version = "0.2.1"
+version = "0.5.0"
 description = "Library to run cardiac EP simulations"
 authors = [{name = "Henrik Finsberg", email = "henriknf@simula.no"}]
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.8"
 keywords = ["cardiac", "electrophysiology"]
@@ -16,6 +21,8 @@ dependencies = [
     "scifem>=0.2.14",
     "pint",
     "rich",
+    "fenics-dolfinx",
+    "packaging",
 ]
 
 [project.scripts]
@@ -31,27 +38,44 @@ Tracker = "https://github.com/finsberg/fenicsx-beat/issues"
 test = [
     "pytest",
     "pytest-cov",
+    "fenicsx-beat[irksome]",
 ]
 dev = [
     "pre-commit",
+    "bump-my-version",
 ]
 pypi = [
     "twine",
     "build"
+]
+irksome = [
+    "irksome[dolfinx]",
+]
+external_operator = [
+    "dolfinx-external-operator",
 ]
 demos = [
    "cardiac-geometriesx",
    "fenicsx-ldrb",
    "gotranx",
    "ukb-atlas",
+   "io4dolfinx",
+   "jax[cpu]",
 ]
 docs = [
-   "jupyter-book",
+   "jupyter-book<2.0",
    "jupytext",
    "fenicsx-beat[demos]",
+   "fenicsx-beat[irksome]",
+   "fenicsx-beat[external_operator]",
    "ipywidgets",
    "imageio",
+   "pyvista[all]>=0.45.0",
+   "vtk>=9.5.0",
    "pyvista[jupyter]",
+   "sphinx-codeautolink",
+   "sphinxcontrib-bibtex",
+    "sphinx-copybutton",
 ]
 all = [
    "fenicsx-beat[test]",
@@ -148,7 +172,7 @@ tag = true
 sign_tags = false
 tag_name = "v{new_version}"
 tag_message = "Bump version: {current_version} → {new_version}"
-current_version = "0.2.1"
+current_version = "0.5.0"
 
 
 [[tool.bumpversion.files]]

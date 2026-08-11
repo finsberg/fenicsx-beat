@@ -4,23 +4,31 @@ from . import (
     base_model,
     conductivities,
     ecg,
+    external_operator_odesolver,
     geometry,
+    irksome_model,
+    irksome_odesolver,
     monodomain_model,
     monodomain_solver,
     odesolver,
     single_cell,
     stimulation,
+    telemetry,
     utils,
 )
 from .ecg import ECGRecovery
+from .external_operator_odesolver import ExternalOperatorMultiODESolver, ExternalOperatorODESolver
+from .irksome_model import IrksomeMonodomainModel
+from .irksome_odesolver import IrksomeMultiODESolver, IrksomeODESolver
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
 from .stimulation import Stimulus
+from .telemetry import BaseMonitor, NullMonitor, PerformanceMonitor
 
 meta = metadata("fenicsx-beat")
 __version__ = meta["Version"]
 __author__ = meta["Author-email"]
-__license__ = meta["License"]
+__license__ = meta["License-Expression"]
 __email__ = meta["Author-email"]
 __program_name__ = meta["Name"]
 
@@ -40,4 +48,16 @@ __all__ = [
     "ecg",
     "Stimulus",
     "ECGRecovery",
+    "telemetry",
+    "BaseMonitor",
+    "NullMonitor",
+    "PerformanceMonitor",
+    "irksome_model",
+    "IrksomeMonodomainModel",
+    "irksome_odesolver",
+    "IrksomeODESolver",
+    "IrksomeMultiODESolver",
+    "external_operator_odesolver",
+    "ExternalOperatorODESolver",
+    "ExternalOperatorMultiODESolver",
 ]

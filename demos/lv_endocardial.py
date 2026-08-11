@@ -1,12 +1,19 @@
 # # Endocardial stimulation of a left ventricle ellipsoid
 # In this example, we will simulate the endocardial stimulation of a left ventricle ellipsoid. The geometry is created using the cardiac_geometries package. The model is based on the ToRORd model.
 #
+# This is the most complete demo in this repository and a good template for a "real" 3D simulation:
+# an idealized left-ventricle geometry with fibre directions, three transmurally distinct cell-model
+# parameterizations (endocardial, mid-myocardial and epicardial), literature conductivity values used
+# to build the conductivity tensor $M$, and endocardial stimulation to trigger a propagating wave. See
+# the [mathematical background](../docs/math_background.md) page for the monodomain model and notation
+# ($v$, $M$, $\chi$, $C_m$, $I_{ion}$, $I_{stim}$, $\theta$) used throughout this demo.
+#
 
 from pathlib import Path
 import shutil
 import math
 
-import adios4dolfinx
+import io4dolfinx
 from mpi4py import MPI
 import cardiac_geometries
 import dolfinx
@@ -15,7 +22,6 @@ import gotranx
 import beat
 import pyvista
 
-import beat.postprocess
 
 # Initialize the MPI communicator and create a folder to store the results
 
@@ -68,7 +74,6 @@ geo = cardiac_geometries.geometry.Geometry.from_folder(
 
 V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 plotter_markers.add_mesh(grid, show_edges=True)
@@ -100,7 +105,6 @@ endo_epi = beat.utils.expand_layer(
 
 # Let us plot these markers
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = endo_epi.x.array
@@ -233,13 +237,15 @@ v_index = {
 }
 
 
-# Now let us specify the conductivities and membrane capacitance. The conductivities are set to the default values for the Bishop model. The membrane capacitance is set to 1 uF/cm^2.
+# Now let us specify the conductivities, surface to volume ratio $\chi$, and membrane capacitance
+# $C_m$. The conductivities are set to the default values for the Bishop model. The membrane
+# capacitance is set to 1 uF/cm^2.
 
 conductivities = beat.conductivities.default_conductivities("Bishop")
 C_m = 1.0 * beat.units.ureg("uF/cm**2")
 print(conductivities)
 
-# From this we can create the conductivity tensor given the fiber orientations.
+# From this we can create the conductivity tensor $M$ given the fiber orientations.
 
 M = beat.conductivities.define_conductivity_tensor(
     f0=geo.f0,
@@ -247,7 +253,7 @@ M = beat.conductivities.define_conductivity_tensor(
 )
 
 
-# Now let us create the stimulus current which will initiate the action potential. We will use a stimulus amplitude of 2000 uA/cm^2 and apply it to the endocardial layer at the beginning of the simulation for 1 ms.
+# Now let us create the stimulus current $I_{stim}$ which will initiate the action potential. We will use a stimulus amplitude of 2000 uA/cm^2 and apply it to the endocardial layer at the beginning of the simulation for 1 ms.
 # We also crate a variable for the time which will be used in the PDE solver.
 
 time = dolfinx.fem.Constant(geo.mesh, dolfinx.default_scalar_type(0.0))
@@ -287,12 +293,13 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 
-# We will the the ODE and PDE using a Godunov splitting scheme. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
+# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
-# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
+# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://github.com/scientificcomputing/io4dolfinx) package.
 
 vtxfname = results_folder / "lv.bp"
 checkpointfname = results_folder / "lv_checkpoint.bp"
@@ -307,7 +314,7 @@ vtx = dolfinx.io.VTXWriter(
     [solver.pde.state],
     engine="BP4",
 )
-adios4dolfinx.write_mesh(checkpointfname, geo.mesh)
+io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -316,7 +323,7 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
 
 
 # We will save results every 1 ms
@@ -340,9 +347,9 @@ while t < end_time + 1e-12:
     t += dt
 
 
-# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using adios4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/adios4dolfinx/docs/original_checkpoint.html for more info
+# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/io4dolfinx/docs/original_checkpoint.html for more info
 
-mesh = adios4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
@@ -374,13 +381,13 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 
 gif_file = Path("voltage_lv_ellipsoid_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
-    adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()

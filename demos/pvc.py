@@ -1,6 +1,17 @@
 # # Premature Ventricular Complexes (PVCs)
 # In this demo we try to replicate the experimental setup conducted in {cite}`zhang2021mechanisms`
 #
+# We simulate a 1D "cable" of tissue with a detailed ionic current model (ten Tusscher–Panfilov 2006),
+# a scalar conductivity/diffusion coefficient $M$, and a region of reduced repolarization reserve (the
+# rapid delayed rectifier and slow delayed rectifier conductances $g_{Kr}$ and $g_{Ks}$ are set to zero
+# in the right half of the cable). When all cells are stimulated simultaneously with a periodic
+# stimulus $I_{stim}$, the heterogeneity in repolarization can, under the right conditions, give rise
+# to a premature ventricular complex (PVC) — an ectopic beat originating from the heterogeneous region
+# rather than from the (here, simultaneous) normal activation. See the
+# [mathematical background](../docs/math_background.md) page for the monodomain model and notation
+# used below, and the [pacing train demo](pace_train.py) for the same tissue setup with a different
+# (single-point, rapid) pacing protocol.
+#
 # First we do the necessary imports
 #
 
@@ -8,7 +19,7 @@ from mpi4py import MPI
 import matplotlib.pyplot as plt
 from pathlib import Path
 import shutil
-import adios4dolfinx
+import io4dolfinx
 import scifem
 import numpy as np
 import ufl
@@ -16,7 +27,6 @@ import beat
 import dolfinx
 import gotranx
 from beat.single_cell import get_steady_state
-import beat.postprocess
 
 # Next we set the output directory for the results and define the geometry. Here we specify an interval mesh of 200 cells with 0.015 cm between each cell
 
@@ -54,7 +64,8 @@ model = tentusscher_panfilov_2006_epi_cell.__dict__
 # Change this to run the simulations for longer
 end_time = 1000.0
 
-# We specify a diffusion coefficient and a membrane capacitance
+# We specify a diffusion coefficient $D$ and a membrane capacitance $C_m$. Since the cable is 1D we
+# use $D$ directly as the (scalar) conductivity $M$ below.
 
 D = 0.0005 * beat.units.ureg("cm**2 / ms")
 Cm = 1.0 * beat.units.ureg("uF/cm**2")
@@ -117,7 +128,7 @@ g_Kr = dolfinx.fem.Function(V_ode)
 g_Kr.interpolate(
     dolfinx.fem.Expression(
         ufl.conditional(ufl.ge(X[0], L / 2), 0.0, g_Kr_value),
-        V_ode.element.interpolation_points(),
+        beat.utils.interpolation_points(V_ode),
     ),
 )
 
@@ -133,12 +144,13 @@ g_Ks = dolfinx.fem.Function(V_ode)
 g_Ks.interpolate(
     dolfinx.fem.Expression(
         ufl.conditional(ufl.ge(X[0], L / 2), 0.0, g_Ks_value),
-        V_ode.element.interpolation_points(),
+        beat.utils.interpolation_points(V_ode),
     ),
 )
 parameters_ode[g_Ks_index, :] = g_Ks.x.array
 
-# Finally we set up the models
+# Finally we set up the PDE and ODE models and combine them with the (default $\theta = 1$,
+# Godunov-split) splitting solver.
 
 # +
 pde = beat.MonodomainModel(
@@ -162,14 +174,14 @@ solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 checkpointfname = outdir / "pvc_checkpoint.bp"
 
 shutil.rmtree(checkpointfname, ignore_errors=True)
-adios4dolfinx.write_mesh(checkpointfname, mesh)
+io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
     v = solver.pde.state.x.array
     if t % 100.0 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
 
 
 # -
@@ -190,10 +202,10 @@ while t < end_time + 1e-12:
 
 
 def post_process(dx, outdir):
-    mesh = adios4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+    mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
     V = dolfinx.fem.functionspace(mesh, ("P", 1))
     v = dolfinx.fem.Function(V)
-    times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+    times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 
     cellnr = [0, 25, 50, 75, 100, 125, 150, 175, 200]
     cellnr = np.arange(0, 200, 10)
@@ -211,7 +223,7 @@ def post_process(dx, outdir):
         traces = np.zeros((len(times), len(cellnr)))
 
         for i, ti in enumerate(times):
-            adios4dolfinx.read_function(checkpointfname, v, time=ti, name="v")
+            io4dolfinx.read_function(checkpointfname, v, time=ti, name="v")
 
             traces[i, :] = scifem.evaluate_function(
                 v,

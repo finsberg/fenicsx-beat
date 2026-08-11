@@ -302,3 +302,124 @@ def test_define_stimulus():
     # Stimulus should be zero after the duration
     time.value = start + duration + 1e-6
     assert np.isclose(comm.allreduce(dolfinx.fem.assemble_scalar(stim_form), op=MPI.SUM), 0.0)
+
+
+def test_generate_random_activation():
+    """Tests the spatial and temporal activation logic of the UFL expression."""
+    # 1. Setup a basic 3D mesh and time constant
+    domain = dolfinx.mesh.create_unit_cube(MPI.COMM_WORLD, 4, 4, 4)
+    t = dolfinx.fem.Constant(domain, 0.0)
+
+    # 2. Define parameters
+    # Point 1 activates at t = 1.0, ends at t = 2.0
+    # Point 2 activates at t = 3.0, ends at t = 4.0
+    points = np.array([[0.5, 0.5, 0.5], [1.0, 1.0, 1.0]])
+    delays = np.array([1.0, 3.0])
+    stim_start = 0.0
+    stim_duration = 1.0
+    stim_amplitude = 5.0
+
+    # Use a larger tolerance for the test so we guarantee it hits interpolation points
+    tol = 0.2
+
+    # 3. Generate the expression
+    stim_expr = beat.stimulation.generate_random_activation(
+        mesh=domain,
+        time=t,
+        points=points,
+        delays=delays,
+        stim_start=stim_start,
+        stim_duration=stim_duration,
+        stim_amplitude=stim_amplitude,
+        tol=tol,
+    )
+
+    # 4. Set up a Function Space (DG0) to evaluate the expression on the mesh cells
+    V = dolfinx.fem.functionspace(domain, ("DG", 0))
+    expr = dolfinx.fem.Expression(stim_expr, beat.utils.interpolation_points(V))
+    stim_func = dolfinx.fem.Function(V)
+
+    # --- Verify Time Stepping ---
+
+    # Case A: Before any activation (t = 0.5)
+    t.value = 0.5
+    stim_func.interpolate(expr)
+    assert np.allclose(stim_func.x.array, 0.0), "Expected 0.0 everywhere before first delay."
+
+    # Case B: First point is active (t = 1.5)
+    t.value = 1.5
+    stim_func.interpolate(expr)
+    assert np.max(stim_func.x.array) == pytest.approx(
+        stim_amplitude,
+    ), "Expected first point to activate."
+    assert np.min(stim_func.x.array) == pytest.approx(
+        0.0,
+    ), "Expected the rest of the mesh to remain 0.0."
+
+    # Case C: Gap between activations (t = 2.5)
+    t.value = 2.5
+    stim_func.interpolate(expr)
+    assert np.allclose(stim_func.x.array, 0.0), "Expected 0.0 everywhere between activations."
+
+    # Case D: Second point is active (t = 3.5)
+    t.value = 3.5
+    stim_func.interpolate(expr)
+    assert np.max(stim_func.x.array) == pytest.approx(
+        stim_amplitude,
+    ), "Expected second point to activate."
+
+    # Case E: After all activations are finished (t = 4.5)
+    t.value = 4.5
+    stim_func.interpolate(expr)
+    assert np.allclose(stim_func.x.array, 0.0), "Expected 0.0 everywhere after all durations end."
+
+
+def test_generate_random_activation_assertion():
+    """Tests that mismatched array lengths raise the expected AssertionError."""
+    domain = dolfinx.mesh.create_unit_cube(MPI.COMM_WORLD, 1, 1, 1)
+    t = dolfinx.fem.Constant(domain, 0.0)
+
+    points = np.array([[0.5, 0.5, 0.5], [1.0, 1.0, 1.0]])
+    delays = np.array([1.0])  # Intentionally mismatched length
+
+    with pytest.raises(AssertionError, match="Points and delays must have the same length"):
+        beat.stimulation.generate_random_activation(domain, t, points, delays)
+
+
+def test_generate_random_activation_recursion():
+    """
+    Tests that a large number of stimulation points doesn't trigger a
+    RecursionError when UFL builds and traverses the expression tree.
+    """
+    # Ensure the standard recursion limit is set
+    import sys
+
+    sys.setrecursionlimit(1000)
+
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_cube(comm, 2, 2, 2)
+    time = dolfinx.fem.Constant(mesh, 0.0)
+
+    # 1500 points would previously guarantee a RecursionError
+    # (Default depth is 1000)
+    num_points = 1500
+    points = np.random.rand(num_points, 3)
+    delays = np.random.rand(num_points)
+
+    expr = beat.stimulation.generate_random_activation(
+        mesh=mesh,
+        time=time,
+        points=points,
+        delays=delays,
+        stim_start=0.0,
+        stim_duration=2.0,
+        stim_amplitude=1.0,
+        tol=1e-12,
+    )
+
+    # Trigger UFL to traverse the tree (e.g., by converting it to a string representation)
+    # If the tree is too deep, this will raise a RecursionError.
+    try:
+        _ = str(expr)
+    except RecursionError:
+        pytest.fail("generate_random_activation raised RecursionError on AST traversal")

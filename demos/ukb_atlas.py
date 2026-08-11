@@ -1,6 +1,14 @@
 # # Purkinje like stimulation of a realistic BiV geometry
 # In this example we will use a realistic geometry generated from the mean shape of an   [atlas from the UK Biobank](https://computationalphysiology.github.io/ukb-atlas) of 630 healthy subjects.
 # We will also stimulate it using a random activation pattern on the endocardial layer of the left and right ventricle.
+#
+# This is the most realistic geometry demo in this repository, and it replaces the single, localized
+# stimulus current $I_{stim}$ used in the [left](lv_endocardial.py)/[bi-ventricular](biv_endocardial.py)
+# ellipsoid demos with many small, randomly timed and positioned stimuli spread across the endocardial
+# surface. This mimics the effect of the Purkinje fibre network, which activates the endocardium at
+# many points nearly simultaneously rather than through slow cell-to-cell propagation from a single
+# site. See the [mathematical background](../docs/math_background.md) page for the monodomain model
+# and notation ($v$, $M$, $\chi$, $C_m$, $I_{ion}$, $I_{stim}$, $\theta$) used below.
 
 import logging
 from pathlib import Path
@@ -10,15 +18,17 @@ from mpi4py import MPI
 import matplotlib.pyplot as plt
 import ufl
 
-import adios4dolfinx
+import io4dolfinx
 import numpy as np
 import cardiac_geometries as cg
 import dolfinx
 import gotranx
 import beat
 import pyvista
+from dolfinx.io import VTXMeshPolicy
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # Initialize the MPI communicator and create a folder to store the results
@@ -42,7 +52,6 @@ V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 
 # Let us plot the geometry
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 plotter_markers.add_mesh(grid, show_edges=True)
@@ -75,7 +84,6 @@ endo_epi = beat.utils.expand_layer_biv(
 
 # Let us plot these markers
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 grid.point_data["V"] = endo_epi.x.array
@@ -211,7 +219,12 @@ v_index = {
 }
 
 
-# Now let us specify the conductivities and membrane capacitance. The conductivities are set to the default values for the Bishop model. The membrane capacitance is set to 1 uF/cm^2.
+# Now let us specify the conductivities, surface to volume ratio $\chi$, and membrane capacitance
+# $C_m$. Here we build the conductivity tensor $M$ by hand instead of using
+# `beat.conductivities.define_conductivity_tensor` (as in the other ventricle demos): we divide the
+# along-fibre and cross-fibre conductivities $s_l$, $s_t$ by $\chi$, then form the transversely
+# isotropic tensor $M = s_l\, f_0 \otimes f_0 + s_t\, (I - f_0 \otimes f_0)$, which is aligned with the
+# local fibre direction $f_0$ and isotropic in the plane perpendicular to it.
 
 chi = 1400.0 * beat.units.ureg("cm**-1")
 s_l = 0.24 * beat.units.ureg("S/cm")
@@ -238,10 +251,57 @@ num_points = 900
 lv_endo_facets = geo.ffun.find(geo.markers["LV"][0])
 rv_endo_facets = geo.ffun.find(geo.markers["RV"][0])
 endo_facets = np.concatenate([lv_endo_facets, rv_endo_facets])
-np.random.shuffle(endo_facets)
-endo_facets_stim = endo_facets[:num_points]
 
-# We then select the midpoints of the facets as the points to stimulate.
+# Distribute the requested number of stimulus points over MPI ranks.
+
+local_num_endo_facets = len(endo_facets)
+all_num_endo_facets = comm.allgather(local_num_endo_facets)
+total_num_endo_facets = sum(all_num_endo_facets)
+
+if total_num_endo_facets < num_points:
+    raise RuntimeError(
+        "Not enough endocardial facets to select "
+        f"{num_points} stimulus points. "
+        f"Only found {total_num_endo_facets} facets globally.",
+    )
+
+# Distribute the total number of stimulus points across MPI ranks
+# proportional to the number of local endocardial facets
+
+raw_counts = [
+    num_points * n / total_num_endo_facets
+    for n in all_num_endo_facets
+]
+
+# Round down to get integer point counts. This will likely result in some points being unassigned due to rounding down, which we will handle in the next step.
+
+stim_counts = [int(np.floor(count)) for count in raw_counts]
+
+# Add the remaining points to the ranks with the largest fractional parts
+# so that the global number of stimulus points is exactly num_points.
+
+missing = num_points - sum(stim_counts)
+
+# Compute the fractional parts of the proportional counts.
+# Ranks with the largest fractional parts are the ones that were
+# closest to receiving one extra point before rounding down.
+
+fractions = [
+    raw_counts[i] - stim_counts[i]
+    for i in range(len(stim_counts))
+]
+
+
+for i in np.argsort(fractions)[::-1][:missing]:
+    stim_counts[i] += 1
+
+# Number of stimulus points assigned to this rank.
+
+local_num_points = stim_counts[comm.rank]
+
+np.random.seed(1234 + comm.rank)
+np.random.shuffle(endo_facets)
+endo_facets_stim = endo_facets[:local_num_points]
 
 midpoints = dolfinx.mesh.compute_midpoints(geo.mesh, 2, endo_facets_stim)
 
@@ -252,7 +312,15 @@ start = 0.0
 duration = 2.0
 value = 2.5
 activation_duration = 4.0
-delays = np.random.uniform(0, activation_duration, num_points)
+delays = np.random.uniform(0, activation_duration, local_num_points)
+
+logger.info(
+    "[rank %d] endo_facets=%d, stim_points=%d, delays=%d",
+    comm.rank,
+    len(endo_facets),
+    len(midpoints),
+    len(delays),
+)
 
 # We now generate the expression for the stimulation. Here we also specify a tolerance of 1.0 which means that the stimulation will be applied to points that are within 1.0 mm of the midpoints.
 
@@ -274,7 +342,7 @@ stim = dolfinx.fem.Function(W)
 
 # We also create an expression that will be used to update the stimulus at each time step.
 
-stim_update_expr = dolfinx.fem.Expression(stim_expr, W.element.interpolation_points())
+stim_update_expr = dolfinx.fem.Expression(stim_expr, beat.utils.interpolation_points(W))
 
 # Now we are ready to create the PDE solver.
 
@@ -300,12 +368,13 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 
-# We will the the ODE and PDE using a Godunov splitting scheme. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
+# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
-# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
+# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://scientificcomputing.github.io/io4dolfinx) package.
 
 vtxfname = results_folder / "v.bp"
 checkpointfname = results_folder / "v_checkpoint.bp"
@@ -319,8 +388,9 @@ vtx = dolfinx.io.VTXWriter(
     vtxfname,
     [solver.pde.state],
     engine="BP4",
+    mesh_policy=VTXMeshPolicy.reuse,
 )
-adios4dolfinx.write_mesh(checkpointfname, geo.mesh)
+io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -345,7 +415,7 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
     grid.point_data["V"] = solver.pde.state.x.array
     plotter_voltage.write_frame()
 

@@ -286,24 +286,78 @@ def generate_random_activation(
     stim_amplitude: float = 1.0,
     tol: float = 1e-12,
 ):
+    """
+    Generate a UFL expression for a random spatio-temporal activation pattern.
+
+    This function creates a sum of UFL conditionals, where each conditional
+    represents a localized stimulus that triggers at a specific spatial point
+    and a specific time (defined by a base start time plus a point-specific delay).
+    It builds a balanced UFL tree to avoid hitting Python's maximum recursion
+    depth during JIT compilation of large numbers of points.
+
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        The computational mesh over which the spatial coordinates are defined.
+    time : dolfinx.fem.Constant
+        The UFL time variable used to evaluate the temporal conditions.
+    points : np.ndarray
+        An array of shape (N, d) containing the spatial coordinates of the
+        N activation points, where d is the geometric dimension.
+    delays : np.ndarray
+        An array of shape (N,) containing the temporal delay for each
+        activation point.
+    stim_start : float, optional
+        The global start time for the stimulation, by default 0.0.
+    stim_duration : float, optional
+        The duration that the stimulus remains active at each point,
+        by default 2.0.
+    stim_amplitude : float, optional
+        The amplitude (strength) of the stimulus, by default 1.0.
+    tol : float, optional
+        The spatial tolerance used to match the continuous spatial coordinate
+        X to the discrete activation `points`, by default 1e-12.
+
+    Returns
+    -------
+    ufl.core.expr.Expr
+        A balanced UFL expression representing the total stimulus.
+
+    Raises
+    ------
+    AssertionError
+        If the lengths of the `points` and `delays` arrays do not match.
+    """
     assert len(points) == len(delays), "Points and delays must have the same length"
     X = ufl.SpatialCoordinate(mesh)
 
-    stim_expr = ufl.as_ufl(0.0)
-    X = ufl.SpatialCoordinate(mesh)
+    terms = []
     for i, point in enumerate(points):
-        stim_expr += ufl.conditional(
-            ufl.And(
+        terms.append(
+            ufl.conditional(
                 ufl.And(
-                    ufl.And(near(X[0], point[0], tol=tol), near(X[1], point[1], tol=tol)),
                     ufl.And(
-                        near(X[2], point[2], tol=tol),
-                        ufl.ge(time, stim_start + delays[i]),
+                        ufl.And(near(X[0], point[0], tol=tol), near(X[1], point[1], tol=tol)),
+                        ufl.And(
+                            near(X[2], point[2], tol=tol),
+                            ufl.ge(time, stim_start + delays[i]),
+                        ),
                     ),
+                    ufl.le(time, stim_start + stim_duration + delays[i]),
                 ),
-                ufl.le(time, stim_start + stim_duration + delays[i]),
+                stim_amplitude,
+                0.0,
             ),
-            stim_amplitude,
-            0.0,
         )
-    return stim_expr
+
+    if not terms:
+        return ufl.as_ufl(0.0)
+
+    # Tree reduction (balanced sum) to avoid maximum recursion depth during compilation
+    while len(terms) > 1:
+        if len(terms) % 2 != 0:
+            terms = [terms[i] + terms[i + 1] for i in range(0, len(terms) - 1, 2)] + [terms[-1]]
+        else:
+            terms = [terms[i] + terms[i + 1] for i in range(0, len(terms), 2)]
+
+    return terms[0]

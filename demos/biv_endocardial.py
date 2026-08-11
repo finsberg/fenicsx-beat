@@ -1,12 +1,20 @@
 # # Endocardial stimulation of a Bi-ventricular ellipsoid
 # In this example, we will simulate the endocardial stimulation of a bi-ventricle ellipsoid. The geometry is created using the cardiac_geometries package. The model is based on the ToRORd model.
 #
+# This follows the same recipe as the [left-ventricle demo](lv_endocardial.py) — a conductivity tensor
+# $M$, a transmurally heterogeneous cell model, and a stimulus current $I_{stim}$ applied to trigger a
+# propagating wave of transmembrane potential $v$ — but on a bi-ventricular geometry, with the left and
+# right ventricle both stimulated. In addition, this demo shows how to recover a 12-lead ECG from the
+# simulated $v$ using `beat.ecg.ECGRecovery`, by evaluating a lead field at electrode positions on the
+# torso surface. See the [mathematical background](../docs/math_background.md) page for the underlying
+# model and notation used below.
+#
 
 from pathlib import Path
 import shutil
 
 from mpi4py import MPI
-import adios4dolfinx
+import io4dolfinx
 import numpy as np
 import cardiac_geometries
 import dolfinx
@@ -14,8 +22,6 @@ import matplotlib.pyplot as plt
 import gotranx
 import beat
 import pyvista
-
-import beat.postprocess
 
 # Initialize the MPI communicator and create a folder to store the results
 
@@ -35,22 +41,6 @@ if not geodir.exists():
         comm=comm,
         outdir=geodir,
         char_length=0.3,  # Reduce this value to get a finer mesh (should be at least 0.2)
-        center_lv_y=0.2,
-        center_lv_z=0.0,
-        a_endo_lv=5.0,
-        b_endo_lv=2.2,
-        c_endo_lv=2.2,
-        a_epi_lv=6.0,
-        b_epi_lv=3.0,
-        c_epi_lv=3.0,
-        center_rv_y=1.0,
-        center_rv_z=0.0,
-        a_endo_rv=6.0,
-        b_endo_rv=2.5,
-        c_endo_rv=2.7,
-        a_epi_rv=8.0,
-        b_epi_rv=5.5,
-        c_epi_rv=4.0,
         create_fibers=True,
     )
 
@@ -58,13 +48,13 @@ geo = cardiac_geometries.geometry.Geometry.from_folder(
     comm=comm,
     folder=geodir,
 )
-mesh_unit = "cm"
+mesh_unit = "cm"  # The unit of the mesh is in cm
+
 
 # Let us plot the geometry
 
 V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 
-pyvista.start_xvfb()
 plotter_markers = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
 plotter_markers.add_mesh(grid, show_edges=True)
@@ -85,8 +75,8 @@ epi_marker = 2
 endo_epi = beat.utils.expand_layer_biv(
     V=V,
     ft=geo.ffun,
-    endo_lv_marker=geo.markers["ENDO_LV"][0],
-    endo_rv_marker=geo.markers["ENDO_RV"][0],
+    endo_lv_marker=geo.markers["LV"][0],
+    endo_rv_marker=geo.markers["RV"][0],
     epi_marker=geo.markers["EPI"][0],
     endo_size=0.3,
     epi_size=0.3,
@@ -232,13 +222,15 @@ v_index = {
 }
 
 
-# Now let us specify the conductivities and membrane capacitance. The conductivities are set to the default values for the Bishop model. The membrane capacitance is set to 1 uF/cm^2.
+# Now let us specify the conductivities, surface to volume ratio $\chi$, and membrane capacitance
+# $C_m$. The conductivities are set to the default values for the Bishop model. The membrane
+# capacitance is set to 1 uF/cm^2.
 
 conductivities = beat.conductivities.default_conductivities("Bishop")
 C_m = 1.0 * beat.units.ureg("uF/cm**2")
 print(conductivities)
 
-# From this we can create the conductivity tensor given the fiber orientations.
+# From this we can create the conductivity tensor $M$ given the fiber orientations.
 
 M = beat.conductivities.define_conductivity_tensor(
     f0=geo.f0,
@@ -246,7 +238,7 @@ M = beat.conductivities.define_conductivity_tensor(
 )
 
 
-# Now let us create the stimulus current which will initiate the action potential. We will use a stimulus amplitude of 2000 uA/cm^2 and apply it to the endocardial layer at the beginning of the simulation for 1 ms.
+# Now let us create the stimulus current $I_{stim}$ which will initiate the action potential. We will use a stimulus amplitude of 2000 uA/cm^2 and apply it to the endocardial layer at the beginning of the simulation for 1 ms.
 # We also crate a variable for the time which will be used in the PDE solver.
 # Note that we now want to stimulate both the left and right ventricle so we will create two stimulus currents.
 
@@ -263,7 +255,7 @@ I_s = [
         start=0.0,
         duration=1.0,
     )
-    for marker in [geo.markers["ENDO_LV"][0], geo.markers["ENDO_RV"][0]]
+    for marker in [geo.markers["LV"][0], geo.markers["RV"][0]]
 ]
 # Now we are ready to create the PDE solver.
 
@@ -289,12 +281,13 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 
-# We will the the ODE and PDE using a Godunov splitting scheme. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
+# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
 solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
 
-# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`adios4dolfinx`](https://jsdokken.com/adios4dolfinx) package.
+# We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://github.com/scientificcomputing/io4dolfinx) package.
 
 vtxfname = results_folder / "biv.bp"
 checkpointfname = results_folder / "biv_checkpoint.bp"
@@ -318,7 +311,12 @@ def save(t):
     v = solver.pde.state.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    adios4dolfinx.write_function_on_input_mesh(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function_on_input_mesh(
+        checkpointfname,
+        solver.pde.state,
+        time=t,
+        name="v",
+    )
 
 
 # We will save results every 1 ms
@@ -341,7 +339,7 @@ while t < end_time + 1e-12:
     i += 1
     t += dt
 
-# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using adios4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/adios4dolfinx/docs/original_checkpoint.html for more info
+# Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/io4dolfinx/docs/original_checkpoint.html for more info
 
 V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
@@ -372,7 +370,7 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = beat.postprocess.read_timestamps(comm, checkpointfname, "v")
+times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 
 gif_file = Path("voltage_biv_ellipsoid_time.gif")
 gif_file.unlink(missing_ok=True)
@@ -398,18 +396,25 @@ leads = dict(
     V5=(10.0, 2.0, 0.0),
     V6=(10.0, -6.0, 2.0),
 )
-ecg = beat.ecg.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude, M=M)
+ecg = beat.ecg.ECGRecovery(
+    v=v,
+    sigma_b=1.0,
+    C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
+    M=M,
+)
 ecg_forms = {k: ecg.eval(p) for k, p in leads.items()}
 ecg_traces: dict[str, list[float]] = {k: [] for k in ecg_forms.keys()}
 
 for t in times:
-    adios4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
     ecg.solve()
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
     for k, e in ecg_forms.items():
-        ecg_traces[k].append(geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM))
+        ecg_traces[k].append(
+            geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM),
+        )
 
 plotter_voltage.close()
 # -

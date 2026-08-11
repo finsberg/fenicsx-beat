@@ -1,7 +1,11 @@
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.08416/status.svg)](https://doi.org/10.21105/joss.08416)
+
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/logo.png)
 
 # fenicsx-beat
-Cardiac electrophysiology simulator in FEniCSx
+Cardiac electrophysiology research uses computational modeling to study heart rhythm disorders and test therapies.
+
+This tool, fenicsx-beat, is a cardiac electrophysiology simulator built specifically for the FEniCSx platform. It provides a dedicated and easy-to-use tool for researchers already using [FEniCSx](https://fenicsproject.org) to perform simulations based on the Monodomain model.
 
 - Source code: https://github.com/finsberg/fenicsx-beat
 - Documentation: https://finsberg.github.io/fenicsx-beat
@@ -17,6 +21,12 @@ or with `conda`
 conda install -c conda-forge fenicsx-beat
 ```
 Note that installing with `pip` requires [FEniCSx already installed](https://fenicsproject.org/download/)
+
+Also that to run most of the examples you will need to install additional dependencies which can be done using the command
+```
+python3 -m pip install fenicsx-beat[demos]
+```
+
 
 ## Getting started
 
@@ -118,8 +128,8 @@ init_states = np.array([0.0, -85], dtype=np.float64)
 # which will also inform the PDE solver later
 v_index = 1
 
-# We can also check that the solution of the ODE
-# by solving a the ODE for a single cell
+# We can also check the solution of the ODE
+# by solving the ODE for a single cell
 times = np.arange(0.0, 1000.0, 0.1)
 values = np.zeros((len(times), 2))
 values[0, :] = np.array([0.0, -85.0])
@@ -198,6 +208,23 @@ vtx.close()
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/joss-paper/paper_figure.png)
 
 See more examples in the [documentation](https://finsberg.github.io/fenicsx-beat)
+
+## Citation
+If you use this software in your research, please cite the following paper
+```bibtex
+@article{Finsberg2025,
+    doi = {10.21105/joss.08416},
+    url = {https://doi.org/10.21105/joss.08416},
+    year = {2025},
+    publisher = {The Open Journal},
+    volume = {10},
+    number = {114},
+    pages = {8416},
+    author = {Finsberg, Henrik},
+    title = {fenicsx-beat - An Open Source Simulation Framework for Cardiac Electrophysiology},
+    journal = {Journal of Open Source Software}
+}
+```
 
 ## License
 MIT

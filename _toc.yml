@@ -4,7 +4,9 @@ root: README
 parts:
   - caption: Getting started
     chapters:
+    - file: docs/math_background.md
     - file: demos/fitzhughnagumo.py
+    - file: demos/index.md
   - caption: Examples
     chapters:
     - file: demos/diffusion.py
@@ -15,11 +17,18 @@ parts:
     - file: demos/pvc.py
     - file: demos/pace_train.py
     - file: demos/biv_endocardial.py
-    - file: demos/monodomain_convergence.py
     - file: demos/ukb_atlas.py
   - caption: Verification
     chapters:
-    - file: tests/README
+    - file: demos/verification.py
+    - file: demos/monodomain_convergence.py
+
+  - caption: Advanced topics
+    chapters:
+    - file: demos/irksome_model_gotranx.py
+    - file: demos/external_operator_gotranx.py
+    - file: demos/monolithic_external_operator.py
+
   - caption: API documentation
     chapters:
     - file: CONTRIBUTING
