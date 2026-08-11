@@ -3,22 +3,26 @@ from pathlib import Path
 from typing import Annotated
 
 try:
-    from pydantic_pint import PydanticPintQuantity
-except ImportError:
-    msg = (
+    from pydantic_pint import PydanticPintQuantity, set_registry
+except ImportError as e:
+    raise ImportError(
         "pydantic_pint is not installed. "
         "Install it with 'pip install pydantic-pint' to use PydanticPintQuantity.",
-    )
-    logging.warning(msg)
-    import sys
-
-    sys.exit(1)
+    ) from e
 
 from pint import Quantity
 from pydantic import AfterValidator, Field
 from pydantic_settings import BaseSettings
 
+from .units import ureg
+
 logger = logging.getLogger(__name__)
+
+# Make pydantic_pint validate/serialize quantities using beat's own unit registry, so that
+# Config quantities can be freely combined (arithmetic, comparisons) with quantities created
+# elsewhere in beat (e.g. in conductivities.py/stimulation.py, which use `beat.units.ureg`).
+# Pint raises if you mix Quantity objects created by different UnitRegistry instances.
+set_registry(ureg)
 
 
 class Conductivity(BaseSettings):
@@ -97,12 +101,17 @@ class CellConfig(BaseSettings):
         description="Time step for single cell simulations (ms)",
     )
     module_name: Path = Field(
-        "cell_model.py", description="Python module containing the cell model",
+        "cell_model.py",
+        description="Python module containing the cell model",
     )
     scheme: str = Field("generalized_rush_larsen", description="Scheme for the cell model")
+    v_name: str = Field(
+        "v",
+        description="Name of the state variable representing the transmembrane potential",
+    )
     track_indices: list[str] = Field(
         default_factory=lambda: ["v", "cai"],
-        description="List of state indices to track during simulation",
+        description="List of state names to track while computing the steady state",
     )
 
 
@@ -141,9 +150,35 @@ class SimulationConfig(BaseSettings):
         "1000 ms",
         description="Basic cycle length for the simulation (ms)",
     )
+    theta: float = Field(
+        1.0,
+        description="Splitting scheme parameter (1.0 = Godunov, 0.5 = Strang)",
+    )
+    save_every_ms: float = Field(1.0, description="Save the simulation state every N ms")
     output_folder: Annotated[Path, AfterValidator(check_output_folder)] = Field(
         "output",
         description="Folder to save the simulation output",
+    )
+
+
+class StimulusConfig(BaseSettings):
+    marker: str = Field(
+        "ENDO",
+        description="Name of the facet marker (from the mesh markers) where the stimulus "
+        "is applied",
+    )
+    amplitude: float = Field(
+        5000.0,
+        description="Amplitude of the stimulus current, in the unit implied by the marker's "
+        "dimension and the mesh unit (see beat.stimulation.define_stimulus)",
+    )
+    duration: Annotated[Quantity, PydanticPintQuantity("ms")] = Field(
+        "2.0 ms",
+        description="Duration of the stimulus (ms)",
+    )
+    start: Annotated[Quantity, PydanticPintQuantity("ms")] = Field(
+        "0.0 ms",
+        description="Start time of the stimulus (ms)",
     )
 
 
@@ -152,6 +187,7 @@ class Config(BaseSettings):
     mesh: MeshConfig = Field(default_factory=MeshConfig)
     cell: CellConfig = Field(default_factory=CellConfig)
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
+    stimulus: StimulusConfig = Field(default_factory=StimulusConfig)
 
     def dump_toml(self, path: Path) -> None:
         """
@@ -162,11 +198,9 @@ class Config(BaseSettings):
         path : Path
             The path to the TOML file where the configuration will be saved.
         """
-        import json
-
         import toml
 
-        Path(path).write_text(toml.dumps(json.loads(self.json())))
+        Path(path).write_text(toml.dumps(self.model_dump(mode="json")))
         logger.info(f"Configuration dumped to {path}")
 
     @classmethod
@@ -188,4 +222,4 @@ class Config(BaseSettings):
         import toml
 
         config_data = toml.loads(path.read_text())
-        return cls.parse_obj(config_data)
+        return cls.model_validate(config_data)

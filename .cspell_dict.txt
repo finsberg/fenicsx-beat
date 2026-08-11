@@ -67,6 +67,7 @@ functionspace
 genexpr
 geodir
 Gilles
+gotran
 gotranx
 gradu
 Guccione
@@ -158,6 +159,7 @@ rmtree
 rtol
 Runge
 savefig
+Schaeffer
 scifem
 setrecursionlimit
 Severi

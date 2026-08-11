@@ -55,6 +55,24 @@ def setup_parser():
         help="Path to the configuration file to validate",
     )
 
+    # Init config parser
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Create a configuration file with default values",
+    )
+    init_parser.add_argument(
+        "config",
+        type=Path,
+        nargs="?",
+        default=Path("config.toml"),
+        help="Path to the configuration file to create",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the configuration file if it already exists",
+    )
+
     # ECG parser
     subparsers.add_parser("ecg", help="Compute ECG signals")
 
@@ -98,6 +116,8 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
         elif command == "run":
             from .runner import run_file
 
+            if not args["config"].exists():
+                raise ValueError(f"Configuration file {args['config']} does not exist.")
             run_file(**args, comm=comm)
 
         elif command == "validate-config":
@@ -108,6 +128,16 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
                 raise ValueError(f"Configuration file {config_path} does not exist.")
             Config.parse_toml(config_path)
             logger.info(f"Configuration file {config_path} is valid.")
+        elif command == "init":
+            from .config import Config
+
+            config_path = args.pop("config")
+            force = args.pop("force")
+            if config_path.exists() and not force:
+                raise ValueError(
+                    f"Configuration file {config_path} already exists. Use --force to overwrite.",
+                )
+            Config().dump_toml(config_path)
         elif command == "ecg":
             return NotImplemented
         elif command == "post":
