@@ -84,6 +84,7 @@ A point used only for `beat ecg` doesn't need to lie inside the mesh — e.g. a 
 for it (with a log warning), instead of the `-1.0` it uses for a point that's inside the mesh but
 simply hadn't activated by the end of the recorded run.
 
+(example-1-a-slab)=
 ## Example 1: a slab
 
 A thin slab of tissue, stimulated at one end — the simplest possible 3D geometry, good for
@@ -144,6 +145,7 @@ beat post config.toml   # -> output/activation_time.xdmf, output/activation_time
 This mirrors the [conduction-velocity/ECG slab demo](../demos/slab.py), which computes conduction
 velocity from the same kind of point-activation-time data by hand.
 
+(example-2-a-left-ventricle-ellipsoid)=
 ## Example 2: a left-ventricle ellipsoid
 
 An idealized LV geometry (a truncated ellipsoid) — see the
@@ -204,6 +206,7 @@ beat post config.toml
 `output/activation_time_map.png` should show activation starting at the endocardium (dark) and
 spreading outward to the epicardium (lighter) as the wave crosses the wall.
 
+(example-3-a-uk-biobank-bi-ventricular-geometry)=
 ## Example 3: a UK Biobank bi-ventricular geometry
 
 A realistic bi-ventricular geometry built from the UK Biobank statistical shape atlas (via the
