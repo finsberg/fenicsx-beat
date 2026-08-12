@@ -19,6 +19,7 @@ bestel
 Bestel
 bibtex
 bidomain
+Biobank
 biophysically
 bjacobi
 booktitle
@@ -33,6 +34,8 @@ cbcbeat
 cellname
 Chiara
 Clermont
+clim
+cmap
 cofac
 Courtemanche
 cpus
@@ -49,6 +52,7 @@ dvlp
 Elife
 Elsevier
 endo
+epicardial
 Erlicher
 Favino
 fdim
@@ -56,6 +60,7 @@ Fedele
 fenics
 fenicsx
 fenicsx_pulse
+ffcx
 ffun
 finsberg
 Fitz
@@ -66,7 +71,11 @@ fridericia
 functionspace
 genexpr
 geodir
+geometriesx
+geox
 Gilles
+gmsh
+gotran
 gotranx
 gradu
 Guccione
@@ -111,6 +120,7 @@ midwall
 Minchole
 Mises
 Monodomain
+mpirun
 multiplicatively
 myocyte
 nabla
@@ -142,6 +152,10 @@ pmatrix
 Potse
 preconditioner
 preonly
+prepace
+psize
+Purkinje
+pydantic
 pyplot
 PYVISTA
 Quarteroni
@@ -157,6 +171,7 @@ rmtree
 rtol
 Runge
 savefig
+Schaeffer
 scifem
 setrecursionlimit
 Severi
@@ -173,12 +188,15 @@ stim
 Strang
 subplus
 Sundnes
+tentusscher
 Terje
 timestep
 tomek
 Tomek
 TRAME
 transmembrane
+transmurally
+travelling
 Tusscher
 Tveito
 unpreconditioned
@@ -188,10 +206,12 @@ Venant
 Verlag
 Viatcheslav
 Virag
+viridis
 viscoelastic
 viscoelasticity
 vmap
 Waldman
+WRONLY
 XDMF
 Xiaodong
 xlabel

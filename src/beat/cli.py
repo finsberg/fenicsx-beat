@@ -1,51 +1,13 @@
 import argparse
 import logging
+from pathlib import Path
 from typing import Optional, Sequence
 
+from mpi4py import MPI
+
+from .log import setup_logging
+
 logger = logging.getLogger(__name__)
-
-
-def setup_logging(level: int = logging.INFO, log_all_cpus: bool = False):
-    from mpi4py import MPI
-
-    from rich.console import Console
-    from rich.logging import RichHandler
-    from rich.theme import Theme
-
-    comm = MPI.COMM_WORLD
-    rank = comm.rank
-    size = comm.size
-
-    FORMAT = (
-        "%(asctime)s %(rank)s%(name)s - %(levelname)s - " "%(message)s (%(filename)s:%(lineno)d)"
-    )
-
-    class Formatter(logging.Formatter):
-        def format(self, record):
-            record.rank = f"CPU {rank}: " if size > 1 else ""
-            return super().format(record)
-
-    class MPIFilter(logging.Filter):
-        def filter(self, record):
-            if rank == 0:
-                return 1
-            else:
-                return 0
-
-    console = Console(theme=Theme({"logging.level.custom": "green"}), width=140)
-    handler = RichHandler(level=level, console=console)
-
-    handler.setFormatter(Formatter(FORMAT))
-    if not log_all_cpus:
-        handler.addFilter(MPIFilter())
-
-    logging.basicConfig(
-        level="NOTSET",
-        format=FORMAT,
-        handlers=[handler],
-    )
-
-    _disable_loggers()
 
 
 def setup_parser():
@@ -74,24 +36,71 @@ def setup_parser():
     subparsers.add_parser("version", help="Display version information")
 
     # Run simulation parser
-    subparsers.add_parser("run", help="Run simulations")
+    run_parser = subparsers.add_parser("run", help="Run simulations")
+    run_parser.add_argument(
+        "config",
+        type=Path,
+        default="config.toml",
+        help="Path to the configuration file",
+    )
+
+    validate_config_parser = subparsers.add_parser(
+        "validate-config",
+        help="Validate the configuration file",
+    )
+    validate_config_parser.add_argument(
+        "config",
+        type=Path,
+        default="config.toml",
+        help="Path to the configuration file to validate",
+    )
+
+    # Init config parser
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Create a configuration file with default values",
+    )
+    init_parser.add_argument(
+        "config",
+        type=Path,
+        nargs="?",
+        default=Path("config.toml"),
+        help="Path to the configuration file to create",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the configuration file if it already exists",
+    )
 
     # ECG parser
-    subparsers.add_parser("ecg", help="Compute ECG signals")
+    ecg_parser = subparsers.add_parser(
+        "ecg",
+        help="Recover the pseudo-ECG at the points in [postprocess.points] from a previous run",
+    )
+    ecg_parser.add_argument(
+        "config",
+        type=Path,
+        default="config.toml",
+        help="Path to the configuration file",
+    )
 
     # Postprocessing parser
-    subparsers.add_parser("post", help="Postprocessing")
+    post_parser = subparsers.add_parser(
+        "post",
+        help="Compute activation times (and visualizations) from a previous run",
+    )
+    post_parser.add_argument(
+        "config",
+        type=Path,
+        default="config.toml",
+        help="Path to the configuration file",
+    )
 
     return parser
 
 
-def _disable_loggers():
-    for name in ["matplotlib"]:
-        logging.getLogger(name).setLevel(logging.WARNING)
-
-
 def display_version_info():
-    from mpi4py import MPI
     from petsc4py import PETSc
 
     import dolfinx
@@ -108,7 +117,8 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
     args = vars(parser.parse_args(argv))
     level = logging.DEBUG if args.pop("verbose") else logging.INFO
     log_all_cpus = args.pop("log_all_cpus")
-    setup_logging(level=level, log_all_cpus=log_all_cpus)
+    comm = MPI.COMM_WORLD
+    setup_logging(level=level, log_all_cpus=log_all_cpus, comm=comm)
 
     dry_run = args.pop("dry_run")
     command = args.pop("command")
@@ -122,17 +132,49 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
         if command == "version":
             display_version_info()
         elif command == "run":
-            return NotImplemented
+            from .runner import run_file
+
+            if not args["config"].exists():
+                raise ValueError(f"Configuration file {args['config']} does not exist.")
+            run_file(**args, comm=comm)
+
+        elif command == "validate-config":
+            from .config import Config
+
+            config_path = args.pop("config")
+            if not config_path.exists():
+                raise ValueError(f"Configuration file {config_path} does not exist.")
+            Config.parse_toml(config_path)
+            logger.info(f"Configuration file {config_path} is valid.")
+        elif command == "init":
+            from .config import Config
+
+            config_path = args.pop("config")
+            force = args.pop("force")
+            if config_path.exists() and not force:
+                raise ValueError(
+                    f"Configuration file {config_path} already exists. Use --force to overwrite.",
+                )
+            Config().dump_toml(config_path)
         elif command == "ecg":
-            return NotImplemented
+            from .postprocess import run_ecg_file
+
+            if not args["config"].exists():
+                raise ValueError(f"Configuration file {args['config']} does not exist.")
+            run_ecg_file(**args, comm=comm)
         elif command == "post":
-            return NotImplemented
+            from .postprocess import run_post_file
+
+            if not args["config"].exists():
+                raise ValueError(f"Configuration file {args['config']} does not exist.")
+            run_post_file(**args, comm=comm)
         else:
             logger.error(f"Unknown command {command}")
             parser.print_help()
+            return 1
     except ValueError as e:
         logger.error(e)
-        parser.print_help()
+        return 1
 
     return 0
 

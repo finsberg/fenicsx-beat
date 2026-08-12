@@ -39,6 +39,7 @@ test = [
     "pytest",
     "pytest-cov",
     "fenicsx-beat[irksome]",
+    "fenicsx-beat[cli]",
 ]
 dev = [
     "pre-commit",
@@ -53,6 +54,15 @@ irksome = [
 ]
 external_operator = [
     "dolfinx-external-operator",
+]
+cli = [
+    "pydantic",
+    "pydantic-settings",
+    "pydantic-pint",
+    "toml",
+    "cardiac-geometriesx",
+    "gotranx",
+    "io4dolfinx",
 ]
 demos = [
    "cardiac-geometriesx",

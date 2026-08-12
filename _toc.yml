@@ -6,6 +6,7 @@ parts:
     chapters:
     - file: docs/math_background.md
     - file: demos/fitzhughnagumo.py
+    - file: docs/cli.md
     - file: demos/index.md
   - caption: Examples
     chapters:
