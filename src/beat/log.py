@@ -97,10 +97,15 @@ class MPIFileHandler(logging.FileHandler):
         mode: str = "a",
         comm=MPI.COMM_WORLD,
         delay: bool = False,
+        encoding: str = "utf-8",
     ):
         self.comm = comm
         self.mpi_mode = mode2mpi_mode[mode]
-        super().__init__(filename=filename, mode=mode, delay=delay)
+        # Must pass a concrete encoding (not None): FileHandler resolves encoding=None via
+        # io.text_encoding(), which outside UTF-8 mode returns the literal string "locale" -
+        # a sentinel only understood by open()/TextIOWrapper. emit() below encodes directly
+        # via MPI.File, bypassing that, so a real codec name is required here.
+        super().__init__(filename=filename, mode=mode, delay=delay, encoding=encoding)
 
     def _open(self):
         stream = MPI.File.Open(self.comm, self.baseFilename, self.mpi_mode)

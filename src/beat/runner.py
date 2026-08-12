@@ -7,6 +7,7 @@ from mpi4py import MPI
 import cardiac_geometries as cg
 import dolfinx
 import gotranx
+import io4dolfinx
 
 from . import single_cell
 from .conductivities import define_conductivity_tensor
@@ -18,6 +19,31 @@ from .odesolver import DolfinODESolver
 from .stimulation import define_stimulus
 
 logger = logging.getLogger(__name__)
+
+
+def checkpoint_path(output_folder: Path) -> Path:
+    return output_folder / "result_checkpoint.bp"
+
+
+def load_geometry(conf: Config, comm=MPI.COMM_WORLD) -> cg.geometry.Geometry:
+    """Load the geometry referenced by ``conf.mesh.folder`` and check it has a fiber field."""
+    logger.info(f"Reading geometry from {conf.mesh.folder}")
+    geo = cg.geometry.Geometry.from_folder(comm=comm, folder=conf.mesh.folder)
+    if geo.f0 is None:
+        raise ValueError(f"No fiber field found in geometry loaded from {conf.mesh.folder}")
+    return geo
+
+
+def build_conductivity_tensor(conf: Config, geo: cg.geometry.Geometry):
+    """Build the conductivity tensor M from the EP config and the geometry's fiber field."""
+    return define_conductivity_tensor(
+        chi=conf.ep.chi,
+        f0=geo.f0,
+        g_il=conf.ep.conductivity.sigma_il,
+        g_it=conf.ep.conductivity.sigma_it,
+        g_el=conf.ep.conductivity.sigma_el,
+        g_et=conf.ep.conductivity.sigma_et,
+    )
 
 
 def run_file(config: Path, comm=MPI.COMM_WORLD) -> Path:
@@ -72,10 +98,7 @@ def run(conf: Config, comm=MPI.COMM_WORLD) -> Path:
         dt=conf.cell.dt.to("ms").magnitude,
     )
 
-    logger.info(f"Reading geometry from {conf.mesh.folder}")
-    geo = cg.geometry.Geometry.from_folder(comm=comm, folder=conf.mesh.folder)
-    if geo.f0 is None:
-        raise ValueError(f"No fiber field found in geometry loaded from {conf.mesh.folder}")
+    geo = load_geometry(conf, comm=comm)
 
     marker_name = conf.stimulus.marker
     if marker_name not in geo.markers:
@@ -104,14 +127,7 @@ def run(conf: Config, comm=MPI.COMM_WORLD) -> Path:
         start=conf.stimulus.start.to("ms").magnitude,
     )
 
-    M = define_conductivity_tensor(
-        chi=conf.ep.chi,
-        f0=geo.f0,
-        g_il=conf.ep.conductivity.sigma_il,
-        g_it=conf.ep.conductivity.sigma_it,
-        g_el=conf.ep.conductivity.sigma_el,
-        g_et=conf.ep.conductivity.sigma_et,
-    )
+    M = build_conductivity_tensor(conf, geo)
 
     C_m = conf.ep.C_m.to(f"uF/{mesh_unit}**2").magnitude
     pde = MonodomainModel(time=time, mesh=geo.mesh, M=M, I_s=I_s, C_m=C_m)
@@ -135,19 +151,30 @@ def run(conf: Config, comm=MPI.COMM_WORLD) -> Path:
     save_freq = max(1, round(conf.simulation.save_every_ms / dt))
 
     result_path = output_folder / "result.bp"
+    ckpt_path = checkpoint_path(output_folder)
     shutil.rmtree(result_path, ignore_errors=True)
+    shutil.rmtree(ckpt_path, ignore_errors=True)
+
+    def save(t: float, vtx) -> None:
+        logger.info(f"Solving for t={t:.3f} ms")
+        vtx.write(t)
+        # Written "on the input mesh" (geo.mesh) rather than as a standalone checkpoint, so that
+        # `beat ecg`/`beat post` can read v back directly onto the same mesh object they build M
+        # on from conf.mesh.folder - combining a Function and a UFL tensor from two different
+        # mesh objects in one form raises "Incompatible mesh" in dolfinx/ffcx.
+        io4dolfinx.write_function_on_input_mesh(ckpt_path, solver.pde.state, time=t, name="v")
 
     t = 0.0
     i = 0
     with dolfinx.io.VTXWriter(comm, result_path, [solver.pde.state], engine="BP4") as vtx:
         while t < end_time - 1e-10:
             if i % save_freq == 0:
-                logger.info(f"Solving for t={t:.3f} ms")
-                vtx.write(t)
+                save(t, vtx)
             solver.step((t, t + dt))
             t += dt
             i += 1
-        vtx.write(t)
+        save(t, vtx)
 
     logger.info(f"Simulation finished. Results saved to {result_path}")
+    logger.info(f"Checkpoint for `beat ecg`/`beat post` saved to {ckpt_path}")
     return output_folder

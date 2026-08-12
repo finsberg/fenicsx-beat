@@ -182,12 +182,35 @@ class StimulusConfig(BaseSettings):
     )
 
 
+class PostprocessConfig(BaseSettings):
+    points: dict[str, list[float]] = Field(
+        default_factory=dict,
+        description="Named points (in mesh_unit coordinates) at which to evaluate the ECG and "
+        "the local activation time, e.g. {P1 = [0.0, 0.0, 0.0]}",
+    )
+    activation_threshold: float = Field(
+        0.0,
+        description="Threshold on v (mV) used to determine the local activation time: the first "
+        "saved time at which v crosses this value",
+    )
+    sigma_b: float = Field(
+        1.0,
+        description="Bath conductivity used in the ECG lead-field recovery (beat.ecg.ECGRecovery)",
+    )
+    make_gif: bool = Field(
+        False,
+        description="If true, also render an animated gif of the voltage field over time "
+        "(requires pyvista)",
+    )
+
+
 class Config(BaseSettings):
     ep: EPConfig = Field(default_factory=EPConfig)
     mesh: MeshConfig = Field(default_factory=MeshConfig)
     cell: CellConfig = Field(default_factory=CellConfig)
     simulation: SimulationConfig = Field(default_factory=SimulationConfig)
     stimulus: StimulusConfig = Field(default_factory=StimulusConfig)
+    postprocess: PostprocessConfig = Field(default_factory=PostprocessConfig)
 
     def dump_toml(self, path: Path) -> None:
         """
@@ -221,5 +244,5 @@ class Config(BaseSettings):
 
         import toml
 
-        config_data = toml.loads(path.read_text())
+        config_data = toml.loads(Path(path).read_text())
         return cls.model_validate(config_data)

@@ -62,6 +62,7 @@ cli = [
     "toml",
     "cardiac-geometriesx",
     "gotranx",
+    "io4dolfinx",
 ]
 demos = [
    "cardiac-geometriesx",

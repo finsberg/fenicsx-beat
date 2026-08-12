@@ -74,10 +74,28 @@ def setup_parser():
     )
 
     # ECG parser
-    subparsers.add_parser("ecg", help="Compute ECG signals")
+    ecg_parser = subparsers.add_parser(
+        "ecg",
+        help="Recover the pseudo-ECG at the points in [postprocess.points] from a previous run",
+    )
+    ecg_parser.add_argument(
+        "config",
+        type=Path,
+        default="config.toml",
+        help="Path to the configuration file",
+    )
 
     # Postprocessing parser
-    subparsers.add_parser("post", help="Postprocessing")
+    post_parser = subparsers.add_parser(
+        "post",
+        help="Compute activation times (and visualizations) from a previous run",
+    )
+    post_parser.add_argument(
+        "config",
+        type=Path,
+        default="config.toml",
+        help="Path to the configuration file",
+    )
 
     return parser
 
@@ -139,9 +157,17 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
                 )
             Config().dump_toml(config_path)
         elif command == "ecg":
-            return NotImplemented
+            from .postprocess import run_ecg_file
+
+            if not args["config"].exists():
+                raise ValueError(f"Configuration file {args['config']} does not exist.")
+            run_ecg_file(**args, comm=comm)
         elif command == "post":
-            return NotImplemented
+            from .postprocess import run_post_file
+
+            if not args["config"].exists():
+                raise ValueError(f"Configuration file {args['config']} does not exist.")
+            run_post_file(**args, comm=comm)
         else:
             logger.error(f"Unknown command {command}")
             parser.print_help()
