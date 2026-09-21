@@ -23,6 +23,28 @@ def interpolation_points(V):
         return V.element.interpolation_points()
 
 
+def cpp_function_space(V):
+    """The C++ function space behind ``V``, whichever wrapper ``V`` arrives in.
+
+    Some dolfinx APIs return the Python ``FunctionSpace`` and others the C++ space it
+    wraps; ``DirichletBC.function_space`` has returned each of them in different releases.
+    Comparisons such as ``contains`` are only defined between two C++ spaces, so bring
+    both sides down to that one shape rather than assuming either.
+
+    Parameters
+    ----------
+    V : dolfinx.fem.FunctionSpace | dolfinx.cpp.fem.FunctionSpace
+        The function space, in either wrapper
+
+    Returns
+    -------
+    dolfinx.cpp.fem.FunctionSpace
+        The C++ function space
+
+    """
+    return getattr(V, "_cpp_object", V)
+
+
 def local_project(
     v: dolfinx.fem.Function,
     V: dolfinx.fem.FunctionSpace,

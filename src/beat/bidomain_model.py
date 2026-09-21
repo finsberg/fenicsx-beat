@@ -13,6 +13,7 @@ from ufl.core.expr import Expr
 
 from .base_model import BaseModel, _BilinearForm, _LinearForm
 from .stimulation import Stimulus
+from .utils import cpp_function_space
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,8 @@ class BidomainModel(BaseModel):
 
     @property
     def _u_e_is_grounded_by_bc(self) -> bool:
-        return any(self.V_ue._cpp_object.contains(bc.function_space) for bc in self.bcs)
+        space = self.V_ue._cpp_object
+        return any(space.contains(cpp_function_space(bc.function_space)) for bc in self.bcs)
 
     def _setup_solver(self) -> None:
         self._multiplier = None

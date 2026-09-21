@@ -144,3 +144,15 @@ def test_expand_layer_biv():
 
     epi = scifem.evaluate_function(markers, epi_points)
     assert np.allclose(epi, output_epi_marker)
+
+
+def test_cpp_function_space_accepts_either_wrapper():
+    """Some dolfinx APIs hand back the Python FunctionSpace and some the C++ one underneath
+    it, and which of the two `DirichletBC.function_space` gives has changed between
+    releases. Both have to resolve to the same C++ space."""
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    V = dolfinx.fem.functionspace(mesh, ("Lagrange", 1))
+
+    assert beat.utils.cpp_function_space(V) is V._cpp_object
+    assert beat.utils.cpp_function_space(V._cpp_object) is V._cpp_object
