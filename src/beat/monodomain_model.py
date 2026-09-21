@@ -53,17 +53,20 @@ class MonodomainModel(BaseModel):
         self._state = dolfinx.fem.Function(self.V, name="v")
 
     @property
+    def v(self) -> dolfinx.fem.Function:
+        """The transmembrane potential."""
+        return self._state
+
+    @property
     def state(self) -> dolfinx.fem.Function:
+        """The transmembrane potential.
+
+        Kept for compatibility; :attr:`v` says the same thing by name and is preferred.
+        """
         return self._state
 
     def assign_previous(self):
         self.v_.x.array[:] = self.state.x.array[:]
-
-    @staticmethod
-    def default_parameters():
-        params = super(MonodomainModel, MonodomainModel).default_parameters()
-        params["use_custom_preconditioner"] = True
-        return params
 
     def variational_forms(self, dt: Expr | float) -> tuple[ufl.Form, ufl.Form]:
         """Create the variational forms corresponding to the given

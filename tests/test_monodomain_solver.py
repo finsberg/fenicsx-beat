@@ -1,4 +1,5 @@
 import gc
+import logging
 
 from mpi4py import MPI
 
@@ -28,6 +29,36 @@ def simple_ode_forward_euler(states, t, dt, parameters):
     values[0] = v - s * dt
     values[1] = s + v * dt
     return values
+
+
+class NullODESolver:
+    """An ODE solver that does nothing, for exercising the splitting driver on its own."""
+
+    def to_dolfin(self) -> None: ...
+
+    def from_dolfin(self) -> None: ...
+
+    def ode_to_pde(self) -> None: ...
+
+    def pde_to_ode(self) -> None: ...
+
+    def step(self, t0: float, dt: float) -> None: ...
+
+
+def test_splitting_solver_logs_both_ends_of_the_interval(caplog):
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    pde = beat.MonodomainModel(time=time, mesh=mesh, M=1.0)
+    solver = beat.MonodomainSplittingSolver(pde=pde, ode=NullODESolver())
+
+    with caplog.at_level(logging.DEBUG, logger="beat.monodomain_solver"):
+        solver.solve((0.0, 1.0), dt=0.5)
+
+    messages = [r.getMessage() for r in caplog.records if r.name == "beat.monodomain_solver"]
+
+    assert "Solving on t = (0.00, 0.50)" in messages, messages
+    assert "Solving on t = (0.50, 1.00)" in messages, messages
 
 
 @pytest.mark.parametrize(

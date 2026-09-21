@@ -178,10 +178,10 @@ io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
-    v = solver.pde.state.x.array
+    v = solver.pde.v.x.array
     if t % 100.0 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
-    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
 
 
 # -

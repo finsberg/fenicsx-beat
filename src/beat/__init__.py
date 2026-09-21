@@ -2,6 +2,7 @@ from importlib.metadata import metadata
 
 from . import (
     base_model,
+    bidomain_model,
     conductivities,
     ecg,
     external_operator_odesolver,
@@ -16,6 +17,7 @@ from . import (
     telemetry,
     utils,
 )
+from .bidomain_model import BidomainModel
 from .ecg import ECGRecovery
 from .external_operator_odesolver import ExternalOperatorMultiODESolver, ExternalOperatorODESolver
 from .irksome_model import IrksomeMonodomainModel
@@ -36,6 +38,8 @@ __all__ = [
     "monodomain_model",
     "odesolver",
     "base_model",
+    "bidomain_model",
+    "BidomainModel",
     "MonodomainModel",
     "monodomain_solver",
     "MonodomainSplittingSolver",

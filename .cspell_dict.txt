@@ -111,6 +111,7 @@ midwall
 Minchole
 Mises
 Monodomain
+monolithically
 multiplicatively
 myocyte
 nabla
@@ -123,6 +124,8 @@ neohookean
 Neumann
 Niederer
 nopython
+normalisation
+normalised
 Numba
 numpy
 odesolver

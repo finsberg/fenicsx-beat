@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 import logging
 from enum import Enum, auto
-from typing import Any, Literal, NamedTuple, Sequence
+from typing import Any, Callable, Literal, NamedTuple, Optional, Sequence, Union, cast
 
 from petsc4py import PETSc
 
@@ -20,13 +20,19 @@ logger = logging.getLogger(__name__)
 _dolfinx_version = Version(dolfinx.__version__)
 
 
+# A single-field model assembles one form per side; a model with several coupled fields
+# assembles them blocked, which is the shape dolfinx' blocked assembly takes.
+_BilinearForm = Union[ufl.Form, Sequence[Sequence[Optional[ufl.Form]]]]
+_LinearForm = Union[ufl.Form, Sequence[ufl.Form]]
+
+
 class Status(str, Enum):
     OK = auto()
     NOT_CONVERGING = auto()
 
 
 class Results(NamedTuple):
-    state: dolfinx.fem.Function
+    state: dolfinx.fem.Function | Sequence[dolfinx.fem.Function]
     status: Status
 
 
@@ -61,6 +67,12 @@ class BaseModel:
         Parameters for the model, by default None
     I_s : Stimulus | Sequence[Stimulus] | ufl.Coefficient, optional
         The stimulus, by default None
+    bcs : Callable[[BaseModel], Sequence[dolfinx.fem.DirichletBC]], optional
+        Factory returning the Dirichlet boundary conditions, by default None (natural
+        boundary conditions). It is called once the state space exists and is handed the
+        model, because a boundary condition is only honoured on the very function space
+        object the model built -- one constructed separately on the same mesh and element
+        is silently ignored during assembly.
     jit_options : dict, optional
         JIT options, by default None
     form_compiler_options : dict, optional
@@ -77,6 +89,7 @@ class BaseModel:
         dx: ufl.Measure | None = None,
         params: dict[str, Any] | None = None,
         I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        bcs: Callable[[BaseModel], Sequence[dolfinx.fem.DirichletBC]] | None = None,
         monitor: BaseMonitor | None = None,
         **kwargs: Any,
     ) -> None:
@@ -92,22 +105,61 @@ class BaseModel:
         self.dx = dx or ufl.dx(domain=mesh)
         self.monitor = monitor or NullMonitor()
 
+        if bcs is not None and not callable(bcs):
+            raise TypeError(
+                "'bcs' must be a callable taking the model and returning the boundary "
+                "conditions. A DirichletBC only applies to the function space object it "
+                "was built on, and the model builds its own, so the conditions cannot be "
+                "constructed before the model exists.",
+            )
+        self._bcs_factory = bcs
+
         self.parameters = type(self).default_parameters()
         if params is not None:
+            # Keys that no default covers are read by nothing, so a caller that passes one
+            # believes it configures something and it does not. Warn as we do for kwargs.
+            unknown = set(params) - set(self.parameters)
+            if unknown:
+                logger.warning(
+                    "Unknown parameters: %s",
+                    ", ".join(f"{k}={params[k]}" for k in sorted(unknown)),
+                )
             self.parameters.update(params)
-
-        form_compiler_options = self.parameters["form_compiler_options"]
-        jit_options = self.parameters["jit_options"]
-        petsc_options = self.parameters["petsc_options"]
 
         self._I_s = _transform_I_s(I_s, dZ=self.dx)
 
         self._setup_state_space()
+        self.bcs = list(self._bcs_factory(self)) if self._bcs_factory is not None else []
 
         self._timestep = dolfinx.fem.Constant(mesh, self.parameters["default_timestep"])
+
+        self._setup_solver()
+        self._assemble_matrix()
+
+    @property
+    def mesh(self) -> dolfinx.mesh.Mesh:
+        """The mesh the model is discretized on."""
+        return self._mesh
+
+    @abc.abstractmethod
+    def _setup_state_space(self) -> None: ...
+
+    @property
+    @abc.abstractmethod
+    def state(self) -> dolfinx.fem.Function | Sequence[dolfinx.fem.Function]: ...
+
+    @abc.abstractmethod
+    def assign_previous(self) -> None: ...
+
+    def _setup_solver(self) -> None:
+        """Build the linear problem the time stepping reuses every step.
+
+        Subclasses whose :meth:`variational_forms` returns something other than a pair of
+        scalar forms -- nested lists for a blocked system, say -- override this.
+        """
         a, L = self.variational_forms(self._timestep)
 
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if _dolfinx_version >= Version("0.10"):
             kwargs["petsc_options_prefix"] = "beat_base_model_"
 
@@ -115,23 +167,12 @@ class BaseModel:
             a,
             L,
             u=self.state,
-            form_compiler_options=form_compiler_options,
-            jit_options=jit_options,
-            petsc_options=petsc_options,
+            bcs=self.bcs,
+            form_compiler_options=self.parameters["form_compiler_options"],
+            jit_options=self.parameters["jit_options"],
+            petsc_options=self.parameters["petsc_options"],
             **kwargs,
         )
-        dolfinx.fem.petsc.assemble_matrix(self._solver.A, self._solver.a)  # type: ignore
-        self._solver.A.assemble()
-
-    @abc.abstractmethod
-    def _setup_state_space(self) -> None: ...
-
-    @property
-    @abc.abstractmethod
-    def state(self) -> dolfinx.fem.Function: ...
-
-    @abc.abstractmethod
-    def assign_previous(self) -> None: ...
 
     @staticmethod
     def default_parameters(
@@ -168,7 +209,10 @@ class BaseModel:
         }
 
     @abc.abstractmethod
-    def variational_forms(self, dt: Expr | float) -> tuple[ufl.Form, ufl.Form]:
+    def variational_forms(
+        self,
+        dt: Expr | float,
+    ) -> tuple[_BilinearForm, _LinearForm]:
         """Create the variational forms corresponding to the given
         discretization of the given system of equations.
 
@@ -179,31 +223,54 @@ class BaseModel:
 
         Returns
         -------
-        tuple[ufl.Form, ufl.Form]
-            The variational form and the precondition
+        tuple[_BilinearForm, _LinearForm]
+            The bilinear and linear form. A model with several coupled fields returns
+            these blocked, as a nested list of forms and a list of forms respectively.
 
         """
         ...
 
-    def _update_matrices(self):
-        """
-        Re-assemble matrix.
-        """
-        self._solver.A.zeroEntries()
-        dolfinx.fem.petsc.assemble_matrix(self._solver.A, self._solver.a)  # type: ignore
-        self._solver.A.assemble()
+    def _assemble_matrix(self) -> None:
+        """(Re-)assemble the system matrix."""
+        # The compiled form spans both the single-field and the blocked shape, which the
+        # assembly overloads cannot be resolved against statically.
+        A, a = self._solver.A, cast(Any, self._solver.a)
+        A.zeroEntries()
+        dolfinx.fem.petsc.assemble_matrix(A, a, bcs=self.bcs)  # type: ignore[misc]
+        A.assemble()
 
-    def _update_rhs(self):
-        """
-        Re-assemble RHS vector
-        """
-        with self._solver.b.localForm() as b_loc:
+    def _assemble_rhs(self) -> None:
+        """(Re-)assemble the right-hand side vector."""
+        b, a = self._solver.b, cast(Any, self._solver.a)
+        with b.localForm() as b_loc:
             b_loc.set(0)
-        dolfinx.fem.petsc.assemble_vector(self._solver.b, self._solver.L)
-        self._solver.b.ghostUpdate(
-            addv=PETSc.InsertMode.ADD,
-            mode=PETSc.ScatterMode.REVERSE,
-        )
+        dolfinx.fem.petsc.assemble_vector(b, self._solver.L)
+        # Move the Dirichlet columns of the matrix over to the right-hand side before the
+        # ghost contributions are summed, then overwrite the constrained rows afterwards.
+        dolfinx.fem.petsc.apply_lifting(b, [a], bcs=[self.bcs])
+        b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+        dolfinx.fem.petsc.set_bc(b, self.bcs)
+
+    def _solve_linear_system(self) -> None:
+        """Solve the assembled system into the state vector."""
+        state = self.state
+        assert isinstance(
+            state,
+            dolfinx.fem.Function,
+        ), "A model whose state is several fields must override _solve_linear_system"
+        self._solver.solver.solve(self._solver.b, state.x.petsc_vec)
+
+    def _scatter_forward(self) -> None:
+        """Update the ghost values of every field the state is made of."""
+        for function in self._state_functions():
+            function.x.scatter_forward()
+
+    def _state_functions(self) -> Sequence[dolfinx.fem.Function]:
+        """The state as a sequence, whether it is one field or several."""
+        state = self.state
+        if isinstance(state, dolfinx.fem.Function):
+            return (state,)
+        return state
 
     def step(self, interval):
         """Perform a single time step.
@@ -227,19 +294,19 @@ class BaseModel:
             if not timestep_unchanged:
                 self._timestep.value = dt
                 with self.monitor.track_time("pde_update_matrices"):
-                    self._update_matrices()
+                    self._assemble_matrix()
 
             with self.monitor.track_time("pde_update_rhs"):
-                self._update_rhs()
+                self._assemble_rhs()
 
             with self.monitor.track_time("pde_linear_solve"):
-                self._solver.solver.solve(self._solver.b, self.state.x.petsc_vec)
+                self._solve_linear_system()
 
             # Record solver metrics
             self.monitor.record_ksp(self._solver.solver)
 
             with self.monitor.track_time("pde_scatter_forward"):
-                self.state.x.scatter_forward()
+                self._scatter_forward()
 
         # Trigger logging/end-of-step aggregation
         self.monitor.advance_step(t0, t1)

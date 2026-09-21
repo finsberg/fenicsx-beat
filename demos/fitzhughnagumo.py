@@ -252,7 +252,7 @@ shutil.rmtree("fitzhughnagumo.bp", ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     "fitzhughnagumo.bp",
-    [solver.pde.state],
+    [solver.pde.v],
     engine="BP4",
 )
 
@@ -272,9 +272,9 @@ else:
     plotter = pyvista.Plotter()
     viridis = plt.get_cmap("viridis")
     grid = pyvista.UnstructuredGrid(
-        *dolfinx.plot.vtk_mesh(solver.pde.state.function_space.mesh),
+        *dolfinx.plot.vtk_mesh(solver.pde.v.function_space.mesh),
     )
-    grid.point_data["V"] = solver.pde.state.x.array
+    grid.point_data["V"] = solver.pde.v.x.array
     grid.set_active_scalars("V")
     renderer = plotter.add_mesh(
         grid,
@@ -295,12 +295,12 @@ T = 50
 t = 0.0
 i = 0
 while t < T:
-    v = solver.pde.state.x.array
+    v = solver.pde.v.x.array
     if i % 200 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
         vtx.write(t)
         if pyvista:
-            grid.point_data["V"] = solver.pde.state.x.array
+            grid.point_data["V"] = solver.pde.v.x.array
             plotter.write_frame()
 
     solver.step((t, t + dt))

@@ -2,9 +2,9 @@ import logging
 from dataclasses import dataclass, field
 from typing import Protocol
 
+import dolfinx
 import numpy as np
 
-from .monodomain_model import MonodomainModel
 from .telemetry import BaseMonitor, NullMonitor
 
 logger = logging.getLogger(__name__)
@@ -23,9 +23,26 @@ class ODESolver(Protocol):
     def step(self, t0: float, dt: float) -> None: ...
 
 
+class PDEModel(Protocol):
+    """What the splitting driver asks of a PDE model.
+
+    It only ever advances the model and asks it to keep its history; the transmembrane
+    potential is shared with the ODE solver directly. So any model offering these is
+    drivable here, whatever else it solves for alongside.
+    """
+
+    @property
+    def v(self) -> dolfinx.fem.Function:
+        """The transmembrane potential."""
+
+    def assign_previous(self) -> None: ...
+
+    def step(self, interval: tuple[float, float]) -> None: ...
+
+
 @dataclass
 class MonodomainSplittingSolver:
-    pde: MonodomainModel
+    pde: PDEModel
     ode: ODESolver
     theta: float = 1.0
     monitor: BaseMonitor = field(default_factory=NullMonitor)
@@ -44,7 +61,7 @@ class MonodomainSplittingSolver:
         t1 = T0 + dt
 
         while t1 < T + EPS:
-            logger.debug(f"Solving on t = ({t0:.2f}, {t0:.2f})")
+            logger.debug(f"Solving on t = ({t0:.2f}, {t1:.2f})")
             self.step((t0, t1))
 
             t0 = t1
