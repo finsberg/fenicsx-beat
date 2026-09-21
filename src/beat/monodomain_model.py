@@ -53,7 +53,16 @@ class MonodomainModel(BaseModel):
         self._state = dolfinx.fem.Function(self.V, name="v")
 
     @property
+    def v(self) -> dolfinx.fem.Function:
+        """The transmembrane potential."""
+        return self._state
+
+    @property
     def state(self) -> dolfinx.fem.Function:
+        """The transmembrane potential.
+
+        Kept for compatibility; :attr:`v` says the same thing by name and is preferred.
+        """
         return self._state
 
     def assign_previous(self):
