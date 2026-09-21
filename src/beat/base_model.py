@@ -136,6 +136,11 @@ class BaseModel:
         self._setup_solver()
         self._assemble_matrix()
 
+    @property
+    def mesh(self) -> dolfinx.mesh.Mesh:
+        """The mesh the model is discretized on."""
+        return self._mesh
+
     @abc.abstractmethod
     def _setup_state_space(self) -> None: ...
 
