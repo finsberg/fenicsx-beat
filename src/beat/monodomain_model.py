@@ -59,12 +59,6 @@ class MonodomainModel(BaseModel):
     def assign_previous(self):
         self.v_.x.array[:] = self.state.x.array[:]
 
-    @staticmethod
-    def default_parameters():
-        params = super(MonodomainModel, MonodomainModel).default_parameters()
-        params["use_custom_preconditioner"] = True
-        return params
-
     def variational_forms(self, dt: Expr | float) -> tuple[ufl.Form, ufl.Form]:
         """Create the variational forms corresponding to the given
         discretization of the given system of equations.

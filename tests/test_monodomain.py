@@ -42,7 +42,7 @@ def test_monodomain_analytic(M, ac_str, exact, err):
     dt = 0.001
     T = 10 * dt
 
-    params = dict(theta=theta, linear_solver_type="direct")
+    params = dict(theta=theta)
     comm = MPI.COMM_WORLD
     mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
@@ -73,7 +73,7 @@ def test_monodomain_spatial_convergence():
     dt = 0.001
     T = 10 * dt
     metadata = {"quadrature_degree": 8}
-    params = dict(theta=theta, linear_solver_type="direct")  # , default_timestep=dt)
+    params = dict(theta=theta)  # , default_timestep=dt)
     for N in Ns:
         mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
         time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
@@ -113,7 +113,7 @@ def test_monodomain_temporal_convergence():
     N = 100
 
     metadata = {"quadrature_degree": 8}
-    params = dict(theta=theta, linear_solver_type="direct")  # , default_timestep=dt)
+    params = dict(theta=theta)  # , default_timestep=dt)
     mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
     x = ufl.SpatialCoordinate(mesh)
 

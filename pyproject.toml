@@ -86,9 +86,14 @@ all = [
 ]
 
 
+[tool.pytest.ini_options]
 testpaths = [
     "tests"
 ]
+markers = [
+    "skip_in_parallel: test cannot be run under multi-rank MPI",
+]
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [

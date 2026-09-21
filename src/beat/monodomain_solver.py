@@ -44,7 +44,7 @@ class MonodomainSplittingSolver:
         t1 = T0 + dt
 
         while t1 < T + EPS:
-            logger.debug(f"Solving on t = ({t0:.2f}, {t0:.2f})")
+            logger.debug(f"Solving on t = ({t0:.2f}, {t1:.2f})")
             self.step((t0, t1))
 
             t0 = t1

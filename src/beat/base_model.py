@@ -94,6 +94,14 @@ class BaseModel:
 
         self.parameters = type(self).default_parameters()
         if params is not None:
+            # Keys that no default covers are read by nothing, so a caller that passes one
+            # believes it configures something and it does not. Warn as we do for kwargs.
+            unknown = set(params) - set(self.parameters)
+            if unknown:
+                logger.warning(
+                    "Unknown parameters: %s",
+                    ", ".join(f"{k}={params[k]}" for k in sorted(unknown)),
+                )
             self.parameters.update(params)
 
         form_compiler_options = self.parameters["form_compiler_options"]

@@ -249,13 +249,11 @@ M = beat.conductivities.define_conductivity_tensor(
     g_et=g_et,
 )
 
-params = {"preconditioner": "sor", "use_custom_preconditioner": False}
 pde = beat.MonodomainModel(
     time=time,
     mesh=data.mesh,
     M=M,
     I_s=I_s,
-    params=params,
     C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
 )
 
