@@ -41,6 +41,10 @@ model and notation used throughout, then work through the
   manufactured solutions.
 - [Monodomain convergence test](monodomain_convergence.py) — the companion check of the (first-order)
   spatial and Godunov-splitting convergence rates.
+- [Bidomain convergence test](bidomain_convergence.py) — the same kind of check for
+  `beat.BidomainModel`, measuring the rate in $h$ and $\Delta t$ for the extracellular potential as
+  well as the transmembrane one, and confirming that the model collapses exactly onto the monodomain
+  model when the conductivity tensors are proportional.
 
 ## Advanced topics
 

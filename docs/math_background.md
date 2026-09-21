@@ -101,6 +101,13 @@ $I_{stim}$ explicitly on the right-hand side — this is how an external
 pacing or defibrillation current enters the model, and it is treated
 identically to $I_{ion}$ but with the opposite sign.
 
+`beat.BidomainModel` implements this
+system, solving for $v$ and $u_e$ together. The second equation determines
+$u_e$ only up to a constant, so the model normalizes it to zero mean unless a
+boundary condition grounds it instead; see the
+[bidomain convergence demo](../demos/bidomain_convergence.py) for the
+verification of both fields.
+
 ## 4. The monodomain model
 
 The bidomain model is a coupled system for two unknown fields, $v$ and
