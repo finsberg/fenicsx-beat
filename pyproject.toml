@@ -1,8 +1,10 @@
 [build-system]
 requires = [
-    "setuptools>=77.0.3",
-    "wheel",
-
+    "scikit-build-core[pyproject]>=0.11.0", # Ensuring license field is correctly parsed]
+    "nanobind>=1.3.2",
+    "setuptools>=77.0.3",                   # Ensuring license field is correctly parsed]
+    "packaging>=24.2",                      # Ensuring license field is correctly parsed]
+    "pkgconfig",
 ]
 
 [project]
@@ -83,6 +85,19 @@ all = [
    "fenicsx-beat[pypi]",
    "fenicsx-beat[dev]",
    "fenicsx-beat[demos]"
+]
+
+
+[dependency-groups]
+# Keep in sync with [build-system].requires above. Needed as a group, not just
+# as build-system metadata, because scifem is installed with
+# `--no-build-isolation`, so the build backend has to already be present.
+build = [
+    "scikit-build-core[pyproject]>=0.11.0",
+    "nanobind>=1.3.2",
+    "setuptools>=77.0.3",
+    "packaging>=24.2",
+    "pkgconfig",
 ]
 
 

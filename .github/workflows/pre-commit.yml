@@ -8,14 +8,75 @@ on:
 
 
 jobs:
+  # Everything, including mypy, runs inside the dolfinx container -- mypy
+  # needs dolfinx (not pip-installable outside the container image), and the
+  # other hooks are cheap enough that splitting them out just to save a few
+  # seconds on a plain runner isn't worth maintaining separate jobs for.
+  # Matrixed over stable/nightly the same way test_package_coverage.yml is,
+  # so mypy (and everything else here) gets an early warning before an
+  # upcoming dolfinx release breaks it.
   check-code:
-    runs-on: ubuntu-22.04
+    name: Check code (${{ matrix.container }})
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.container }}
+    env:
+      DEB_PYTHON_INSTALL_LAYOUT: deb_system
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        container: [
+          "ghcr.io/fenics/dolfinx/dolfinx:stable",
+          "ghcr.io/fenics/dolfinx/dolfinx:nightly"
+        ]
     steps:
-      # This action sets the current path to the root of your github repo
+      # The dolfinx container doesn't ship git, and pre-commit needs a real
+      # repo (git rev-parse, git diff, ...) to function at all. Install it
+      # before checkout so actions/checkout does a real git clone instead of
+      # silently falling back to a git-less tarball download (which leaves
+      # no .git dir and breaks pre-commit with "git failed").
+      - name: Install git
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git
+          # actions/checkout runs as a different UID than the workspace ends
+          # up owned by inside `container:` jobs, and git >=2.35.2 refuses to
+          # touch a repo it doesn't "own" for this reason -- mark it safe
+          # rather than debug UID mismatches per container image.
+          git config --global --add safe.directory '*'
+
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
 
-      - name: Install pre-commit
-        run: python3 -m pip install pre-commit
+      - name: Install build requirements
+        run: |
+          python3 -m pip install --group build
 
-      - name: Run hooks
-        run: pre-commit run --all
+      - name: Install development versions of dependencies
+        if: ${{ matrix.container == 'ghcr.io/fenics/dolfinx/dolfinx:nightly' }}
+        run: |
+          python3 -m pip install git+https://github.com/scientificcomputing/io4dolfinx.git
+          python3 -m pip install git+https://github.com/scientificcomputing/scifem.git --no-build-isolation
+          python3 -m pip install git+https://github.com/ComputationalPhysiology/cardiac-geometriesx.git
+
+      - name: Install package
+        run: |
+          python3 -m pip install scifem --no-build-isolation
+          python3 -m pip install .[dev,test]
+
+      - name: Run pre-commit
+        run: pre-commit run --all-files
+
+      # Commits any fixes the hooks above made (ruff --fix, ruff-format,
+      # trailing-whitespace, ...) back onto the PR branch. This is the
+      # Actions-native "pre-commit.ci lite" -- see
+      # https://pre-commit.ci/lite.html. Only on the stable leg: with both
+      # legs pushing, they'd race to commit fixes onto the same branch.
+      # Nightly is here to fail loudly if the dolfinx-facing hooks (mostly
+      # mypy) break on the next release, not to drive autofixes off an
+      # unstable toolchain.
+      - uses: pre-commit-ci/lite-action@v1.1.0
+        if: always() && matrix.container == 'ghcr.io/fenics/dolfinx/dolfinx:stable'

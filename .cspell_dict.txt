@@ -95,6 +95,7 @@ Kutta
 Laszlo
 levelname
 libgl
+libosmesa
 libxrender
 linalg
 lmbda

@@ -18,18 +18,22 @@ jobs:
       PUBLISH_DIR: ./_build/html
       PYVISTA_OFF_SCREEN: false
       PYVISTA_JUPYTER_BACKEND: "html"
+      LIBGL_ALWAYS_SOFTWARE: 1
+      VTK_DEFAULT_OPENGL_WINDOW: vtkOSOpenGLRenderWindow
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Install dependencies for pyvista
+        run: apt-get update && apt-get install -y --no-install-recommends libgl1 libosmesa6
+
+      - name: Install build requirements
         run: |
-          apt-get update && apt-get install -y libxrender1
+          python3 -m pip install --group build
 
       - name: Install dependencies
         run: |
-          python3 -m pip install -r https://raw.githubusercontent.com/scientificcomputing/scifem/refs/heads/main/build-requirements.txt
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install ".[docs]"
           # PyPI's irksome release has a bug in its dolfinx backend (it always

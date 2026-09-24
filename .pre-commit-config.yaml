@@ -33,6 +33,8 @@ repos:
     rev: v1.13.0
     hooks:
       - id: mypy
+        language: system
+        args: ["--scripts-are-modules"]
 
   - repo: https://github.com/streetsidesoftware/cspell-cli
     rev: v8.16.0
