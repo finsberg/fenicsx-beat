@@ -43,8 +43,13 @@ test = [
     "fenicsx-beat[irksome]",
 ]
 dev = [
-    "pre-commit",
+    "pdbpp",
+    "ipython",
     "bump-my-version",
+    "pre-commit",
+    "mypy",
+    "fenicsx-beat[test]",
+    "fenicsx-beat[docs]",
 ]
 pypi = [
     "twine",
