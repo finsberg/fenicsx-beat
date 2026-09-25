@@ -63,9 +63,19 @@ jobs:
           python3 -m pip install git+https://github.com/ComputationalPhysiology/cardiac-geometriesx.git
 
       - name: Install package
+        if: ${{ matrix.container == 'ghcr.io/fenics/dolfinx/dolfinx:stable' }}
         run: |
           python3 -m pip install scifem --no-build-isolation
           python3 -m pip install .[dev,test]
+
+      # dolfinx-external-operator does not yet support nightly dolfinx, and `dev` pulls it
+      # in through `docs`. Install what the hooks need without it instead; mypy then treats
+      # `dolfinx_external_operator` as a missing import (see [tool.mypy] in pyproject.toml).
+      - name: Install package (without dolfinx-external-operator)
+        if: ${{ matrix.container == 'ghcr.io/fenics/dolfinx/dolfinx:nightly' }}
+        run: |
+          python3 -m pip install scifem --no-build-isolation
+          python3 -m pip install .[test,demos] pre-commit mypy "pyvista>=0.45.0"
 
       - name: Run pre-commit
         run: pre-commit run --all-files
