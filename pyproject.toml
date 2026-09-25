@@ -1,8 +1,10 @@
 [build-system]
 requires = [
-    "setuptools>=77.0.3",
-    "wheel",
-
+    "scikit-build-core[pyproject]>=0.11.0", # Ensuring license field is correctly parsed]
+    "nanobind>=1.3.2",
+    "setuptools>=77.0.3",                   # Ensuring license field is correctly parsed]
+    "packaging>=24.2",                      # Ensuring license field is correctly parsed]
+    "pkgconfig",
 ]
 
 [project]
@@ -41,8 +43,13 @@ test = [
     "fenicsx-beat[irksome]",
 ]
 dev = [
-    "pre-commit",
+    "pdbpp",
+    "ipython",
     "bump-my-version",
+    "pre-commit",
+    "mypy",
+    "fenicsx-beat[test]",
+    "fenicsx-beat[docs]",
 ]
 pypi = [
     "twine",
@@ -86,6 +93,19 @@ all = [
 ]
 
 
+[dependency-groups]
+# Keep in sync with [build-system].requires above. Needed as a group, not just
+# as build-system metadata, because scifem is installed with
+# `--no-build-isolation`, so the build backend has to already be present.
+build = [
+    "scikit-build-core[pyproject]>=0.11.0",
+    "nanobind>=1.3.2",
+    "setuptools>=77.0.3",
+    "packaging>=24.2",
+    "pkgconfig",
+]
+
+
 [tool.pytest.ini_options]
 testpaths = [
     "tests"
@@ -93,6 +113,29 @@ testpaths = [
 markers = [
     "skip_in_parallel: test cannot be run under multi-rank MPI",
 ]
+
+[[tool.mypy.overrides]]
+# Third-party packages without type information, and cell models the demos generate at runtime.
+module = [
+    "scipy.*",
+    "numba.*",
+    "scifem.*",
+    "irksome.*",
+    "dolfinx_external_operator.*",
+    "tentusscher_panfilov_2006_epi_cell",
+    "ToRORd_dynCl_endo",
+    "ms_cell_model",
+    "ms_jax_monolithic",
+    "ms_np_monolithic",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Plotting-only APIs whose annotations reject valid calls: `vtk_mesh` is a singledispatch
+# function annotated for `Mesh` only, and pyvista's positional-args deprecation decorator
+# hides the `self` binding of methods such as `view_xy`.
+module = ["pyvista.*", "dolfinx.plot"]
+follow_imports = "skip"
 
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.

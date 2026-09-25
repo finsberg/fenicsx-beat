@@ -57,7 +57,7 @@ class BidomainModel(BaseModel):
         The intracellular conductivity tensor
     M_e : ufl.Coefficient | float
         The extracellular conductivity tensor
-    I_s : Stimulus | Sequence[Stimulus] | ufl.Coefficient, optional
+    I_s : Stimulus | Sequence[Stimulus] | ufl.core.expr.Expr, optional
         The stimulus, by default None
     params : dict, optional
         Parameters for the model, by default None
@@ -74,7 +74,7 @@ class BidomainModel(BaseModel):
         mesh: dolfinx.mesh.Mesh,
         M_i: ufl.Coefficient | float,
         M_e: ufl.Coefficient | float,
-        I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        I_s: Stimulus | Sequence[Stimulus] | ufl.core.expr.Expr | None = None,
         params: dict[str, Any] | None = None,
         C_m: float = 1.0,
         dx: ufl.Measure | None = None,
@@ -129,7 +129,7 @@ class BidomainModel(BaseModel):
         self._multiplier = None
         if not self._u_e_is_grounded_by_bc:
             # One global degree of freedom carrying the constant that enforces zero mean.
-            real = basix.ufl.real_element(self._mesh.basix_cell())
+            real = basix.ufl.real_element(self._mesh.basix_cell(), value_shape=())
             self.R = dolfinx.fem.functionspace(self._mesh, real)
             self._multiplier = dolfinx.fem.Function(self.R, name="u_e_mean")
 
@@ -139,9 +139,11 @@ class BidomainModel(BaseModel):
 
         a, L = self.variational_forms(self._timestep)
 
+        # The forms' declared types also span the single-field shape, and the blocked forms
+        # contain ``None`` blocks, which dolfinx's annotation does not admit.
         self._solver = dolfinx.fem.petsc.LinearProblem(
-            a,
-            L,
+            cast(Any, a),
+            cast(Any, L),
             u=self._unknowns,
             bcs=self.bcs,
             kind="mpi",
@@ -221,22 +223,22 @@ class BidomainModel(BaseModel):
         b = self._solver.b
         with b.localForm() as b_loc:
             b_loc.set(0)
-        dolfinx.fem.petsc.assemble_vector(b, self._solver.L)
+        dolfinx.fem.petsc.assemble_vector(b, self._solver.L)  # type: ignore[arg-type]
         if self.bcs:
             dolfinx.fem.petsc.apply_lifting(
                 b,
                 a,
                 bcs=dolfinx.fem.bcs_by_block(
-                    dolfinx.fem.extract_function_spaces(a, 1),
+                    dolfinx.fem.extract_function_spaces(a, 1),  # type: ignore[arg-type]
                     self.bcs,
                 ),
             )
-        b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+        b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)  # type: ignore[arg-type]
         if self.bcs:
             dolfinx.fem.petsc.set_bc(
                 b,
                 dolfinx.fem.bcs_by_block(
-                    dolfinx.fem.extract_function_spaces(self._solver.L),
+                    dolfinx.fem.extract_function_spaces(self._solver.L),  # type: ignore[arg-type]
                     self.bcs,
                 ),
             )
@@ -247,7 +249,7 @@ class BidomainModel(BaseModel):
         # afterwards, from the owning ranks.
         x = self._solver.x
         self._solver.solver.solve(self._solver.b, x)
-        dolfinx.fem.petsc.assign(x, self._unknowns)
+        dolfinx.fem.petsc.assign(x, self._unknowns)  # type: ignore[arg-type]
 
     def step(self, interval) -> None:
         if self._previous_u_e_is_stale:
@@ -287,7 +289,7 @@ class BidomainModel(BaseModel):
             unknowns = [self.ue_, dolfinx.fem.Function(self.R)]
 
         problem = dolfinx.fem.petsc.LinearProblem(
-            a,
+            cast(Any, a),
             L,
             u=unknowns,
             bcs=self.bcs,

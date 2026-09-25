@@ -29,7 +29,7 @@ if os.environ.get("NO_PYVISTA", "0") == "1":
     logger.warning("Turn off pyvista")
 else:
     try:
-        import pyvista  # type: ignore[no-redef]
+        import pyvista  # type: ignore[no-redef, assignment]
     except ImportError:
         pyvista = None  # type: ignore[no-redef]
         logger.warning("pyvista not installed, skipping visualization")
@@ -79,7 +79,7 @@ here = Path.cwd()
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
 if not model_path.is_file():
     here = Path.cwd()
-    ode = gotranx.load_ode(
+    cell_ode = gotranx.load_ode(
         here
         / ".."
         / "odes"
@@ -87,7 +87,7 @@ if not model_path.is_file():
         / "tentusscher_panfilov_2006_epi_cell.ode",
     )
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
@@ -133,7 +133,7 @@ if pyvista is not None:
 # ratio $\chi$, used below to build the conductivity tensor $M$.
 conductivities = beat.conductivities.default_conductivities("Niederer")
 # Membrane capacitance $C_m$
-C_m = 1.0 * beat.units.ureg("uF/cm**2")
+C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2")
 
 time_constant = dolfinx.fem.Constant(geo.mesh, 0.0)
 L = 1.5 * beat.units.ureg("mm").to(mesh_unit).magnitude

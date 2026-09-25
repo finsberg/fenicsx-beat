@@ -1,0 +1,37 @@
+name: pre-commit autoupdate
+
+on:
+  schedule:
+    # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autoupdate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pre-commit
+        run: python3 -m pip install pre-commit
+
+      - name: Run pre-commit autoupdate
+        run: pre-commit autoupdate
+
+      - name: Open a pull request with any updates
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: "chore: pre-commit autoupdate"
+          title: "chore: pre-commit autoupdate"
+          body: |
+            Result of running `pre-commit autoupdate` on a schedule.
+
+            Check the diff bumps rev pins only, then let CI (including the
+            separate `mypy` job, which this workflow can't run since it needs
+            the dolfinx container) confirm nothing broke before merging.
+          branch: pre-commit-autoupdate
+          delete-branch: true

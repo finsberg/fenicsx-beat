@@ -29,7 +29,7 @@ class MonodomainModel(BaseModel):
         time: dolfinx.fem.Constant,
         mesh: dolfinx.mesh.Mesh,
         M: ufl.Coefficient | float,
-        I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        I_s: Stimulus | Sequence[Stimulus] | ufl.core.expr.Expr | None = None,
         params=None,
         C_m: float = 1.0,
         dx: ufl.Measure | None = None,

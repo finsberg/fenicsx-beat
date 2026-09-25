@@ -71,7 +71,7 @@ class PerformanceMonitor(BaseMonitor):
             self.ksp_total_iterations += iterations
             self.ksp_max_iterations = max(self.ksp_max_iterations, iterations)
             self.ksp_last_residual_norm = float(ksp.getResidualNorm())
-            self.ksp_last_converged_reason = int(ksp.getConvergedReason())
+            self.ksp_last_converged_reason = int(ksp.getConvergedReason())  # type: ignore[call-overload]
         except PETSc.Error:
             pass
 

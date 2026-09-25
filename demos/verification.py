@@ -180,7 +180,7 @@ for i, dt in enumerate(dts):
         v_pde=pde.state,
         fun=simple_ode_exact,
         init_states=init_states,
-        parameters=None,
+        parameters=np.array([]),
         num_states=2,
         v_index=0,
     )
@@ -189,7 +189,7 @@ for i, dt in enumerate(dts):
     solver.solve((t0, T), dt=dt)
 
     # Advance time.value to the final endpoint T before calculating error
-    time.value = T
+    time.value = T  # type: ignore[assignment]
 
     v_exact = v_exact_func(x, time)
     error_form = dolfinx.fem.form((pde.state - v_exact) ** 2 * ufl.dx)
