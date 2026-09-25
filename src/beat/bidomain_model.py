@@ -129,7 +129,7 @@ class BidomainModel(BaseModel):
         self._multiplier = None
         if not self._u_e_is_grounded_by_bc:
             # One global degree of freedom carrying the constant that enforces zero mean.
-            real = basix.ufl.real_element(self._mesh.basix_cell())
+            real = basix.ufl.real_element(self._mesh.basix_cell(), value_shape=())
             self.R = dolfinx.fem.functionspace(self._mesh, real)
             self._multiplier = dolfinx.fem.Function(self.R, name="u_e_mean")
 
