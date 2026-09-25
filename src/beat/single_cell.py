@@ -19,7 +19,7 @@ try:
     from numba import jit
 except ImportError:
 
-    def jit(*args, **kwargs):
+    def jit(*args, **kwargs):  # type: ignore[no-redef]
         return lambda x: x
 
     warnings.warn(

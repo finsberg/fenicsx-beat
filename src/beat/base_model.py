@@ -163,11 +163,13 @@ class BaseModel:
         if _dolfinx_version >= Version("0.10"):
             kwargs["petsc_options_prefix"] = "beat_base_model_"
 
-        # Blocked forms may contain ``None`` blocks, which dolfinx's annotation does not admit.
-        self._solver = dolfinx.fem.petsc.LinearProblem(
+        # The forms and state span both the single-field and the blocked shape, which
+        # dolfinx's annotations cannot be resolved against statically, and blocked forms may
+        # contain ``None`` blocks, which they do not admit either.
+        self._solver: dolfinx.fem.petsc.LinearProblem = dolfinx.fem.petsc.LinearProblem(
             cast(Any, a),
-            L,
-            u=self.state,
+            cast(Any, L),
+            u=cast(Any, self.state),
             bcs=self.bcs,
             form_compiler_options=self.parameters["form_compiler_options"],
             jit_options=self.parameters["jit_options"],

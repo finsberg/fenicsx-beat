@@ -92,6 +92,7 @@ def parse_element(space_string: str, mesh: dolfinx.mesh.Mesh, dim: int) -> basix
         else:
             kwargs["shape"] = (dim,)
 
+    el: basix.ufl._ElementBase
     if family_str in ["Lagrange", "P", "CG"]:
         el = basix.ufl.element(family=basix.ElementFamily.P, discontinuous=False, **kwargs)
     elif family_str in ["Discontinuous Lagrange", "DG", "dP"]:

@@ -117,9 +117,9 @@ states = np.array([0.0, -85.0])
 dt = 0.01
 times = np.arange(0, 1000, dt)
 all_states = np.zeros((len(times), len(states)))
-for i, t in enumerate(times):
+for i, ti in enumerate(times):
     all_states[i, :] = states
-    states += rhs(t, states, parameters) * dt
+    states += rhs(ti, states, parameters) * dt
 
 import matplotlib.pyplot as plt
 

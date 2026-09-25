@@ -139,10 +139,11 @@ class BidomainModel(BaseModel):
 
         a, L = self.variational_forms(self._timestep)
 
-        # The blocked forms contain ``None`` blocks, which dolfinx's annotation does not admit.
+        # The forms' declared types also span the single-field shape, and the blocked forms
+        # contain ``None`` blocks, which dolfinx's annotation does not admit.
         self._solver = dolfinx.fem.petsc.LinearProblem(
             cast(Any, a),
-            L,
+            cast(Any, L),
             u=self._unknowns,
             bcs=self.bcs,
             kind="mpi",
