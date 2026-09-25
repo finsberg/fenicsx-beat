@@ -240,7 +240,7 @@ for dt in collapse_dts:
         params=dict(theta=0.5),
     )
     bidomain.solve((0.0, T_TIME), dt=dt)
-    time.value = 0.0
+    time.value = 0.0  # type: ignore[assignment]
     monodomain.solve((0.0, T_TIME), dt=dt)
 
     collapse.append(l2(bidomain.v - monodomain.v, mesh) / l2(monodomain.v, mesh))

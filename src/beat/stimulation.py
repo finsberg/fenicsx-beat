@@ -21,7 +21,7 @@ class Stimulus(NamedTuple):
         return self.dZ(self.marker)
 
     def assign(self, amp: float):
-        self.expr.amplitude = amp
+        self.expr.amplitude = amp  # type: ignore[attr-defined]
 
 
 def compute_effective_dim(mesh: dolfinx.mesh.Mesh, subdomain_data: dolfinx.mesh.MeshTags) -> int:
@@ -150,7 +150,7 @@ def convert_amplitude(effective_dim: int, amplitude: float | pint.Quantity) -> p
     return amplitude * unit
 
 
-def compute_stimulus_unit(effective_dim: int, mesh_unit: str) -> str:
+def compute_stimulus_unit(effective_dim: int, mesh_unit: str) -> pint.Quantity:
     """
     Compute the unit of the stimulus based on the effective dimension and mesh unit.
 
@@ -163,7 +163,7 @@ def compute_stimulus_unit(effective_dim: int, mesh_unit: str) -> str:
 
     Returns
     -------
-    str
+    pint.Quantity
         The unit of the stimulus.
 
     Raises
@@ -183,13 +183,13 @@ def compute_stimulus_unit(effective_dim: int, mesh_unit: str) -> str:
         return ureg(f"uA/{mesh_unit}**{effective_dim - 1}")
 
 
-def convert_chi(chi: float, mesh_unit: str) -> pint.Quantity:
+def convert_chi(chi: float | pint.Quantity, mesh_unit: str) -> pint.Quantity:
     """
     Convert the surface to volume ratio to the appropriate unit based on the mesh unit.
 
     Parameters
     ----------
-    chi : float
+    chi : float | pint.Quantity
         The surface to volume ratio.
     mesh_unit : str
         The unit of the mesh.
@@ -262,11 +262,11 @@ def define_stimulus(
         If the mesh unit is not valid.
     """
     effective_dim = compute_effective_dim(mesh, subdomain_data)
-    chi = convert_chi(chi, mesh_unit)
+    chi_q = convert_chi(chi, mesh_unit)
     A = convert_amplitude(effective_dim, amplitude)
     dZ = get_dZ(mesh, subdomain_data)
     unit = compute_stimulus_unit(effective_dim, mesh_unit)
-    amp = (A / chi).to(unit).magnitude
+    amp: float = (A / chi_q).to(unit).magnitude
     I_s = ufl.conditional(ufl.And(ufl.ge(time, start), ufl.le(time, start + duration)), amp, 0.0)
 
     return Stimulus(dZ=dZ, marker=marker, expr=I_s)

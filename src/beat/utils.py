@@ -85,7 +85,7 @@ def parse_element(space_string: str, mesh: dolfinx.mesh.Mesh, dim: int) -> basix
     Parse a string representation of a basix element family
     """
     family_str, degree_str = space_string.split("_")
-    kwargs = {"degree": int(degree_str), "cell": mesh.basix_cell()}
+    kwargs: dict[str, Any] = {"degree": int(degree_str), "cell": mesh.basix_cell()}
     if dim > 1:
         if family_str in ["Quadrature", "Q", "Quad"]:
             kwargs["value_shape"] = (dim,)

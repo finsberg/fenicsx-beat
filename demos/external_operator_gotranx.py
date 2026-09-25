@@ -44,7 +44,7 @@ from beat.external_operator_odesolver import ExternalOperatorODESolver
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
 if not model_path.is_file():
     here = Path.cwd()
-    ode = gotranx.load_ode(
+    cell_ode = gotranx.load_ode(
         here
         / ".."
         / "odes"
@@ -52,7 +52,7 @@ if not model_path.is_file():
         / "tentusscher_panfilov_2006_epi_cell.ode",
     )
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)

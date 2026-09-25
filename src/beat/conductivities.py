@@ -61,11 +61,11 @@ class Conductivities(NamedTuple):
 
 
 def get_harmonic_mean_conductivity(
-    chi: float,
-    g_il: float = 0.17,
-    g_it: float = 0.019,
-    g_el: float = 0.62,
-    g_et: float = 0.24,
+    chi: pint.Quantity,
+    g_il: float | pint.Quantity = 0.17,
+    g_it: float | pint.Quantity = 0.019,
+    g_el: float | pint.Quantity = 0.62,
+    g_et: float | pint.Quantity = 0.24,
 ) -> tuple[float, float]:
     # Conductivities as defined by page 4339 of Niederer benchmark
     sigma_il = to_quantity(g_il, "S/m")
@@ -105,12 +105,12 @@ def conductivity_tensor(s_l: float, s_t: float, f0: dolfinx.fem.Constant | dolfi
 
 
 def define_conductivity_tensor(
-    chi: float,
-    f0: dolfinx.fem.Constant | dolfinx.fem.Function,
-    g_il: float = 0.17,
-    g_it: float = 0.019,
-    g_el: float = 0.62,
-    g_et: float = 0.24,
+    chi: pint.Quantity,
+    f0: dolfinx.fem.Constant | dolfinx.fem.Function | None,
+    g_il: float | pint.Quantity = 0.17,
+    g_it: float | pint.Quantity = 0.019,
+    g_el: float | pint.Quantity = 0.62,
+    g_et: float | pint.Quantity = 0.24,
 ):
     if f0 is None:
         raise ValueError("f0 must be provided")

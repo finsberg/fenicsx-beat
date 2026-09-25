@@ -22,13 +22,13 @@ class ODEResults(NamedTuple):
 
 
 def solve(
-    fun: np.NDArray,
+    fun: Callable,
     t_bound: float,
-    states: np.NDArray,
-    V: np.NDArray,
+    states: npt.NDArray,
+    V: npt.NDArray,
     V_index: int,
     dt: float,
-    parameters: np.NDArray,
+    parameters: npt.NDArray,
     t0: float = 0.0,
     extra: dict[str, float | npt.NDArray] | None = None,
 ):

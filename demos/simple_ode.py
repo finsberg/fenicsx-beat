@@ -53,7 +53,7 @@ beat.odesolver.solve(
     V=V,
     V_index=V_index,
     dt=dt,
-    parameters=None,
+    parameters=np.array([]),
 )
 
 fig, ax = plt.subplots()

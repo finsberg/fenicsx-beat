@@ -37,7 +37,7 @@ class Results(NamedTuple):
 
 
 def _transform_I_s(
-    I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None,
+    I_s: Stimulus | Sequence[Stimulus] | ufl.core.expr.Expr | None,
     dZ: ufl.Measure,
 ) -> list[Stimulus]:
     if I_s is None:
@@ -65,7 +65,7 @@ class BaseModel:
         The measure for the spatial domain, by default None
     params : dict, optional
         Parameters for the model, by default None
-    I_s : Stimulus | Sequence[Stimulus] | ufl.Coefficient, optional
+    I_s : Stimulus | Sequence[Stimulus] | ufl.core.expr.Expr, optional
         The stimulus, by default None
     bcs : Callable[[BaseModel], Sequence[dolfinx.fem.DirichletBC]], optional
         Factory returning the Dirichlet boundary conditions, by default None (natural
@@ -88,7 +88,7 @@ class BaseModel:
         mesh: dolfinx.mesh.Mesh,
         dx: ufl.Measure | None = None,
         params: dict[str, Any] | None = None,
-        I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        I_s: Stimulus | Sequence[Stimulus] | ufl.core.expr.Expr | None = None,
         bcs: Callable[[BaseModel], Sequence[dolfinx.fem.DirichletBC]] | None = None,
         monitor: BaseMonitor | None = None,
         **kwargs: Any,
@@ -163,8 +163,9 @@ class BaseModel:
         if _dolfinx_version >= Version("0.10"):
             kwargs["petsc_options_prefix"] = "beat_base_model_"
 
+        # Blocked forms may contain ``None`` blocks, which dolfinx's annotation does not admit.
         self._solver = dolfinx.fem.petsc.LinearProblem(
-            a,
+            cast(Any, a),
             L,
             u=self.state,
             bcs=self.bcs,
@@ -236,7 +237,7 @@ class BaseModel:
         # assembly overloads cannot be resolved against statically.
         A, a = self._solver.A, cast(Any, self._solver.a)
         A.zeroEntries()
-        dolfinx.fem.petsc.assemble_matrix(A, a, bcs=self.bcs)  # type: ignore[misc]
+        dolfinx.fem.petsc.assemble_matrix(A, a, bcs=self.bcs)  # type: ignore[arg-type, misc]
         A.assemble()
 
     def _assemble_rhs(self) -> None:
@@ -244,11 +245,11 @@ class BaseModel:
         b, a = self._solver.b, cast(Any, self._solver.a)
         with b.localForm() as b_loc:
             b_loc.set(0)
-        dolfinx.fem.petsc.assemble_vector(b, self._solver.L)
+        dolfinx.fem.petsc.assemble_vector(b, self._solver.L)  # type: ignore[arg-type]
         # Move the Dirichlet columns of the matrix over to the right-hand side before the
         # ghost contributions are summed, then overwrite the constrained rows afterwards.
         dolfinx.fem.petsc.apply_lifting(b, [a], bcs=[self.bcs])
-        b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+        b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)  # type: ignore[arg-type]
         dolfinx.fem.petsc.set_bc(b, self.bcs)
 
     def _solve_linear_system(self) -> None:

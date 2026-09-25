@@ -141,9 +141,9 @@ model_path = Path("ToRORd_dynCl_endo.py")
 if not model_path.is_file():
     print("Generate code for cell model")
     here = Path.cwd()
-    ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
+    cell_ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
@@ -154,11 +154,11 @@ model = ToRORd_dynCl_endo.__dict__
 
 # Surface to volume ratio $\chi$
 
-chi = 1400.0 * beat.units.ureg("cm**-1")
+chi = beat.units.ureg.Quantity(1400.0, "cm**-1")
 
 # Membrane capacitance $C_m$
 
-C_m = 1.0 * beat.units.ureg("uF/cm**2")
+C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2")
 
 
 print("Get steady states")

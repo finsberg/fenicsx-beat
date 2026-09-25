@@ -44,7 +44,7 @@ mesh = dolfinx.mesh.create_interval(comm, num_cells, (0, L))
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
 if not model_path.is_file():
     here = Path.cwd()
-    ode = gotranx.load_ode(
+    cell_ode = gotranx.load_ode(
         here
         / ".."
         / "odes"
@@ -52,7 +52,7 @@ if not model_path.is_file():
         / "tentusscher_panfilov_2006_epi_cell.ode",
     )
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
@@ -67,8 +67,8 @@ end_time = 1000.0
 # We specify a diffusion coefficient $D$ and a membrane capacitance $C_m$. Since the cable is 1D we
 # use $D$ directly as the (scalar) conductivity $M$ below.
 
-D = 0.0005 * beat.units.ureg("cm**2 / ms")
-Cm = 1.0 * beat.units.ureg("uF/cm**2")
+D = beat.units.ureg.Quantity(0.0005, "cm**2 / ms")
+Cm = beat.units.ureg.Quantity(1.0, "uF/cm**2")
 
 # Next we run a single cell model with the to get the correct steady state solutions.
 # We run this for 50 beats with a stimulation every 1000.0 ms

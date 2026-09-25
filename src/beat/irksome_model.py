@@ -21,7 +21,7 @@ class IrksomeMonodomainModel(MonodomainModel):
         mesh: dolfinx.mesh.Mesh,
         M: ufl.Coefficient | float,
         butcher_tableau,
-        I_s: Stimulus | Sequence[Stimulus] | ufl.Coefficient | None = None,
+        I_s: Stimulus | Sequence[Stimulus] | ufl.core.expr.Expr | None = None,
         params=None,
         C_m: float = 1.0,
         dx: ufl.Measure | None = None,

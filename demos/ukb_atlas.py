@@ -47,6 +47,7 @@ if not geodir.is_dir():
 
 
 geo = cg.geometry.Geometry.from_folder(comm, geodir)
+assert geo.ffun is not None, "The geometry is expected to have facet tags"
 mesh_unit = "mm"
 V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 
@@ -115,9 +116,9 @@ model_path = Path("ToRORd_dynCl_endo.py")
 if not model_path.is_file():
     print("Generate code for cell model")
     here = Path.cwd()
-    ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
+    cell_ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
@@ -226,17 +227,17 @@ v_index = {
 # isotropic tensor $M = s_l\, f_0 \otimes f_0 + s_t\, (I - f_0 \otimes f_0)$, which is aligned with the
 # local fibre direction $f_0$ and isotropic in the plane perpendicular to it.
 
-chi = 1400.0 * beat.units.ureg("cm**-1")
-s_l = 0.24 * beat.units.ureg("S/cm")
-s_t = 0.0456 * beat.units.ureg("S/cm")
-s_l = (s_l / chi).to("uA/mV").magnitude
-s_t = (s_t / chi).to("uA/mV").magnitude
+chi = beat.units.ureg.Quantity(1400.0, "cm**-1")
+sigma_l = beat.units.ureg.Quantity(0.24, "S/cm")
+sigma_t = beat.units.ureg.Quantity(0.0456, "S/cm")
+s_l: float = (sigma_l / chi).to("uA/mV").magnitude
+s_t: float = (sigma_t / chi).to("uA/mV").magnitude
 # dim = geo.mesh.topology().dim()
 M = s_l * ufl.outer(geo.f0, geo.f0) + s_t * (
     ufl.Identity(3) - ufl.outer(geo.f0, geo.f0)
 )
 
-C_m = 1.0 * beat.units.ureg("uF/cm**2")
+C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2")
 
 
 # Now we will create a random activation pattern on the endocardial layer of the left and right ventricle.
