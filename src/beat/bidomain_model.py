@@ -13,7 +13,7 @@ from ufl.core.expr import Expr
 
 from .base_model import BaseModel, _BilinearForm, _LinearForm
 from .stimulation import Stimulus
-from .utils import cpp_function_space
+from .utils import cpp_function_space, real_function_space
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +129,7 @@ class BidomainModel(BaseModel):
         self._multiplier = None
         if not self._u_e_is_grounded_by_bc:
             # One global degree of freedom carrying the constant that enforces zero mean.
-            real = basix.ufl.real_element(self._mesh.basix_cell(), value_shape=())
-            self.R = dolfinx.fem.functionspace(self._mesh, real)
+            self.R = real_function_space(self._mesh)
             self._multiplier = dolfinx.fem.Function(self.R, name="u_e_mean")
 
         self._unknowns = [self._v, self._u_e]

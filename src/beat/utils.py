@@ -23,6 +23,34 @@ def interpolation_points(V):
         return V.element.interpolation_points()
 
 
+def real_function_space(mesh: dolfinx.mesh.Mesh) -> dolfinx.fem.FunctionSpace:
+    """A scalar space holding a single global degree of freedom.
+
+    dolfinx supports real spaces natively from 0.11; before that, ``basix.ufl.real_element``
+    exists but cannot be compiled into a function space, so fall back to scifem's
+    implementation.
+
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        The mesh the space is defined on
+
+    Returns
+    -------
+    dolfinx.fem.FunctionSpace
+        The real function space
+    """
+    if _dolfinx_version >= Version("0.11"):
+        return dolfinx.fem.functionspace(
+            mesh,
+            basix.ufl.real_element(mesh.basix_cell(), value_shape=()),
+        )
+    else:
+        import scifem
+
+        return scifem.create_real_functionspace(mesh, value_shape=())
+
+
 def cpp_function_space(V):
     """The C++ function space behind ``V``, whichever wrapper ``V`` arrives in.
 
