@@ -215,7 +215,7 @@ def define_stimulus(
     marker: int,
     mesh_unit: str = "cm",
     duration: float = 2.0,
-    amplitude: float = 500.0,
+    amplitude: float | pint.Quantity = 500.0,
     start: float = 0.0,
 ) -> Stimulus:
     """
@@ -242,8 +242,9 @@ def define_stimulus(
         Unit of the mesh, by default "cm"
     duration : float, optional
         Duration of the stimulus, by default 2.0
-    amplitude : float, optional
-        Amplitude of the stimulus, by default 500.0
+    amplitude : float | pint.Quantity, optional
+        Amplitude of the stimulus, by default 500.0. A float is taken to be in uA/cm,
+        uA/cm**2 or uA/cm**3, for a 1D, 2D or 3D stimulus domain respectively.
     start : float, optional
         Start time of the stimulus, by default 0.0
 
