@@ -85,8 +85,11 @@ class BaseDolfinODESolver(abc.ABC):
     _metadata: dict[str, Any] | None = None
 
     def _initialize_metadata(self):
-        if self.v_ode.ufl_element().family_name == "Quadrature":
-            self._metadata = {"quadrature_degree": self.v_ode.ufl_element().degree()}
+        # basix.ufl names quadrature elements "quadrature" (lowercase), and
+        # `degree` is a property, not a method.
+        element = self.v_ode.ufl_element()
+        if element.family_name == "quadrature":
+            self._metadata = {"quadrature_degree": element.degree}
         else:
             self._metadata = None
 

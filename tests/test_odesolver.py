@@ -1,7 +1,9 @@
 from mpi4py import MPI
 
+import basix.ufl
 import dolfinx
 import numpy as np
+import pytest
 import ufl
 
 import beat.utils
@@ -115,6 +117,31 @@ def test_DolfinODESolver():
     assert len(states) == 2
     np.allclose(states[0].x.array, 1.0)
     np.allclose(states[1].x.array, v0 - s0 * dt)
+
+
+@pytest.mark.parametrize(
+    "quadrature, expected",
+    [(False, None), (True, {"quadrature_degree": 2})],
+)
+def test_DolfinODESolver_metadata(quadrature, expected):
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 2, 2)
+    v_pde = dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, ("P", 1)))
+    if quadrature:
+        element = basix.ufl.quadrature_element(mesh.basix_cell(), value_shape=(), degree=2)
+    else:
+        element = basix.ufl.element("P", mesh.basix_cell(), 1)
+    v_ode = dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, element))
+
+    ode = DolfinODESolver(
+        v_ode=v_ode,
+        v_pde=v_pde,
+        init_states=np.array([1.0, 2.0]),
+        parameters=np.array([1, 1]),
+        fun=simple_ode_forward_euler,
+        num_states=2,
+    )
+
+    assert ode._metadata == expected
 
 
 def test_DolfinMultiODESolver():
