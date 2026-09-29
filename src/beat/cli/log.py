@@ -4,8 +4,24 @@ from pathlib import Path
 from mpi4py import MPI
 
 
+def remove_logfile_handlers() -> None:
+    """Detach and close every :class:`MPIFileHandler` on the root logger.
+
+    Closing is collective (``MPI.File.Close``), so call this on every rank.
+    """
+    root = logging.getLogger()
+    for handler in [h for h in root.handlers if isinstance(h, MPIFileHandler)]:
+        root.removeHandler(handler)
+        handler.close()
+
+
 def add_logfile_handler(output_folder: Path, comm=MPI.COMM_WORLD):
-    comm = MPI.COMM_WORLD
+    """Log to ``output_folder/output.log`` (and ``output_all_cpus.log`` on >1 rank).
+
+    Any previously added file handlers are removed first, so calling this repeatedly in one
+    process (e.g. several ``beat.cli.runner.run`` calls) never duplicates log lines.
+    """
+    remove_logfile_handlers()
     rank = comm.rank
     size = comm.size
 
@@ -117,5 +133,10 @@ class MPIFileHandler(logging.FileHandler):
         self.stream.Write_shared((msg + self.terminator).encode(self.encoding))
 
     def close(self):
-        self.stream.Sync()
-        self.stream.Close()
+        # Idempotent: logging.shutdown() closes every handler again at interpreter exit,
+        # including ones already closed by remove_logfile_handlers().
+        if self.stream is not None:
+            self.stream.Sync()
+            self.stream.Close()
+            self.stream = None
+        logging.Handler.close(self)
