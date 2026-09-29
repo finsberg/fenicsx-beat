@@ -10,22 +10,37 @@ from beat.cli.config import Config, ConfigError
 from beat.cli.geometry import build_geometry
 
 
+@pytest.fixture
+def tmp_path(tmp_path):
+    """Override pytest's built-in ``tmp_path`` so every rank shares rank 0's directory.
+
+    Every test in this module exercises the on-disk, rank-0-only codegen/steady-state cache
+    (`load_module`/`_steady_state`), which assumes ``cache_dir`` is a *shared* path across ranks
+    (true in production, where it's an absolute path resolved from the config file). But under
+    `mpirun -n 2 pytest`, each rank runs a fully independent pytest process with its own
+    ``tmp_path`` fixture value, and that value is NOT rank-synchronized (verified directly: two
+    ranks get e.g. ``/tmp/pytest-of-root/pytest-50/test_tmp0`` and ``.../pytest-51/...``). Note
+    that a plain local re-bcast *inside* a helper (e.g. `conf_with`) is not enough: reassigning a
+    local variable there doesn't change the caller's own ``tmp_path`` used e.g. for
+    ``tmp_path / "cache"`` — the override has to happen at the fixture itself so every use of
+    ``tmp_path`` in a test body sees the same, shared value.
+    """
+    return MPI.COMM_WORLD.bcast(tmp_path, root=0)
+
+
 def conf_with(tmp_path, **cell):
-    data = minimal_config_dict(tmp_path)
+    # `tmp_path` is already shared across ranks (see the `tmp_path` fixture override above), so
+    # only rank 0 needs to do the actual `.ode`-file write that `minimal_config_dict` performs;
+    # every rank then gets an identical `data` dict via `bcast` (which also synchronizes: no
+    # rank can proceed to read the file before rank 0's write is visible to it).
+    comm = MPI.COMM_WORLD
+    data = minimal_config_dict(tmp_path) if comm.rank == 0 else None
+    comm.barrier()
+    data = comm.bcast(data, root=0)
     data["cell"].update(cell)
     return Config.model_validate(data)
 
 
-# Every test that calls `build_cell_model` exercises the on-disk, rank-0-only codegen cache
-# (`load_module`), which assumes `cache_dir` is a *shared* path across ranks. Under
-# `mpirun -n 2 pytest`, `tmp_path` is a per-process pytest fixture and is NOT rank-synchronized
-# (verified: two ranks get e.g. `/tmp/pytest-of-root/pytest-50/test_tmp0` and `.../pytest-51/...`),
-# so only rank 0 (which did the writing into its own local tmp_path) would find the file; other
-# ranks would hit `FileNotFoundError`. Same issue and fix as the generated-geometry cache tests
-# in `tests/test_cli_geometry.py`.
-
-
-@pytest.mark.skip_in_parallel
 def test_codegen_is_cached_by_content(tmp_path):
     conf = conf_with(tmp_path)
     m1 = build_cell_model(conf.cell, tmp_path / "cache", MPI.COMM_WORLD)
@@ -37,7 +52,6 @@ def test_codegen_is_cached_by_content(tmp_path):
     assert m1.v_index == 0
 
 
-@pytest.mark.skip_in_parallel
 def test_parameter_overrides_and_unknown_parameter(tmp_path):
     conf = conf_with(tmp_path, parameters={"tau_in": 0.5})
     model = build_cell_model(conf.cell, tmp_path / "cache", MPI.COMM_WORLD)
@@ -48,20 +62,17 @@ def test_parameter_overrides_and_unknown_parameter(tmp_path):
         build_cell_model(bad.cell, tmp_path / "cache", MPI.COMM_WORLD)
 
 
-@pytest.mark.skip_in_parallel
 def test_unknown_v_name(tmp_path):
     with pytest.raises(ConfigError, match="V"):
         build_cell_model(conf_with(tmp_path, v_name="V").cell, tmp_path / "c", MPI.COMM_WORLD)
 
 
-@pytest.mark.skip_in_parallel
 def test_state_index_unknown(tmp_path):
     model = build_cell_model(conf_with(tmp_path).cell, tmp_path / "c", MPI.COMM_WORLD)
     with pytest.raises(ConfigError, match="cai"):
         state_index(model, "cai")
 
 
-@pytest.mark.skip_in_parallel
 def test_regions_get_their_own_parameters(tmp_path):
     conf = conf_with(
         tmp_path,
@@ -94,3 +105,34 @@ def test_steady_state_is_cached(tmp_path):
     build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
     cached = list((tmp_path / "c" / "init_states").glob("tissue_*.npy"))
     assert len(cached) == 1
+
+
+def test_steady_state_cache_key_includes_scheme(tmp_path):
+    """The steady state is computed with the scheme-specific stepper (`cell.fun`), so changing
+    `cell.scheme` (with everything else, including resolved parameters, identical) must not
+    reuse a steady state cached under a different scheme."""
+    ss = {"num_beats": 1, "BCL": "2 ms", "dt": "0.1 ms"}
+    conf_default = conf_with(tmp_path, steady_state=ss)
+    build_cell_model(conf_default.cell, tmp_path / "c", MPI.COMM_WORLD)
+    files_default = set((tmp_path / "c" / "init_states").glob("tissue_*.npy"))
+    assert len(files_default) == 1
+
+    conf_other = conf_with(tmp_path, scheme="explicit_euler", steady_state=ss)
+    build_cell_model(conf_other.cell, tmp_path / "c", MPI.COMM_WORLD)
+    files_after = set((tmp_path / "c" / "init_states").glob("tissue_*.npy"))
+
+    assert files_after != files_default
+    assert len(files_after) == 2
+
+
+def test_malformed_ode_file_raises_config_error(tmp_path):
+    """A gotranx parse failure on rank 0 (during codegen) must surface as a `ConfigError` on
+    every rank, not a raw traceback (and, under MPI, not a hang on the other ranks)."""
+    conf = conf_with(tmp_path)
+    bad_ode = conf.cell.ode_file.parent / "bad.ode"
+    if MPI.COMM_WORLD.rank == 0:
+        bad_ode.write_text("this is not valid gotran syntax !!! ===")
+    MPI.COMM_WORLD.barrier()
+    conf = conf_with(tmp_path, ode_file=str(bad_ode))
+    with pytest.raises(ConfigError):
+        build_cell_model(conf.cell, tmp_path / "c_bad", MPI.COMM_WORLD)

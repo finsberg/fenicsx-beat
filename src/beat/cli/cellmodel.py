@@ -112,6 +112,7 @@ def _steady_state(
     key = json.dumps(
         {
             "ode": hashlib.sha256(cell.ode_file.read_bytes()).hexdigest(),
+            "scheme": cell.scheme,
             "params": params.tolist(),
             "ss": ss.model_dump(mode="json"),
         },
