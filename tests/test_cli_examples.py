@@ -24,7 +24,9 @@ except ImportError:
 
 # Per-template overrides that make it tiny. Keys are --set strings.
 SHRINK = {
-    "slab": ["geometry.dx=1.5", "geometry.lx=3.0", "geometry.ly=1.5", "geometry.lz=1.5"],
+    # box_slab needs n = round(L/dx) >= 1 along every axis; the template's Ly=Lz=0.05 cm means
+    # dx must stay <= 0.05 (0.1 would round Ly/dx and Lz/dx down to 0 cells and fail to mesh).
+    "slab": ["geometry.dx=0.05"],
     "niederer_benchmark": [
         "geometry.dx=0.5",
         "geometry.lx=2.0",
@@ -50,14 +52,15 @@ SHRINK = {
     "external_operator_gotranx": ["geometry.dx=0.25"],
 }
 NEEDS = {
-    "slab": "cardiac_geometries",
+    # "slab" is deliberately absent: geometry.type = "box_slab" wraps beat.geometry's own
+    # get_3D_slab_mesh/get_3D_slab_microstructure directly (no gmsh/cardiac-geometriesx).
     "lv_endocardial": "cardiac_geometries",
     "biv_endocardial": "cardiac_geometries",
     "ukb_atlas": "ukb",
     "irksome_model_gotranx": "irksome",
     "external_operator_gotranx": "dolfinx_external_operator",
 }
-SERIAL_ONLY = {"slab", "lv_endocardial", "biv_endocardial", "ukb_atlas"}  # gmsh meshing
+SERIAL_ONLY = {"lv_endocardial", "biv_endocardial", "ukb_atlas"}  # gmsh meshing
 
 
 def test_all_demo_templates_exist():

@@ -7,8 +7,9 @@
 # needs geometry cell tags, `transmural` needs endo/epi facet markers), so this template uses the
 # homogeneous cable instead -- no PVC will emerge, but the periodic whole-cable pacing and cell
 # model match the demo. The demo also sets a raw scalar diffusion coefficient D=0.0005 cm**2/ms
-# directly (not through chi/conductivities); [ep] here uses the default ("Niederer") conductivity
-# preset instead, which gives a comparable-order (not identical) conduction spread.
+# directly (not through chi/conductivities); harmonic_mean(a, a) = a / 2, so setting every
+# sigma_* below to the same value `a` reproduces D exactly: (a / 2 / chi) = 0.14 / 2 / 1400 =
+# 0.0005 (as in beat.conductivities.get_harmonic_mean_conductivity; verified numerically).
 
 [geometry]
 type = "interval"           # 200 cells x 0.015 cm, as in the demo
@@ -20,7 +21,11 @@ fibers = { type = "isotropic" }
 [ep]
 chi = "1400 cm**-1"
 C_m = "1 uF/cm**2"
-conductivity = { preset = "Niederer" }
+[ep.conductivity]
+sigma_il = "0.14 S/m"
+sigma_it = "0.14 S/m"
+sigma_el = "0.14 S/m"
+sigma_et = "0.14 S/m"
 
 [cell]
 ode_file = "tentusscher_panfilov_2006_epi_cell.ode"
