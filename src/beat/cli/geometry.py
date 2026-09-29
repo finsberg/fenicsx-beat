@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import shutil
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -87,35 +88,66 @@ def _needs_regeneration(meta: Path, current_hash: str) -> tuple[bool, str | None
         return True, None
     try:
         cached_hash = json.loads(meta.read_text()).get("hash")
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, AttributeError) as e:
         # ValueError also catches json.JSONDecodeError and UnicodeDecodeError.
         return True, f"Ignoring unreadable/corrupt {meta} ({e}); regenerating geometry"
     return cached_hash != current_hash, None
 
 
-def _write_meta_atomically(meta: Path, geometry_type: str, h: str) -> None:
-    """Write the cache metadata file atomically.
+def cache_folder(conf: GeometryConfig) -> Path:
+    """The folder a generated geometry is cached in: ``geometry.folder/<hash16>/``.
 
-    Called on rank 0 only, before ``comm.barrier()``: must never raise, or the other ranks
-    would deadlock waiting on the barrier. Writes to a temp file and ``os.replace``s it into
-    place so a job killed mid-write can never leave a partially-written ``meta`` behind (the
-    next run would then see a corrupt file, harmlessly handled by ``_needs_regeneration``).
+    Keyed by the geometry hash so that different geometry parameters (e.g. an array-job sweep
+    over ``geometry.dx``) never share, overwrite or delete each other's mesh, and so that
+    ``geometry.folder`` itself -- possibly the config's own directory -- is never deleted.
     """
-    try:
-        tmp = meta.with_name(f".{meta.name}.tmp{os.getpid()}")
-        tmp.write_text(json.dumps({"type": geometry_type, "hash": h}, indent=2))
-        os.replace(tmp, meta)
-    except OSError as e:
-        logger.warning(f"Could not write geometry cache metadata {meta}: {e}")
+    return Path(conf.folder) / _geometry_hash(conf)[:16]
+
+
+def _install_generated(tmp: Path, target: Path, geometry_type: str, h: str) -> None:
+    """Move the freshly generated ``tmp`` folder into place as ``target`` (rank 0 only).
+
+    ``target`` is a hash-keyed subfolder beat itself owns, so a stale/corrupt one may be
+    replaced. If a concurrent job already installed a complete entry for the same hash, it is
+    reused and ``tmp`` discarded. The metadata file is written into ``tmp`` *before* the
+    (atomic) rename, so ``target`` only ever appears complete.
+    """
+    (tmp / META_FILE).write_text(json.dumps({"type": geometry_type, "hash": h}, indent=2))
+    for _ in range(3):
+        if not _needs_regeneration(target / META_FILE, h)[0]:
+            shutil.rmtree(tmp, ignore_errors=True)  # another job finished first: reuse its
+            return
+        if target.exists():
+            # Stale or partial entry beat created: move it aside first (atomic), then delete.
+            trash = target.with_name(f".trash-{target.name}-{os.getpid()}-{uuid.uuid4().hex[:8]}")
+            try:
+                os.rename(target, trash)
+            except FileNotFoundError:
+                pass  # another job removed/replaced it meanwhile; re-check
+            else:
+                shutil.rmtree(trash, ignore_errors=True)
+        try:
+            os.rename(tmp, target)
+            return
+        except OSError:
+            continue  # another job installed ``target`` in between; re-check
+    raise OSError(f"Could not install the generated geometry into {target}")
 
 
 def ensure_generated(conf: GeometryConfig, comm: MPI.Intracomm) -> Path:
-    """Generate a cardiac-geometriesx mesh into ``conf.folder`` unless it is up to date."""
+    """Generate a cardiac-geometriesx mesh into :func:`cache_folder` unless it is up to date.
+
+    Generation writes into a private temporary sibling folder, which is then atomically
+    renamed into place, so concurrent jobs generating the same geometry never see (or delete)
+    each other's half-written mesh. Nothing else in ``geometry.folder`` is ever touched.
+    """
     import cardiac_geometries as cg
 
-    folder = Path(conf.folder)
-    meta = folder / META_FILE
+    from .runner import _on_rank0
+
     h = _geometry_hash(conf)
+    target = cache_folder(conf)
+    meta = target / META_FILE
     need = True
     if comm.rank == 0:
         need, warning = _needs_regeneration(meta, h)
@@ -123,21 +155,25 @@ def ensure_generated(conf: GeometryConfig, comm: MPI.Intracomm) -> Path:
             logger.warning(warning)
     need = comm.bcast(need, root=0)
     if not need:
-        logger.info(f"Reusing cached {conf.type} geometry in {folder}")
-        return folder
+        logger.info(f"Reusing cached {conf.type} geometry in {target}")
+        return target
 
-    logger.info(f"Generating {conf.type} geometry in {folder}")
-    if comm.rank == 0:
-        shutil.rmtree(folder, ignore_errors=True)
-    comm.barrier()
+    logger.info(f"Generating {conf.type} geometry in {target}")
+    name = f".tmp-{target.name}-{os.getpid()}-{uuid.uuid4().hex[:8]}" if comm.rank == 0 else None
+    tmp: Path = target.with_name(comm.bcast(name, root=0))
+    _on_rank0(comm, OSError, lambda: target.parent.mkdir(parents=True, exist_ok=True))
     generator = getattr(cg.mesh, conf.type)
     kwargs = conf.generator_kwargs()
     kwargs["create_fibers"] = conf.fibers.type == "from_geometry"
-    generator(outdir=folder, comm=comm, **kwargs)
-    if comm.rank == 0:
-        _write_meta_atomically(meta, conf.type, h)
-    comm.barrier()
-    return folder
+    try:
+        generator(outdir=tmp, comm=comm, **kwargs)
+    except BaseException:
+        # No collective here (ranks may fail independently): best-effort cleanup only.
+        if comm.rank == 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    _on_rank0(comm, OSError, lambda: _install_generated(tmp, target, conf.type, h))
+    return target
 
 
 def _from_folder(folder: Path, comm: MPI.Intracomm) -> CLIGeometry:

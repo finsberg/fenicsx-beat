@@ -159,11 +159,17 @@ def _dispatch(args: dict, comm) -> None:
             print(toml.dumps(conf.model_dump(mode="json", exclude_none=True)))
         logger.info(f"Configuration file {args['config']} is valid.")
     elif command == "geometry":
-        from .geometry import build_geometry
+        from .config import GENERATED_GEOMETRY_TYPES
+        from .geometry import build_geometry, cache_folder
 
         geo = build_geometry(conf.geometry, comm)
         n_cells = geo.mesh.topology.index_map(geo.mesh.topology.dim).size_global
-        logger.info(f"Geometry ready: {n_cells} cells, markers {sorted(geo.markers)}")
+        where = ""
+        if conf.geometry.type == "folder":
+            where = f" (loaded from {conf.geometry.folder})"
+        elif conf.geometry.type in GENERATED_GEOMETRY_TYPES:
+            where = f" (cached in {cache_folder(conf.geometry)})"
+        logger.info(f"Geometry ready: {n_cells} cells, markers {sorted(geo.markers)}{where}")
     elif command == "run":
         from .runner import run
 
