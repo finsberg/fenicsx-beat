@@ -63,8 +63,7 @@ external_operator = [
     "dolfinx-external-operator",
 ]
 cli = [
-    "pydantic",
-    "pydantic-settings",
+    "pydantic>=2",
     "pydantic-pint",
     "toml",
     "cardiac-geometriesx",

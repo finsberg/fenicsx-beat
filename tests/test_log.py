@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 import pytest
 
-from beat.log import MPIFileHandler
+from beat.cli.log import MPIFileHandler
 
 
 def test_mpi_file_handler_uses_a_concrete_encoding(tmp_path):
@@ -39,7 +39,7 @@ def test_emit_under_non_utf8_locale(tmp_path):
         import logging
         from pathlib import Path
         from mpi4py import MPI
-        from beat.log import add_logfile_handler
+        from beat.cli.log import add_logfile_handler
 
         logging.getLogger().setLevel(logging.INFO)
         outdir = Path({outdir!r})

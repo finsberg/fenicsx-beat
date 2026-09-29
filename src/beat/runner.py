@@ -10,9 +10,9 @@ import gotranx
 import io4dolfinx
 
 from . import single_cell
+from .cli.log import add_logfile_handler
 from .conductivities import define_conductivity_tensor
 from .config import Config
-from .log import add_logfile_handler
 from .monodomain_model import MonodomainModel
 from .monodomain_solver import MonodomainSplittingSolver
 from .odesolver import DolfinODESolver

@@ -105,7 +105,7 @@ def display_version_info():
 
     import dolfinx
 
-    from . import __version__
+    from beat import __version__
 
     logger.info(f"fenicsx-beat: {__version__}")
     logger.info(f"dolfinx: {dolfinx.__version__}")
@@ -132,14 +132,14 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
         if command == "version":
             display_version_info()
         elif command == "run":
-            from .runner import run_file
+            from beat.runner import run_file
 
             if not args["config"].exists():
                 raise ValueError(f"Configuration file {args['config']} does not exist.")
             run_file(**args, comm=comm)
 
         elif command == "validate-config":
-            from .config import Config
+            from beat.config import Config
 
             config_path = args.pop("config")
             if not config_path.exists():
@@ -147,7 +147,7 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
             Config.parse_toml(config_path)
             logger.info(f"Configuration file {config_path} is valid.")
         elif command == "init":
-            from .config import Config
+            from beat.config import Config
 
             config_path = args.pop("config")
             force = args.pop("force")
@@ -157,13 +157,13 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
                 )
             Config().dump_toml(config_path)
         elif command == "ecg":
-            from .postprocess import run_ecg_file
+            from beat.postprocess import run_ecg_file
 
             if not args["config"].exists():
                 raise ValueError(f"Configuration file {args['config']} does not exist.")
             run_ecg_file(**args, comm=comm)
         elif command == "post":
-            from .postprocess import run_post_file
+            from beat.postprocess import run_post_file
 
             if not args["config"].exists():
                 raise ValueError(f"Configuration file {args['config']} does not exist.")
@@ -177,8 +177,3 @@ def dispatch(parser: argparse.ArgumentParser, argv: Optional[Sequence[str]] = No
         return 1
 
     return 0
-
-
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = setup_parser()
-    return dispatch(parser, argv)
