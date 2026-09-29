@@ -193,6 +193,8 @@ sharex
 sharey
 Shrier
 shutil
+SIGALRM
+signum
 Silvano
 simcardems
 Sorine

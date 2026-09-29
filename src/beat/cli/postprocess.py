@@ -10,6 +10,7 @@ import csv
 import json
 import logging
 from pathlib import Path
+from typing import Any, Callable
 
 from mpi4py import MPI
 
@@ -174,6 +175,28 @@ def _convert_to_vtx(path: Path, v: dolfinx.fem.Function, times, post: Path, comm
     logger.info(f"VTX output for ParaView written to {out}")
 
 
+def _rank0_guarded(comm, ok: bool, step_name: str, fn: Callable[[], None]) -> bool:
+    """Run ``fn`` on rank 0 only, if no earlier step already failed, and make the resulting
+    "did visualization succeed so far" flag identical on every rank.
+
+    This is the crux of keeping ``_visualize`` MPI-safe: rank 0's pyvista rendering
+    (off-screen rendering can fail on a headless cluster node, disk errors, etc.) must never
+    raise past this point while the other ranks carry on into a later collective
+    ``io4dolfinx.read_function`` call that rank 0 then never reaches - that would deadlock
+    every other rank waiting on rank 0 forever. Catching the exception here and broadcasting
+    ``ok`` (always rank 0's value, via ``root=0``) means every rank agrees, after this call,
+    on whether to keep going - so any subsequent collective call is either entered by every
+    rank or skipped by every rank together.
+    """
+    if ok and comm.rank == 0:
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001 - any rendering failure is recoverable here
+            ok = False
+            logger.warning(f"Visualization failed at {step_name!r}, skipping it: {e!r}")
+    return comm.bcast(ok, root=0)
+
+
 def _visualize(
     conf: Config,
     v: dolfinx.fem.Function,
@@ -186,10 +209,12 @@ def _visualize(
     """Render PNG/GIF previews (if pyvista is installed) into ``post``.
 
     ``io4dolfinx.read_function`` is collective over ``v``'s mesh communicator (it does
-    parallel dof/cell-ownership exchanges internally), so it must be called on *every* rank
-    regardless of whether pyvista is installed there - only the actual pyvista
-    grid/plotter/screenshot calls (which would otherwise race writing the same file from every
-    rank) are restricted to rank 0, using rank 0's local mesh partition.
+    parallel dof/cell-ownership exchanges internally), so it must be called on *every* rank,
+    outside of any rank-0-only block, regardless of whether pyvista is installed there or
+    whether rendering has failed. Only the actual pyvista grid/plotter/screenshot/gif calls
+    (which would otherwise race writing the same file from every rank, and use rank 0's local
+    mesh partition) are restricted to rank 0, each wrapped by :func:`_rank0_guarded` so a
+    rendering failure there can never leave rank 0 out of step with the other ranks.
     """
     available = True
     if comm.rank == 0:
@@ -213,9 +238,15 @@ def _visualize(
     pyvista.OFF_SCREEN = True
 
     io4dolfinx.read_function(path, v, time=times[-1], name="v")
-    grid = None
-    if comm.rank == 0:
+
+    # Rank-0-only pyvista state (grid/plotter), threaded between the guarded steps below via
+    # this dict rather than plain local variables/asserts - `ok` becoming False mid-way means
+    # a later step is simply never attempted, so these never need to exist for mypy's sake.
+    state: dict[str, Any] = {}
+
+    def render_snapshots() -> None:
         grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(v.function_space))
+        state["grid"] = grid
         grid.point_data["v"] = v.x.array
         plotter = pyvista.Plotter(off_screen=True)
         plotter.add_mesh(
@@ -245,30 +276,45 @@ def _visualize(
         plotter.close()
         logger.info(f"Activation time map snapshot saved to {activation_png}")
 
-    if conf.postprocess.make_gif:
-        io4dolfinx.read_function(path, v, time=times[0], name="v")
-        gif_path = post / "voltage.gif"
-        plotter = None
-        if comm.rank == 0:
-            assert grid is not None
-            grid.point_data["v"] = v.x.array
-            plotter = pyvista.Plotter(off_screen=True)
-            plotter.add_mesh(
-                grid,
-                scalars="v",
-                show_edges=True,
-                lighting=False,
-                cmap="viridis",
-                clim=[-90.0, 40.0],
-            )
-            plotter.open_gif(gif_path.as_posix())
-        for t in times:
-            io4dolfinx.read_function(path, v, time=t, name="v")
-            if comm.rank == 0:
-                assert grid is not None and plotter is not None
-                grid.point_data["v"] = v.x.array
-                plotter.write_frame()
-        if comm.rank == 0:
-            assert plotter is not None
-            plotter.close()
-            logger.info(f"Voltage animation saved to {gif_path}")
+    ok = _rank0_guarded(comm, True, "PNG snapshots", render_snapshots)
+    if not ok or not conf.postprocess.make_gif:
+        return
+
+    io4dolfinx.read_function(path, v, time=times[0], name="v")
+    gif_path = post / "voltage.gif"
+
+    def start_gif() -> None:
+        grid = state["grid"]
+        grid.point_data["v"] = v.x.array
+        plotter = pyvista.Plotter(off_screen=True)
+        plotter.add_mesh(
+            grid,
+            scalars="v",
+            show_edges=True,
+            lighting=False,
+            cmap="viridis",
+            clim=[-90.0, 40.0],
+        )
+        plotter.open_gif(gif_path.as_posix())
+        state["plotter"] = plotter
+
+    ok = _rank0_guarded(comm, ok, "GIF setup", start_gif)
+
+    for t in times:
+        if not ok:
+            break
+        io4dolfinx.read_function(path, v, time=t, name="v")
+
+        def write_frame(t=t) -> None:
+            state["grid"].point_data["v"] = v.x.array
+            state["plotter"].write_frame()
+
+        ok = _rank0_guarded(comm, ok, f"GIF frame at t={t}", write_frame)
+
+    if comm.rank == 0 and "plotter" in state:
+        try:
+            state["plotter"].close()
+        except Exception as e:  # noqa: BLE001 - closing is best-effort, never fatal
+            logger.warning(f"Failed to close the GIF plotter cleanly: {e!r}")
+    if ok and comm.rank == 0:
+        logger.info(f"Voltage animation saved to {gif_path}")

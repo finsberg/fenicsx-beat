@@ -1,5 +1,6 @@
 import csv
 import json
+import signal
 
 from mpi4py import MPI
 
@@ -10,6 +11,30 @@ from cli_helpers import minimal_config_dict
 from beat.cli.overrides import load_config
 from beat.cli.postprocess import run_ecg, run_post
 from beat.cli.runner import run
+
+
+class _TimedOut(Exception):
+    pass
+
+
+def _run_with_timeout(fn, *args, seconds=60, **kwargs):
+    """Run ``fn`` under a hard wall-clock timeout.
+
+    A real MPI deadlock (one rank waiting forever in a collective the others never enter)
+    would otherwise hang the whole test run; this turns it into a clear per-rank failure
+    instead. POSIX-only (``SIGALRM``), which is fine for the Linux CI/test environment.
+    """
+
+    def _on_alarm(signum, frame):
+        raise _TimedOut(f"{fn.__name__} did not return within {seconds}s (possible MPI deadlock)")
+
+    previous = signal.signal(signal.SIGALRM, _on_alarm)
+    signal.alarm(seconds)
+    try:
+        return fn(*args, **kwargs)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
 
 
 @pytest.fixture
@@ -60,6 +85,36 @@ def test_ecg_requires_points(finished):
     finished.postprocess.points = {}
     with pytest.raises(ConfigError, match="points"):
         run_ecg(finished, MPI.COMM_WORLD)
+
+
+def test_post_gif_render_failure_does_not_hang(finished, monkeypatch):
+    """A rendering failure on rank 0 (e.g. off-screen rendering on a headless node) must not
+    leave rank 0 skipping a collective ``io4dolfinx.read_function`` call that the other ranks
+    still enter - see ``beat.cli.postprocess._rank0_guarded``. Simulated here by making
+    ``pyvista.Plotter.screenshot`` raise on rank 0 only; every rank must still return from
+    ``run_post`` (no hang, no propagated exception), and the non-visualization outputs must
+    still be written.
+    """
+    pyvista = pytest.importorskip("pyvista")
+
+    finished.postprocess.make_gif = True
+    comm = MPI.COMM_WORLD
+
+    def boom(self, *args, **kwargs):
+        if comm.rank == 0:
+            raise RuntimeError("simulated headless rendering failure")
+        return None  # pragma: no cover - never reached, screenshot is only called on rank 0
+
+    monkeypatch.setattr(pyvista.Plotter, "screenshot", boom)
+
+    _run_with_timeout(run_post, finished, comm, seconds=60)
+
+    post = finished.output.folder / "post"
+    assert (post / "activation_time.bp").exists()
+    assert (post / "activation_times.json").exists()
+    assert (post / "v.bp").exists()
+    assert not (post / "voltage_final.png").exists()
+    assert not (post / "voltage.gif").exists()
 
 
 def test_post_requires_prior_run(tmp_path):
