@@ -29,7 +29,7 @@ if os.environ.get("NO_PYVISTA", "0") == "1":
     logger.warning("Turn off pyvista")
 else:
     try:
-        import pyvista  # type: ignore[no-redef]
+        import pyvista  # type: ignore[no-redef, assignment]
     except ImportError:
         pyvista = None  # type: ignore[no-redef]
         logger.warning("pyvista not installed, skipping visualization")
@@ -79,7 +79,7 @@ here = Path.cwd()
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
 if not model_path.is_file():
     here = Path.cwd()
-    ode = gotranx.load_ode(
+    cell_ode = gotranx.load_ode(
         here
         / ".."
         / "odes"
@@ -87,7 +87,7 @@ if not model_path.is_file():
         / "tentusscher_panfilov_2006_epi_cell.ode",
     )
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
@@ -133,7 +133,7 @@ if pyvista is not None:
 # ratio $\chi$, used below to build the conductivity tensor $M$.
 conductivities = beat.conductivities.default_conductivities("Niederer")
 # Membrane capacitance $C_m$
-C_m = 1.0 * beat.units.ureg("uF/cm**2")
+C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2")
 
 time_constant = dolfinx.fem.Constant(geo.mesh, 0.0)
 L = 1.5 * beat.units.ureg("mm").to(mesh_unit).magnitude
@@ -226,7 +226,7 @@ filename.with_suffix(".h5").unlink(missing_ok=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     "niederer_benchmark.bp",
-    [solver.pde.state],
+    [solver.pde.v],
     engine="BP4",
 )
 
@@ -250,7 +250,7 @@ i = 0
 if pyvista is not None:
     plotter_voltage = pyvista.Plotter()
     viridis = plt.get_cmap("viridis")
-    grid.point_data["V"] = solver.pde.state.x.array
+    grid.point_data["V"] = solver.pde.v.x.array
     grid.set_active_scalars("V")
     renderer = plotter_voltage.add_mesh(
         grid,
@@ -268,7 +268,7 @@ T = 20
 t = 0.0
 times: list[float] = []
 while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
-    v = solver.pde.state.x.array
+    v = solver.pde.v.x.array
     if i % save_freq == 0:
         logger.info(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
         if len(times) > 0:
@@ -276,13 +276,13 @@ while t < T + 1e-12 and any(at < 0.0 for at in activation_times.values()):
         logger.info(activation_times)
         vtx.write(t)
         if pyvista is not None:
-            grid.point_data["V"] = solver.pde.state.x.array
+            grid.point_data["V"] = solver.pde.v.x.array
             plotter_voltage.write_frame()
     t0 = time.perf_counter()
     solver.step((t, t + dt))
     times.append(time.perf_counter() - t0)
     for p in points:
-        value = scifem.evaluate_function(solver.pde.state, [points[p]]).squeeze()
+        value = scifem.evaluate_function(solver.pde.v, [points[p]]).squeeze()
         if value > 0.0 and activation_times[p] < 0.0:
             activation_times[p] = t
     i += 1

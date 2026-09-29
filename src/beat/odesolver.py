@@ -22,13 +22,13 @@ class ODEResults(NamedTuple):
 
 
 def solve(
-    fun: np.NDArray,
+    fun: Callable,
     t_bound: float,
-    states: np.NDArray,
-    V: np.NDArray,
+    states: npt.NDArray,
+    V: npt.NDArray,
     V_index: int,
     dt: float,
-    parameters: np.NDArray,
+    parameters: npt.NDArray,
     t0: float = 0.0,
     extra: dict[str, float | npt.NDArray] | None = None,
 ):
@@ -85,8 +85,11 @@ class BaseDolfinODESolver(abc.ABC):
     _metadata: dict[str, Any] | None = None
 
     def _initialize_metadata(self):
-        if self.v_ode.ufl_element().family_name == "Quadrature":
-            self._metadata = {"quadrature_degree": self.v_ode.ufl_element().degree()}
+        # basix.ufl names quadrature elements "quadrature" (lowercase), and
+        # `degree` is a property, not a method.
+        element = self.v_ode.ufl_element()
+        if element.family_name == "quadrature":
+            self._metadata = {"quadrature_degree": element.degree}
         else:
             self._metadata = None
 

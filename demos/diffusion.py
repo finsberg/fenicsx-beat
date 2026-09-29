@@ -56,10 +56,10 @@ I_s = beat.base_model.Stimulus(expr=S, dZ=dx, marker=S1_marker)
 time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
 
 model = beat.MonodomainModel(time=time, mesh=mesh, M=1.0, I_s=I_s, dx=dx)
-res = model.solve((0, 2.5), dt=0.1)
+model.solve((0, 2.5), dt=0.1)
 
-u_grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(res.state.function_space))
-u_grid.point_data["u"] = res.state.x.array.real
+u_grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(model.v.function_space))
+u_grid.point_data["u"] = model.v.x.array.real
 u_grid.set_active_scalars("u")
 u_plotter = pyvista.Plotter()
 u_plotter.add_mesh(u_grid, show_edges=True)

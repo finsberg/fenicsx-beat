@@ -141,9 +141,9 @@ model_path = Path("ToRORd_dynCl_endo.py")
 if not model_path.is_file():
     print("Generate code for cell model")
     here = Path.cwd()
-    ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
+    cell_ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
@@ -154,11 +154,11 @@ model = ToRORd_dynCl_endo.__dict__
 
 # Surface to volume ratio $\chi$
 
-chi = 1400.0 * beat.units.ureg("cm**-1")
+chi = beat.units.ureg.Quantity(1400.0, "cm**-1")
 
 # Membrane capacitance $C_m$
 
-C_m = 1.0 * beat.units.ureg("uF/cm**2")
+C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2")
 
 
 print("Get steady states")
@@ -249,13 +249,11 @@ M = beat.conductivities.define_conductivity_tensor(
     g_et=g_et,
 )
 
-params = {"preconditioner": "sor", "use_custom_preconditioner": False}
 pde = beat.MonodomainModel(
     time=time,
     mesh=data.mesh,
     M=M,
     I_s=I_s,
-    params=params,
     C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
 )
 
@@ -284,7 +282,7 @@ shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
-    [solver.pde.state],
+    [solver.pde.v],
     engine="BP4",
     mesh_policy=VTXMeshPolicy.reuse,
 )
@@ -293,10 +291,10 @@ io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
-    v = solver.pde.state.x.array
+    v = solver.pde.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
 
 
 i = 0

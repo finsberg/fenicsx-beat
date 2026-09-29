@@ -69,6 +69,7 @@ geo = cardiac_geometries.geometry.Geometry.from_folder(
     comm=comm,
     folder=geodir,
 )
+assert geo.ffun is not None, "The geometry is expected to have facet tags"
 
 # Let us plot the geometry
 
@@ -134,9 +135,9 @@ model_path = Path("ToRORd_dynCl_endo.py")
 if not model_path.is_file():
     print("Generate code for cell model")
     here = Path.cwd()
-    ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
+    cell_ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
-        ode,
+        cell_ode,
         scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
@@ -242,7 +243,7 @@ v_index = {
 # capacitance is set to 1 uF/cm^2.
 
 conductivities = beat.conductivities.default_conductivities("Bishop")
-C_m = 1.0 * beat.units.ureg("uF/cm**2")
+C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2")
 print(conductivities)
 
 # From this we can create the conductivity tensor $M$ given the fiber orientations.
@@ -311,7 +312,7 @@ shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
-    [solver.pde.state],
+    [solver.pde.v],
     engine="BP4",
 )
 io4dolfinx.write_mesh(checkpointfname, geo.mesh)
@@ -320,10 +321,10 @@ io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 
 def save(t):
-    v = solver.pde.state.x.array
+    v = solver.pde.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.pde.state, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
 
 
 # We will save results every 1 ms

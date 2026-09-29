@@ -47,15 +47,15 @@ class IrksomeODESolver(BaseDolfinODESolver):
         self.states = dolfinx.fem.Function(self.W, name="ode_states")
 
         # Map and initialize the starting states from the underlying arrays
-        self._maps = []
+        self._maps: list[np.ndarray] = []
         for i in range(num_states):
             _, map_i = self.W.sub(i).collapse()
             # dolfinx's collapse() returns the dof map wrapped in a length-1 list; unwrap it
             # to a flat array so downstream indexing (including boolean masks) works as expected.
-            map_i = np.asarray(map_i).reshape(-1)
-            self._maps.append(map_i)
+            dofs = np.asarray(map_i).reshape(-1)
+            self._maps.append(dofs)
             if init_states is not None:
-                self.states.x.array[map_i] = init_states[i, :]
+                self.states.x.array[dofs] = init_states[i, :]
 
         # Setup the UFL weak form for the ODE system
         w = ufl.TestFunctions(self.W)
@@ -89,8 +89,8 @@ class IrksomeODESolver(BaseDolfinODESolver):
 
     def step(self, t0: float, dt: float) -> None:
         with self.monitor.track_time("ode_total_step"):
-            self.time.value = t0
-            self.dt.value = dt
+            self.time.value = t0  # type: ignore[assignment]
+            self.dt.value = dt  # type: ignore[assignment]
             self.stepper.advance()
 
     def to_dolfin(self) -> None:
@@ -196,16 +196,16 @@ class IrksomeMultiODESolver(BaseDolfinODESolver):
             W = dolfinx.fem.functionspace(mesh, mixed_el)
             states = dolfinx.fem.Function(W, name=f"ode_states_{marker}")
 
-            maps = []
+            maps: list[np.ndarray] = []
             for i in range(n):
                 _, map_i = W.sub(i).collapse()
                 # collapse() wraps the dof map in a length-1 list; unwrap to a flat array so
                 # downstream indexing (including boolean masks) works as expected.
-                map_i = np.asarray(map_i).reshape(-1)
-                maps.append(map_i)
+                dofs = np.asarray(map_i).reshape(-1)
+                maps.append(dofs)
                 full = np.zeros(where.shape)
                 full[where] = values[i, :]
-                states.x.array[map_i] = full
+                states.x.array[dofs] = full
             self._maps[marker] = maps
             self._states[marker] = states
 
@@ -251,10 +251,10 @@ class IrksomeMultiODESolver(BaseDolfinODESolver):
 
     def step(self, t0: float, dt: float) -> None:
         with self.monitor.track_time("ode_total_step"):
-            self.time.value = t0
+            self.time.value = t0  # type: ignore[assignment]
             for marker in self._marker_values:
                 with self.monitor.track_time(f"marker_{marker}_ode_step"):
-                    self._dt[marker].value = dt
+                    self._dt[marker].value = dt  # type: ignore[assignment]
                     self._steppers[marker].advance()
 
     def to_dolfin(self) -> None:

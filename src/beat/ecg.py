@@ -98,8 +98,8 @@ def detect_t_end(
         # return None
 
     # Find T-peak index within the segment (relative to segment start)
-    t_peak_index_relative = np.argmax(
-        np.abs(signal_segment),
+    t_peak_index_relative = int(
+        np.argmax(np.abs(signal_segment)),
     )  # Find peak of T-wave (can be positive or negative)
 
     # Search for T-end after the T-peak

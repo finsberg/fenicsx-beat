@@ -4,4 +4,6 @@ FROM ghcr.io/fenics/dolfinx/lab:stable
 COPY . /repo
 WORKDIR /repo
 
+RUN python3 -m pip install --group build
+RUN python3 -m pip install scifem --no-build-isolation
 RUN python3 -m pip install ".[demos]"

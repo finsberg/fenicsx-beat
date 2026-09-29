@@ -23,6 +23,7 @@ parts:
     chapters:
     - file: demos/verification.py
     - file: demos/monodomain_convergence.py
+    - file: demos/bidomain_convergence.py
 
   - caption: Advanced topics
     chapters:

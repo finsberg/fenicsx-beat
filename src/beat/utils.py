@@ -23,6 +23,56 @@ def interpolation_points(V):
         return V.element.interpolation_points()
 
 
+def real_function_space(mesh: dolfinx.mesh.Mesh) -> dolfinx.fem.FunctionSpace:
+    """A scalar space holding a single global degree of freedom.
+
+    dolfinx supports real spaces natively from 0.11; before that, ``basix.ufl.real_element``
+    exists but cannot be compiled into a function space, so fall back to scifem's
+    implementation.
+
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        The mesh the space is defined on
+
+    Returns
+    -------
+    dolfinx.fem.FunctionSpace
+        The real function space
+    """
+    if _dolfinx_version >= Version("0.11"):
+        return dolfinx.fem.functionspace(
+            mesh,
+            basix.ufl.real_element(mesh.basix_cell(), value_shape=()),
+        )
+    else:
+        import scifem
+
+        return scifem.create_real_functionspace(mesh, value_shape=())
+
+
+def cpp_function_space(V):
+    """The C++ function space behind ``V``, whichever wrapper ``V`` arrives in.
+
+    Some dolfinx APIs return the Python ``FunctionSpace`` and others the C++ space it
+    wraps; ``DirichletBC.function_space`` has returned each of them in different releases.
+    Comparisons such as ``contains`` are only defined between two C++ spaces, so bring
+    both sides down to that one shape rather than assuming either.
+
+    Parameters
+    ----------
+    V : dolfinx.fem.FunctionSpace | dolfinx.cpp.fem.FunctionSpace
+        The function space, in either wrapper
+
+    Returns
+    -------
+    dolfinx.cpp.fem.FunctionSpace
+        The C++ function space
+
+    """
+    return getattr(V, "_cpp_object", V)
+
+
 def local_project(
     v: dolfinx.fem.Function,
     V: dolfinx.fem.FunctionSpace,
@@ -63,13 +113,14 @@ def parse_element(space_string: str, mesh: dolfinx.mesh.Mesh, dim: int) -> basix
     Parse a string representation of a basix element family
     """
     family_str, degree_str = space_string.split("_")
-    kwargs = {"degree": int(degree_str), "cell": mesh.basix_cell()}
+    kwargs: dict[str, Any] = {"degree": int(degree_str), "cell": mesh.basix_cell()}
     if dim > 1:
         if family_str in ["Quadrature", "Q", "Quad"]:
             kwargs["value_shape"] = (dim,)
         else:
             kwargs["shape"] = (dim,)
 
+    el: basix.ufl._ElementBase
     if family_str in ["Lagrange", "P", "CG"]:
         el = basix.ufl.element(family=basix.ElementFamily.P, discontinuous=False, **kwargs)
     elif family_str in ["Discontinuous Lagrange", "DG", "dP"]:

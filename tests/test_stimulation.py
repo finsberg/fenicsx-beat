@@ -244,6 +244,7 @@ def test_convert_chi(value, mesh_unit, expected_value):
         (1, 2.0, 2.0 * beat.units.ureg("uA / cm")),
         (2, 2.0, 2.0 * beat.units.ureg("uA / cm**2")),
         (3, 2.0, 2.0 * beat.units.ureg("uA / cm**3")),
+        (3, 2.0 * beat.units.ureg("uA / mm**3"), 2.0 * beat.units.ureg("uA / mm**3")),
     ],
 )
 def test_convert_amplitude(effective_dim, amplitude, expected_value):
