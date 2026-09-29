@@ -142,3 +142,77 @@ def test_geometry_command(cfg, tmp_path):
 def test_dry_run(cfg, tmp_path):
     assert main(["--dry-run", "run", str(cfg)]) == 0
     assert not (tmp_path / "output").exists()
+
+
+def test_unexpected_exception_exit_2(cfg, monkeypatch, caplog):
+    """Anything that isn't a ConfigError/SolverFailure (gmsh, io4dolfinx, OSError, ...) is a
+    runtime failure: exit 2 with a one-line error, never a traceback exiting 1."""
+    import beat.cli.runner as runner
+
+    def boom(*a, **k):
+        raise AssertionError("io4dolfinx says no")
+
+    monkeypatch.setattr(runner, "run", boom)
+    assert main(["run", str(cfg)]) == 2
+    assert "AssertionError: io4dolfinx says no" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["run"], ["run", "c.toml", "--no-such-flag"], ["nope"], []],
+)
+def test_usage_errors_exit_1(argv):
+    assert main(argv) == 1
+
+
+def test_help_exits_0():
+    assert main(["run", "--help"]) == 0
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["-v", "--log-all-cpus", "validate-config", "CFG"],
+        ["validate-config", "CFG", "-v", "--log-all-cpus"],
+        ["-v", "validate-config", "CFG", "--log-all-cpus"],
+    ],
+)
+def test_global_flags_before_or_after_subcommand(cfg, monkeypatch, argv):
+    import beat.cli as cli
+
+    seen = {}
+
+    def fake_setup_logging(level, log_all_cpus, comm):
+        seen.update(level=level, log_all_cpus=log_all_cpus)
+
+    monkeypatch.setattr(cli, "setup_logging", fake_setup_logging)
+    assert main([str(cfg) if a == "CFG" else a for a in argv]) == 0
+    assert seen == {"level": logging.DEBUG, "log_all_cpus": True}
+
+
+def test_global_flags_default_off(cfg, monkeypatch):
+    import beat.cli as cli
+
+    seen = {}
+    monkeypatch.setattr(cli, "setup_logging", lambda **kw: seen.update(kw))
+    assert main(["validate-config", str(cfg)]) == 0
+    assert seen["level"] == logging.INFO and seen["log_all_cpus"] is False
+
+
+def test_missing_cli_extra_prints_install_hint(cfg, monkeypatch, caplog):
+    import beat.cli as cli
+
+    monkeypatch.setattr(cli, "_CLI_EXTRA_MODULES", ("no_such_module_xyz",))
+    assert main(["validate-config", str(cfg)]) == 1
+    assert 'pip install "fenicsx-beat[cli]"' in caplog.text
+
+
+def test_missing_cli_extra_module_at_runtime_prints_install_hint(cfg, monkeypatch, caplog):
+    import beat.cli.runner as runner
+
+    def boom(*a, **k):
+        raise ModuleNotFoundError("No module named 'gotranx'", name="gotranx")
+
+    monkeypatch.setattr(runner, "run", boom)
+    assert main(["run", str(cfg)]) == 1
+    assert 'pip install "fenicsx-beat[cli]"' in caplog.text

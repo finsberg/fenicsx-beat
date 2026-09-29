@@ -4,8 +4,10 @@ Requires the ``cli`` extra: ``pip install "fenicsx-beat[cli]"``.
 """
 
 import argparse
+import importlib.util
 import logging
 import shutil
+import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -17,6 +19,33 @@ logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 EXIT_OK, EXIT_CONFIG, EXIT_RUNTIME = 0, 1, 2
+
+# Top-level modules of the ``cli`` extra (see pyproject.toml).
+_CLI_EXTRA_MODULES = (
+    "pydantic",
+    "pydantic_pint",
+    "toml",
+    "cardiac_geometries",
+    "gotranx",
+    "io4dolfinx",
+)
+_INSTALL_HINT = 'The beat CLI needs the "cli" extra: pip install "fenicsx-beat[cli]"'
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser whose usage errors exit with EXIT_CONFIG (1), not argparse's 2.
+
+    Exit code 2 is reserved for runtime/solver failures, so a job script branching on the exit
+    code must not mistake a typo on the command line for a failed simulation.
+    """
+
+    def error(self, message: str):  # type: ignore[override]
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_CONFIG, f"{self.prog}: error: {message}\n")
+
+
+def _missing_cli_extra(e: ImportError) -> bool:
+    return (getattr(e, "name", None) or "").split(".")[0] in _CLI_EXTRA_MODULES
 
 
 def _available_templates() -> list[str]:
@@ -38,19 +67,42 @@ def _add_config_args(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_global_args(p: argparse.ArgumentParser, default: object) -> None:
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=default,
+        help="Print the command, do not run",
+    )
+    p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=default,
+        help="Print more information",
+    )
+    p.add_argument("--log-all-cpus", action="store_true", default=default, help="Log on all ranks")
+
+
 def setup_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _ArgumentParser(
         prog="beat",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--dry-run", action="store_true", help="Print the command, do not run")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Print more information")
-    parser.add_argument("--log-all-cpus", action="store_true", help="Log on all ranks")
+    _add_global_args(parser, default=False)
+    # The same flags are accepted after the subcommand too (``beat run cfg.toml -v``). SUPPRESS
+    # as the subparsers' default, so a flag given *before* the subcommand isn't reset to False
+    # by the subparser's own default.
+    common = _ArgumentParser(add_help=False)
+    _add_global_args(common, default=argparse.SUPPRESS)
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("version", help="Display version information")
+    def add_parser(name: str, **kwargs) -> argparse.ArgumentParser:
+        return sub.add_parser(name, parents=[common], **kwargs)
 
-    init = sub.add_parser("init", help="Write a starter config from a template")
+    add_parser("version", help="Display version information")
+
+    init = add_parser("init", help="Write a starter config from a template")
     init.add_argument("config", type=Path, nargs="?", default=Path("config.toml"))
     init.add_argument(
         "--template",
@@ -59,13 +111,13 @@ def setup_parser() -> argparse.ArgumentParser:
     )
     init.add_argument("--force", action="store_true", help="Overwrite existing files")
 
-    validate = sub.add_parser("validate-config", help="Validate and print the resolved config")
+    validate = add_parser("validate-config", help="Validate and print the resolved config")
     _add_config_args(validate)
 
-    geometry = sub.add_parser("geometry", help="Only generate/load the geometry")
+    geometry = add_parser("geometry", help="Only generate/load the geometry")
     _add_config_args(geometry)
 
-    run = sub.add_parser("run", help="Run a simulation")
+    run = add_parser("run", help="Run a simulation")
     _add_config_args(run)
     run.add_argument("--restart", action="store_true", help="Continue from the last checkpoint")
     run.add_argument("--overwrite", action="store_true", help="Replace existing results")
@@ -85,7 +137,7 @@ def setup_parser() -> argparse.ArgumentParser:
         ("ecg", "Recover the pseudo-ECG at [postprocess.points]"),
         ("post", "Activation times, VTX conversion and visualizations"),
     ):
-        p = sub.add_parser(name, help=help_)
+        p = add_parser(name, help=help_)
         _add_config_args(p)
         p.add_argument("--output-folder", type=Path, default=None)
     return parser
@@ -187,8 +239,12 @@ def _dispatch(args: dict, comm) -> None:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    """Entry point of ``beat``; returns the exit code (0 ok, 1 config/usage, 2 runtime)."""
     parser = setup_parser()
-    args = vars(parser.parse_args(argv))
+    try:
+        args = vars(parser.parse_args(argv))
+    except SystemExit as e:  # usage error (-> EXIT_CONFIG, see _ArgumentParser) or --help
+        return e.code if isinstance(e.code, int) else EXIT_CONFIG
     comm = MPI.COMM_WORLD
     setup_logging(
         level=logging.DEBUG if args.pop("verbose") else logging.INFO,
@@ -198,6 +254,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.pop("dry_run"):
         logger.info("Dry run: %s %s", args["command"], args)
         return EXIT_OK
+
+    missing = [m for m in _CLI_EXTRA_MODULES if importlib.util.find_spec(m) is None]
+    if missing:
+        logger.error(f"{_INSTALL_HINT} (missing: {', '.join(missing)})")
+        return EXIT_CONFIG
 
     from .config import ConfigError
     from .runner import SolverFailure
@@ -209,6 +270,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return EXIT_CONFIG
     except SolverFailure as e:
         logger.error(f"Simulation failed: {e}")
+        return EXIT_RUNTIME
+    except ImportError as e:
+        if _missing_cli_extra(e):
+            logger.error(f"{_INSTALL_HINT} ({e})")
+            return EXIT_CONFIG
+        logger.error(f"{type(e).__name__}: {e}")
+        logger.debug("Traceback:", exc_info=True)
+        return EXIT_RUNTIME
+    except Exception as e:  # noqa: BLE001 - any other failure is a runtime failure (exit 2)
+        logger.error(f"{type(e).__name__}: {e} (run with -v for the traceback)")
+        logger.debug("Traceback:", exc_info=True)
         return EXIT_RUNTIME
     return EXIT_OK
 
