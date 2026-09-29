@@ -43,6 +43,22 @@ def test_quantity_without_unit_is_rejected(tmp_path):
         Config.model_validate(base(tmp_path, solver={"dt": 0.1, "end_time": "1 ms"}))
 
 
+def test_geometry_invalid_unit_string_is_rejected(tmp_path):
+    with pytest.raises(ValidationError, match="valid unit"):
+        Config.model_validate(
+            base(
+                tmp_path,
+                geometry={"type": "rectangle", "lx": 1.0, "ly": 1.0, "dx": 0.25, "unit": "banana"},
+            ),
+        )
+
+
+def test_stimulus_invalid_unit_string_is_rejected(tmp_path):
+    stim = {"type": "marker", "marker": "X0", "amplitude": "5 banana"}
+    with pytest.raises(ValidationError, match="valid quantity"):
+        Config.model_validate(base(tmp_path, stimulus=[stim]))
+
+
 def test_end_time_or_beats_exactly_one(tmp_path):
     with pytest.raises(ValidationError, match="exactly one"):
         Config.model_validate(base(tmp_path, solver={"dt": "0.1 ms"}))

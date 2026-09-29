@@ -8,6 +8,7 @@ import math
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
 
+import pint
 from pint import Quantity
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_pint import PydanticPintQuantity, set_registry
@@ -29,6 +30,22 @@ class ConfigError(ValueError):
 
 def ms(q: Quantity) -> float:
     return float(q.to("ms").magnitude)
+
+
+def _q(default: str) -> Quantity:
+    """Type-only cast for a pint-quantity field's string-literal default.
+
+    Every ``Time``/``SigmaQ``/``InvLength``/``Capacitance`` field is statically typed as
+    ``pint.Quantity`` (via ``PydanticPintQuantity``), but its convenient default is a plain
+    ``"<value> <unit>"`` string; pydantic-pint parses that string into a real ``Quantity`` at
+    validation time because every model here sets ``validate_default=True``. mypy can't see
+    through that runtime conversion, so this helper centralizes the one necessary lie ("this
+    string is already a Quantity") in a single documented place instead of scattering
+    ``# type: ignore`` comments across every field declaration. Always use it through
+    ``default_factory=lambda: _q(...)`` (not ``default=_q(...)``) so each model instance gets
+    its own validated value.
+    """
+    return default  # type: ignore[return-value]
 
 
 class _Base(BaseModel):
@@ -58,16 +75,20 @@ FibersConfig = Annotated[
 
 
 class _GeometryBase(_Base):
-    unit: str = Field("mm", description="Length unit of the mesh coordinates")
+    unit: str = Field(default="mm", description="Length unit of the mesh coordinates")
     folder: Path = Field(
-        Path("geometry"),
+        default=Path("geometry"),
         description="type=folder: folder to read. Generated types: cache folder for the mesh",
     )
 
     @field_validator("unit")
     @classmethod
     def _is_length(cls, v: str) -> str:
-        if ureg.Quantity(1, v).dimensionality != ureg.Quantity(1, "m").dimensionality:
+        try:
+            dim = ureg.Quantity(1, v).dimensionality
+        except pint.errors.PintError as e:
+            raise ValueError(f"geometry.unit must be a valid unit, got {v!r}: {e}") from e
+        if dim != ureg.Quantity(1, "m").dimensionality:
             raise ValueError(f"geometry.unit must be a length unit, got {v!r}")
         return v
 
@@ -82,16 +103,16 @@ class FolderGeometry(_GeometryBase):
 
 class IntervalGeometry(_GeometryBase):
     type: Literal["interval"] = "interval"
-    length: float = Field(10.0, gt=0, description="Cable length (geometry.unit)")
-    dx: float = Field(0.1, gt=0, description="Element size (geometry.unit)")
+    length: float = Field(default=10.0, gt=0, description="Cable length (geometry.unit)")
+    dx: float = Field(default=0.1, gt=0, description="Element size (geometry.unit)")
     fibers: FibersConfig = Field(default_factory=IsotropicFibers)
 
 
 class RectangleGeometry(_GeometryBase):
     type: Literal["rectangle"] = "rectangle"
-    lx: float = Field(1.0, gt=0)
-    ly: float = Field(1.0, gt=0)
-    dx: float = Field(0.05, gt=0)
+    lx: float = Field(default=1.0, gt=0)
+    ly: float = Field(default=1.0, gt=0)
+    dx: float = Field(default=0.05, gt=0)
     fibers: FibersConfig = Field(default_factory=IsotropicFibers)
 
 
@@ -99,10 +120,10 @@ class BoxSlabGeometry(_GeometryBase):
     """Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed."""
 
     type: Literal["box_slab"] = "box_slab"
-    lx: float = Field(20.0, gt=0)
-    ly: float = Field(7.0, gt=0)
-    lz: float = Field(3.0, gt=0)
-    dx: float = Field(0.5, gt=0)
+    lx: float = Field(default=20.0, gt=0)
+    ly: float = Field(default=7.0, gt=0)
+    lz: float = Field(default=3.0, gt=0)
+    dx: float = Field(default=0.5, gt=0)
     fibers: FibersConfig = Field(default_factory=AxisFibers)
 
 
@@ -170,7 +191,7 @@ GeometryConfig = Annotated[
 
 class ConductivityConfig(_Base):
     preset: Literal["Niederer", "Bishop"] | None = Field(
-        None,
+        default=None,
         description="Literature set from beat.conductivities.default_conductivities; "
         "explicit sigma_* override it field by field",
     )
@@ -193,25 +214,23 @@ class ConductivityConfig(_Base):
 
 class EPConfig(_Base):
     chi: InvLength = Field(
-        default="1400 cm**-1",  # type: ignore[arg-type]
+        default_factory=lambda: _q("1400 cm**-1"),
         description="Surface to volume ratio",
     )
     C_m: Capacitance = Field(
-        default="1 uF/cm**2",  # type: ignore[arg-type]
+        default_factory=lambda: _q("1 uF/cm**2"),
         description="Membrane capacitance",
     )
-    conductivity: ConductivityConfig = Field(
-        default_factory=ConductivityConfig,  # type: ignore[arg-type]
-    )
+    conductivity: ConductivityConfig = Field(default_factory=ConductivityConfig)
 
 
 # --- cell model -------------------------------------------------------------------------
 
 
 class SteadyStateConfig(_Base):
-    num_beats: int = Field(20, ge=1)
-    BCL: Time = "1000 ms"  # type: ignore[assignment]
-    dt: Time = "0.05 ms"  # type: ignore[assignment]
+    num_beats: int = Field(default=20, ge=1)
+    BCL: Time = Field(default_factory=lambda: _q("1000 ms"))
+    dt: Time = Field(default_factory=lambda: _q("0.05 ms"))
     track: list[str] = Field(default_factory=list, description="States to record")
 
 
@@ -221,10 +240,10 @@ class NoLayers(_Base):
 
 class TransmuralLayers(_Base):
     method: Literal["transmural"] = "transmural"
-    endo_size: float = Field(0.3, ge=0, le=1)
-    epi_size: float = Field(0.3, ge=0, le=1)
+    endo_size: float = Field(default=0.3, ge=0, le=1)
+    epi_size: float = Field(default=0.3, ge=0, le=1)
     endo_markers: list[str] | None = Field(
-        None,
+        default=None,
         description='Facet markers of the endocardium. Default: ["ENDO"] if present, '
         'else ["LV", "RV"] (BiV)',
     )
@@ -260,10 +279,10 @@ class RegionConfig(_Base):
 class CellConfig(_Base):
     ode_file: Path = Field(description="Path to the gotranx .ode cell model")
     scheme: str = "generalized_rush_larsen"
-    v_name: str = Field("v", description="Name of the transmembrane potential state")
+    v_name: str = Field(default="v", description="Name of the transmembrane potential state")
     parameters: dict[str, float] = Field(default_factory=dict)
     steady_state: SteadyStateConfig | None = Field(
-        None,
+        default=None,
         description="If set, pre-pace a single cell to steady state before the tissue run",
     )
     layers: LayersConfig = Field(default_factory=NoLayers)
@@ -296,7 +315,10 @@ class CellConfig(_Base):
 
 
 def _check_current_density(v: str) -> str:
-    q = ureg.Quantity(v)
+    try:
+        q = ureg.Quantity(v)
+    except pint.errors.PintError as e:
+        raise ValueError(f"amplitude must be a valid quantity, got {v!r}: {e}") from e
     current = ureg.Quantity(1, "uA").dimensionality
     for k in (1, 2, 3):
         if q.dimensionality == current / ureg.Quantity(1, "cm").dimensionality ** k:
@@ -309,11 +331,11 @@ class _StimulusBase(_Base):
         description="Current density (uA/cm, uA/cm**2 or uA/cm**3 for a 1D/2D/3D stimulus "
         "domain), see beat.stimulation.define_stimulus",
     )
-    duration: Time = "2 ms"  # type: ignore[assignment]
-    start: Time = "0 ms"  # type: ignore[assignment]
-    period: Time | None = Field(None, description="If set, repeat the pulse every period")
+    duration: Time = Field(default_factory=lambda: _q("2 ms"))
+    start: Time = Field(default_factory=lambda: _q("0 ms"))
+    period: Time | None = Field(default=None, description="If set, repeat the pulse every period")
     num_pulses: int | None = Field(
-        None,
+        default=None,
         ge=1,
         description="Number of pulses (requires period). Default: until the end time",
     )
@@ -362,10 +384,12 @@ class BoxStimulus(_StimulusBase):
 class RandomEndocardialStimulus(_StimulusBase):
     type: Literal["random_endocardial"] = "random_endocardial"
     markers: list[str] = Field(default_factory=lambda: ["LV", "RV"])
-    num_points: int = Field(200, ge=1)
-    delay_range: tuple[Time, Time] = ("0 ms", "4 ms")  # type: ignore[assignment]
+    num_points: int = Field(default=200, ge=1)
+    delay_range: tuple[Time, Time] = Field(
+        default_factory=lambda: (_q("0 ms"), _q("4 ms")),
+    )
     seed: int = 0
-    tol: float = Field(1.0, gt=0, description="Radius around each point (geometry.unit)")
+    tol: float = Field(default=1.0, gt=0, description="Radius around each point (geometry.unit)")
 
 
 StimulusConfig = Annotated[
@@ -378,14 +402,14 @@ StimulusConfig = Annotated[
 
 class ThetaPDE(_Base):
     type: Literal["theta"] = "theta"
-    theta: float = Field(0.5, ge=0, le=1, description="PDE theta-scheme parameter")
+    theta: float = Field(default=0.5, ge=0, le=1, description="PDE theta-scheme parameter")
     linear_solver: Literal["direct", "iterative"] = "direct"
 
 
 class IrksomePDE(_Base):
     type: Literal["irksome"] = "irksome"
-    tableau: str = Field("RadauIIA", description="Irksome Butcher tableau class name")
-    stages: int = Field(1, ge=1)
+    tableau: str = Field(default="RadauIIA", description="Irksome Butcher tableau class name")
+    stages: int = Field(default=1, ge=1)
     linear_solver: Literal["direct", "iterative"] = "direct"
 
 
@@ -399,7 +423,7 @@ class DolfinODE(_Base):
 class IrksomeODE(_Base):
     type: Literal["irksome"] = "irksome"
     tableau: str = "RadauIIA"
-    stages: int = Field(1, ge=1)
+    stages: int = Field(default=1, ge=1)
 
 
 class ExternalOperatorODE(_Base):
@@ -413,12 +437,12 @@ ODEBackendConfig = Annotated[
 
 
 class SolverConfig(_Base):
-    dt: Time = "0.05 ms"  # type: ignore[assignment]
-    theta: float = Field(1.0, ge=0, le=1, description="Splitting: 1.0 Godunov, 0.5 Strang")
+    dt: Time = Field(default_factory=lambda: _q("0.05 ms"))
+    theta: float = Field(default=1.0, ge=0, le=1, description="Splitting: 1.0 Godunov, 0.5 Strang")
     end_time: Time | None = None
-    num_beats: int | None = Field(None, ge=1)
+    num_beats: int | None = Field(default=None, ge=1)
     BCL: Time | None = None
-    pde: PDEConfig = Field(default_factory=ThetaPDE)  # type: ignore[arg-type]
+    pde: PDEConfig = Field(default_factory=ThetaPDE)
     ode: ODEBackendConfig = Field(default_factory=DolfinODE)
     petsc_options: dict[str, str | int | float | bool] = Field(default_factory=dict)
 
@@ -444,14 +468,14 @@ class SolverConfig(_Base):
 
 class OutputConfig(_Base):
     folder: Path = Path("output")
-    save_every: Time = "1 ms"  # type: ignore[assignment]
+    save_every: Time = Field(default_factory=lambda: _q("1 ms"))
     fields: list[str] = Field(default_factory=list, description="Extra ODE states to save")
     checkpoint_every: Time = Field(
-        default="0 ms",  # type: ignore[arg-type]
+        default_factory=lambda: _q("0 ms"),
         description="Restart checkpoint interval; 0 = end only",
     )
     performance: bool = False
-    log_every: int = Field(100, ge=1)
+    log_every: int = Field(default=100, ge=1)
 
 
 class PostprocessConfig(_Base):
@@ -468,7 +492,7 @@ class Config(_Base):
     cell: CellConfig
     stimulus: list[StimulusConfig] = Field(default_factory=list)
     solver: SolverConfig
-    output: OutputConfig = Field(default_factory=OutputConfig)  # type: ignore[arg-type]
+    output: OutputConfig = Field(default_factory=OutputConfig)
     postprocess: PostprocessConfig = Field(default_factory=PostprocessConfig)
 
     @model_validator(mode="after")
