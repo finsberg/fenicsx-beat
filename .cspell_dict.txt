@@ -31,12 +31,14 @@ capsys
 cardiomyocytes
 carputils
 cbcbeat
+cellmodel
 cellname
 cfun
 Chiara
 Clermont
 clim
 cmap
+codegen
 cofac
 Courtemanche
 cpus
@@ -196,6 +198,7 @@ stim
 Strang
 subplus
 Sundnes
+tdim
 tentusscher
 Terje
 timestep
