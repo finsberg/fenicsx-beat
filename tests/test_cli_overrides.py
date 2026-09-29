@@ -196,3 +196,18 @@ def test_physics_hash_missing_ode_file_errors(cfg_file):
     conf.cell.ode_file.unlink()
     with pytest.raises(ConfigError, match="not found"):
         physics_hash(conf)
+
+
+def test_physics_hash_ignores_bcl(tmp_path):
+    """solver.BCL only sets the run length (end = num_beats * BCL); it paces nothing, so it's
+    excluded from the physics hash like end_time/num_beats."""
+    by_time = tmp_path / "by_time.toml"
+    by_time.write_text(toml.dumps(minimal_config_dict(tmp_path)))
+    data = minimal_config_dict(tmp_path)
+    data["solver"] = {"dt": "0.1 ms", "num_beats": 2, "BCL": "0.15 ms"}
+    by_beats = tmp_path / "by_beats.toml"
+    by_beats.write_text(toml.dumps(data))
+    a = load_config(by_time, environ={})
+    b = load_config(by_beats, environ={})
+    c = load_config(by_beats, environ={}, sets=['solver.BCL="0.5 ms"'])
+    assert physics_hash(a) == physics_hash(b) == physics_hash(c)

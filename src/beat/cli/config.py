@@ -6,7 +6,7 @@ tests. Everything with a physical unit is a pint quantity (``"<value> <unit>"`` 
 
 import math
 from pathlib import Path
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union
 
 import pint
 from pint import Quantity
@@ -78,7 +78,8 @@ class _GeometryBase(_Base):
     unit: str = Field(default="mm", description="Length unit of the mesh coordinates")
     folder: Path = Field(
         default=Path("geometry"),
-        description="type=folder: folder to read. Generated types: cache folder for the mesh",
+        description="type=folder: folder to read. Generated types (slab, lv_ellipsoid, "
+        "biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder",
     )
 
     @field_validator("unit")
@@ -314,22 +315,33 @@ class CellConfig(_Base):
 # --- stimulus ---------------------------------------------------------------------------
 
 
-def _check_current_density(v: str) -> str:
+def _check_current_density(v: str, dims: tuple[int, ...] = (2, 3)) -> str:
+    """Check ``v`` is a current per length**k for some k in ``dims``.
+
+    The effective stimulus dimension (see ``beat.stimulation.compute_effective_dim``) is only
+    ever 2 (a facet marker) or 3 (a cell marker, box or random_endocardial), so a current per
+    length (k = 1) is never valid.
+    """
     try:
         q = ureg.Quantity(v)
     except pint.errors.PintError as e:
         raise ValueError(f"amplitude must be a valid quantity, got {v!r}: {e}") from e
     current = ureg.Quantity(1, "uA").dimensionality
-    for k in (1, 2, 3):
+    for k in dims:
         if q.dimensionality == current / ureg.Quantity(1, "cm").dimensionality ** k:
             return v
-    raise ValueError(f"amplitude must be a current density (e.g. uA/cm**2), got {v!r}")
+    expected = " or ".join(f"uA/cm**{k}" for k in dims)
+    raise ValueError(f"amplitude must be a current density (e.g. {expected}), got {v!r}")
 
 
 class _StimulusBase(_Base):
+    # Allowed length exponents of the amplitude's current density (see _check_current_density).
+    _amplitude_dims: ClassVar[tuple[int, ...]] = (2, 3)
+
     amplitude: str = Field(
-        description="Current density (uA/cm, uA/cm**2 or uA/cm**3 for a 1D/2D/3D stimulus "
-        "domain), see beat.stimulation.define_stimulus",
+        description="Current density: uA/cm**2 for a marker stimulus on a facet marker, "
+        "uA/cm**3 for a marker stimulus on a cell marker and for box/random_endocardial "
+        "stimuli (any mesh dimension); see beat.stimulation.define_stimulus",
     )
     duration: Time = Field(default_factory=lambda: _q("2 ms"))
     start: Time = Field(default_factory=lambda: _q("0 ms"))
@@ -343,7 +355,7 @@ class _StimulusBase(_Base):
     @field_validator("amplitude")
     @classmethod
     def _amp(cls, v: str) -> str:
-        return _check_current_density(v)
+        return _check_current_density(v, cls._amplitude_dims)
 
     @model_validator(mode="after")
     def _check_train(self) -> "_StimulusBase":
@@ -368,6 +380,8 @@ class MarkerStimulus(_StimulusBase):
 
 
 class BoxStimulus(_StimulusBase):
+    _amplitude_dims: ClassVar[tuple[int, ...]] = (3,)  # always volumetric
+
     type: Literal["box"] = "box"
     min: list[float]
     max: list[float]
@@ -382,6 +396,8 @@ class BoxStimulus(_StimulusBase):
 
 
 class RandomEndocardialStimulus(_StimulusBase):
+    _amplitude_dims: ClassVar[tuple[int, ...]] = (3,)  # always volumetric
+
     type: Literal["random_endocardial"] = "random_endocardial"
     markers: list[str] = Field(default_factory=lambda: ["LV", "RV"], min_length=1)
     num_points: int = Field(default=200, ge=1)
@@ -439,9 +455,20 @@ ODEBackendConfig = Annotated[
 class SolverConfig(_Base):
     dt: Time = Field(default_factory=lambda: _q("0.05 ms"))
     theta: float = Field(default=1.0, ge=0, le=1, description="Splitting: 1.0 Godunov, 0.5 Strang")
-    end_time: Time | None = None
-    num_beats: int | None = Field(default=None, ge=1)
-    BCL: Time | None = None
+    end_time: Time | None = Field(
+        default=None,
+        description="Simulated end time. Give either this or num_beats and BCL",
+    )
+    num_beats: int | None = Field(
+        default=None,
+        ge=1,
+        description="Run length in beats: end time = num_beats x BCL",
+    )
+    BCL: Time | None = Field(
+        default=None,
+        description="Basic cycle length, only used for the run length (num_beats x BCL). It "
+        "does not pace anything: set a [[stimulus]] period for that",
+    )
     pde: PDEConfig = Field(default_factory=ThetaPDE)
     ode: ODEBackendConfig = Field(default_factory=DolfinODE)
     petsc_options: dict[str, str | int | float | bool] = Field(default_factory=dict)

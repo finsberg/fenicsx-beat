@@ -10,7 +10,7 @@ Quantities are strings with units, e.g. `"0.05 ms"`.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `type` | 'folder' | `'folder'` |  |
 | `fibers` | FromGeometryFibers \| AxisFibers \| IsotropicFibers | `FromGeometryFibers(type='from_geometry')` |  |
 
@@ -19,7 +19,7 @@ Quantities are strings with units, e.g. `"0.05 ms"`.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `type` | 'interval' | `'interval'` |  |
 | `length` | float | `10.0` | Cable length (geometry.unit) |
 | `dx` | float | `0.1` | Element size (geometry.unit) |
@@ -30,7 +30,7 @@ Quantities are strings with units, e.g. `"0.05 ms"`.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `type` | 'rectangle' | `'rectangle'` |  |
 | `lx` | float | `1.0` |  |
 | `ly` | float | `1.0` |  |
@@ -44,7 +44,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `type` | 'box_slab' | `'box_slab'` |  |
 | `lx` | float | `20.0` |  |
 | `ly` | float | `7.0` |  |
@@ -57,7 +57,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `fiber_angle_endo` | float | `60.0` |  |
 | `fiber_angle_epi` | float | `-60.0` |  |
 | `fiber_space` | str | `'P_1'` |  |
@@ -73,7 +73,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `fiber_angle_endo` | float | `60.0` |  |
 | `fiber_angle_epi` | float | `-60.0` |  |
 | `fiber_space` | str | `'P_1'` |  |
@@ -94,7 +94,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `fiber_angle_endo` | float | `60.0` |  |
 | `fiber_angle_epi` | float | `-60.0` |  |
 | `fiber_space` | str | `'P_1'` |  |
@@ -107,7 +107,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `unit` | str | `'mm'` | Length unit of the mesh coordinates |
-| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types: cache folder for the mesh |
+| `folder` | path | `'geometry'` | type=folder: folder to read. Generated types (slab, lv_ellipsoid, biv_ellipsoid, ukb): cache root, each mesh is cached in its own <hash>/ subfolder |
 | `fiber_angle_endo` | float | `60.0` |  |
 | `fiber_angle_epi` | float | `-60.0` |  |
 | `fiber_space` | str | `'P_1'` |  |
@@ -221,7 +221,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `amplitude` | str | **required** | Current density (uA/cm, uA/cm**2 or uA/cm**3 for a 1D/2D/3D stimulus domain), see beat.stimulation.define_stimulus |
+| `amplitude` | str | **required** | Current density: uA/cm**2 for a marker stimulus on a facet marker, uA/cm**3 for a marker stimulus on a cell marker and for box/random_endocardial stimuli (any mesh dimension); see beat.stimulation.define_stimulus |
 | `duration` | Quantity | `'2 ms'` |  |
 | `start` | Quantity | `'0 ms'` |  |
 | `period` | Quantity (optional) | – | If set, repeat the pulse every period |
@@ -233,7 +233,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `amplitude` | str | **required** | Current density (uA/cm, uA/cm**2 or uA/cm**3 for a 1D/2D/3D stimulus domain), see beat.stimulation.define_stimulus |
+| `amplitude` | str | **required** | Current density: uA/cm**2 for a marker stimulus on a facet marker, uA/cm**3 for a marker stimulus on a cell marker and for box/random_endocardial stimuli (any mesh dimension); see beat.stimulation.define_stimulus |
 | `duration` | Quantity | `'2 ms'` |  |
 | `start` | Quantity | `'0 ms'` |  |
 | `period` | Quantity (optional) | – | If set, repeat the pulse every period |
@@ -246,7 +246,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `amplitude` | str | **required** | Current density (uA/cm, uA/cm**2 or uA/cm**3 for a 1D/2D/3D stimulus domain), see beat.stimulation.define_stimulus |
+| `amplitude` | str | **required** | Current density: uA/cm**2 for a marker stimulus on a facet marker, uA/cm**3 for a marker stimulus on a cell marker and for box/random_endocardial stimuli (any mesh dimension); see beat.stimulation.define_stimulus |
 | `duration` | Quantity | `'2 ms'` |  |
 | `start` | Quantity | `'0 ms'` |  |
 | `period` | Quantity (optional) | – | If set, repeat the pulse every period |
@@ -266,9 +266,9 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 |---|---|---|---|
 | `dt` | Quantity | `'0.05 ms'` |  |
 | `theta` | float | `1.0` | Splitting: 1.0 Godunov, 0.5 Strang |
-| `end_time` | Quantity (optional) | – |  |
-| `num_beats` | int (optional) | – |  |
-| `BCL` | Quantity (optional) | – |  |
+| `end_time` | Quantity (optional) | – | Simulated end time. Give either this or num_beats and BCL |
+| `num_beats` | int (optional) | – | Run length in beats: end time = num_beats x BCL |
+| `BCL` | Quantity (optional) | – | Basic cycle length, only used for the run length (num_beats x BCL). It does not pace anything: set a [[stimulus]] period for that |
 | `pde` | ThetaPDE \| IrksomePDE | `ThetaPDE(type='theta', theta=0.5, linear_solver='direct')` |  |
 | `ode` | DolfinODE \| IrksomeODE \| ExternalOperatorODE | `DolfinODE(type='dolfin')` |  |
 | `petsc_options` | dict[str, str \| int \| float \| bool] | `{}` |  |

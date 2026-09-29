@@ -202,6 +202,9 @@ def _dispatch(args: dict, comm) -> None:
         petsc_options=args.get("petsc_options"),
     )
     if command == "validate-config":
+        # Cheap existence check (no dolfinx/codegen); `run` checks it again in load_module.
+        if not conf.cell.ode_file.is_file():
+            raise ConfigError(f"cell.ode_file {conf.cell.ode_file} does not exist")
         # Rank-0-only, and needs no barrier: load_config above already ran (and would have
         # raised ConfigError) identically on every rank, so every rank reaches this point only
         # on success, printing is not collective, and nothing after this depends on it.

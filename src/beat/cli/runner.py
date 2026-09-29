@@ -359,6 +359,12 @@ def run(
     """
     action = decide_output(conf, restart=restart, overwrite=overwrite, comm=comm)
     folder = conf.output.folder
+    if conf.solver.num_beats is not None and not any(s.period for s in conf.stimulus):
+        logger.warning(
+            f"solver.num_beats/BCL only set the run length ({conf.solver.t_end_ms()} ms); BCL "
+            "does not pace the tissue and no [[stimulus]] has a period. Set a stimulus "
+            "`period` (e.g. equal to BCL) to pace every beat.",
+        )
     monitor = PerformanceMonitor(comm=comm) if conf.output.performance else None
     try:
         sim = build_simulation(conf, comm, monitor=monitor)

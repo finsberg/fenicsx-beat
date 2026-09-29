@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from beat.cli.config import Config, ms
+from beat.cli.config import Config, SolverConfig, ms
 
 
 def base(tmp_path, **kw):
@@ -175,3 +175,41 @@ def test_irksome_backends_parse(tmp_path):
     )
     assert conf.solver.pde.stages == 2
     assert conf.solver.ode.type == "external_operator"
+
+
+@pytest.mark.parametrize("stim_type", ["marker", "box", "random_endocardial"])
+def test_stimulus_amplitude_per_length_is_rejected(tmp_path, stim_type):
+    """The effective stimulus dimension is only ever 2 (facet marker) or 3 (cell marker, box,
+    random_endocardial): uA/cm is never valid."""
+    stim = {"type": stim_type, "amplitude": "1 uA/cm", **_STIM_EXTRA[stim_type]}
+    with pytest.raises(ValidationError, match="amplitude"):
+        Config.model_validate(base(tmp_path, stimulus=[stim]))
+
+
+@pytest.mark.parametrize("stim_type", ["box", "random_endocardial"])
+def test_volumetric_stimulus_requires_per_volume_amplitude(tmp_path, stim_type):
+    stim = {"type": stim_type, "amplitude": "1 uA/cm**2", **_STIM_EXTRA[stim_type]}
+    with pytest.raises(ValidationError, match="uA/cm\\*\\*3"):
+        Config.model_validate(base(tmp_path, stimulus=[stim]))
+    stim["amplitude"] = "1 uA/mm**3"
+    Config.model_validate(base(tmp_path, stimulus=[stim]))
+
+
+def test_marker_stimulus_accepts_areal_and_volumetric_amplitude(tmp_path):
+    for amp in ("1 uA/cm**2", "1 uA/cm**3"):
+        stim = {"type": "marker", "marker": "X0", "amplitude": amp}
+        Config.model_validate(base(tmp_path, stimulus=[stim]))
+
+
+_STIM_EXTRA = {
+    "marker": {"marker": "X0"},
+    "box": {"min": [0.0, 0.0], "max": [1.0, 1.0]},
+    "random_endocardial": {},
+}
+
+
+def test_solver_run_length_fields_are_documented():
+    fields = SolverConfig.model_fields
+    assert "num_beats" in fields["end_time"].description
+    assert "BCL" in fields["num_beats"].description
+    assert "period" in fields["BCL"].description

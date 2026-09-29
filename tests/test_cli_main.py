@@ -216,3 +216,8 @@ def test_missing_cli_extra_module_at_runtime_prints_install_hint(cfg, monkeypatc
     monkeypatch.setattr(runner, "run", boom)
     assert main(["run", str(cfg)]) == 1
     assert 'pip install "fenicsx-beat[cli]"' in caplog.text
+
+
+def test_validate_config_missing_ode_file_exit_1(cfg, tmp_path, caplog):
+    assert main(["validate-config", str(cfg), "--set", 'cell.ode_file="missing.ode"']) == 1
+    assert "missing.ode" in caplog.text

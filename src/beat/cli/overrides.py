@@ -213,7 +213,8 @@ def file_hash(path: Path) -> str:
 def physics_hash(conf: Config) -> str:
     """Hash of everything that must not change across a restart.
 
-    Excludes run length (solver.end_time/num_beats), output and postprocess settings, and
+    Excludes run length (solver.end_time/num_beats/BCL -- BCL only sets the run length, it
+    paces nothing), output and postprocess settings, and
     replaces cell.ode_file's path by its contents' hash (so a moved run can still restart).
     geometry.folder is kept only for geometry.type == "folder", where it *is* the mesh being
     simulated; for every other (generated) geometry type it's just a cache location, so it's
@@ -221,7 +222,7 @@ def physics_hash(conf: Config) -> str:
     """
     data = conf.model_dump(
         mode="json",
-        exclude={"output": True, "postprocess": True, "solver": {"end_time", "num_beats"}},
+        exclude={"output": True, "postprocess": True, "solver": {"end_time", "num_beats", "BCL"}},
     )
     data["cell"]["ode_file"] = file_hash(conf.cell.ode_file)
     if data["geometry"].get("type") != "folder":

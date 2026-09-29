@@ -281,3 +281,23 @@ def test_rerun_before_first_checkpoint_suggests_overwrite(tmp_path):
         run(conf)
     with pytest.raises(ConfigError, match="no restart checkpoint exists yet.*--overwrite"):
         run(conf, restart=True)
+
+
+def test_restart_may_switch_end_time_to_num_beats_and_bcl(tmp_path, caplog):
+    cfg = write_cfg(tmp_path)  # end_time = 0.3 ms
+    run(load_config(cfg, environ={}))
+    data = minimal_config_dict(tmp_path)
+    data["solver"] = {"dt": "0.1 ms", "num_beats": 1, "BCL": "0.3 ms"}  # same end
+    beats = tmp_path / "beats.toml"
+    if MPI.COMM_WORLD.rank == 0:
+        beats.write_text(toml.dumps(data))
+    MPI.COMM_WORLD.barrier()
+    run(load_config(beats, environ={}), restart=True)
+    ext = load_config(beats, environ={}, sets=["solver.num_beats=2"])  # 0.6 ms
+    caplog.set_level(logging.WARNING)
+    run(ext, restart=True)
+    times = read_result_times(ext.output.folder / RESULTS, MPI.COMM_WORLD)
+    assert np.allclose(times, np.arange(7) * 0.1)
+    # BCL paces nothing: without a stimulus period, warn that only the run length is set.
+    if MPI.COMM_WORLD.rank == 0:
+        assert "does not pace" in caplog.text
