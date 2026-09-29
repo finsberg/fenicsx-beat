@@ -1,4 +1,6 @@
 import logging
+import signal
+from contextlib import contextmanager
 
 from mpi4py import MPI
 
@@ -8,6 +10,28 @@ from cli_helpers import minimal_config_dict
 
 import beat
 from beat.cli import main
+
+
+@contextmanager
+def _timeout(seconds: int):
+    """Fail (instead of hanging forever) if the body doesn't return within ``seconds``.
+
+    Guards MPI-deadlock regressions: if a rank-0-only failure ever again skipped the
+    broadcast in ``beat.cli``'s ``init`` dispatch, the other ranks under ``mpirun`` would block
+    on ``comm.bcast``/``comm.barrier`` forever instead of raising -- turning that hang into a
+    clear ``TimeoutError`` instead of a stuck CI job.
+    """
+
+    def _handler(signum, frame):
+        raise TimeoutError(f"timed out after {seconds}s (possible MPI deadlock)")
+
+    old = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
 
 
 @pytest.fixture
@@ -86,6 +110,25 @@ def test_init_template(tmp_path):
     assert main(["validate-config", str(target)]) == 0
     assert main(["init", str(target)]) == 1  # exists
     assert main(["init", str(target), "--force"]) == 0
+
+
+def test_init_filesystem_error_becomes_config_error(tmp_path, monkeypatch, caplog):
+    """A rank-0-only OSError (e.g. from mkdir/copyfile) during ``init`` must become a
+    ConfigError raised on every rank (exit 1), never skip the broadcast and hang the others.
+    """
+    import beat.cli as cli
+
+    if MPI.COMM_WORLD.rank == 0:
+
+        def boom(target, template, force):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(cli, "_init", boom)
+
+    with _timeout(30):
+        code = main(["init", str(tmp_path / "config.toml")])
+    assert code == 1
+    assert "disk full" in caplog.text
 
 
 # NOTE (deviation from the literal brief, flagged for the controller): with no templates

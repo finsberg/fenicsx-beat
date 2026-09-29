@@ -52,7 +52,11 @@ def setup_parser() -> argparse.ArgumentParser:
 
     init = sub.add_parser("init", help="Write a starter config from a template")
     init.add_argument("config", type=Path, nargs="?", default=Path("config.toml"))
-    init.add_argument("--template", default="slab", help="Template name (examples/cli/<name>)")
+    init.add_argument(
+        "--template",
+        default="slab",
+        help="Template name (src/beat/cli/templates/<name>)",
+    )
     init.add_argument("--force", action="store_true", help="Overwrite existing files")
 
     validate = sub.add_parser("validate-config", help="Validate and print the resolved config")
@@ -129,16 +133,14 @@ def _dispatch(args: dict, comm) -> None:
         display_version_info()
         return
     if command == "init":
-        error: Exception | None = None
-        if comm.rank == 0:
-            try:
-                _init(args["config"], args["template"], args["force"])
-            except ConfigError as e:
-                error = e
-        error = comm.bcast(error, root=0)
-        comm.barrier()
-        if error is not None:
-            raise ConfigError(str(error))
+        from .runner import _on_rank0
+
+        # _on_rank0 runs _init on rank 0 only and re-raises *any* exception (not just
+        # ConfigError -- an OSError/PermissionError from mkdir/copyfile must not skip the
+        # broadcast either) as a ConfigError on every rank, so a rank-0-only failure here can
+        # never leave the other ranks waiting forever on a barrier/bcast that rank 0 never
+        # reaches.
+        _on_rank0(comm, ConfigError, lambda: _init(args["config"], args["template"], args["force"]))
         return
 
     conf = load_config(
@@ -148,6 +150,9 @@ def _dispatch(args: dict, comm) -> None:
         petsc_options=args.get("petsc_options"),
     )
     if command == "validate-config":
+        # Rank-0-only, and needs no barrier: load_config above already ran (and would have
+        # raised ConfigError) identically on every rank, so every rank reaches this point only
+        # on success, printing is not collective, and nothing after this depends on it.
         if comm.rank == 0:
             import toml
 
