@@ -23,7 +23,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 
 from mpi4py import MPI
 
@@ -67,12 +67,65 @@ class Simulation:
     V_ode: Any
 
 
-def _write_json(path: Path, data: dict, comm) -> None:
+# Everything beat itself writes into an output folder (``beat run``: results, restarts,
+# metadata, logs, the cell-model code/steady-state caches; ``beat post``: ``post/``). --overwrite
+# deletes exactly these and nothing else, since the output folder may well be the config's own
+# directory, holding the user's config.toml/.ode files.
+_ARTIFACT_NAMES = (
+    RESULTS,
+    RESTART,
+    RESTART_META,
+    RUN_META,
+    "config.resolved.toml",
+    PERFORMANCE,
+    "output.log",
+    "output_all_cpus.log",
+    "init_states",
+    "post",
+)
+_ARTIFACT_GLOBS = ("cell_model_*.py",)
+
+
+def _on_rank0(comm, error_type: type[Exception], fn: Callable[[], Any]) -> None:
+    """Run ``fn`` on rank 0 only, and make any failure raise on *every* rank.
+
+    Rank-0-only filesystem work followed by a barrier/collective otherwise deadlocks when rank 0
+    raises. A :class:`ConfigError` stays a ConfigError; anything else is raised as
+    ``error_type`` with the same message (chained to the original on rank 0).
+    """
+    original: Exception | None = None
+    error: tuple[bool, str] | None = None
     if comm.rank == 0:
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001 - re-raised on every rank below
+            original = e
+            error = (isinstance(e, ConfigError), str(e) or repr(e))
+    error = comm.bcast(error, root=0)
+    if error is None:
+        return
+    is_config, message = error
+    exc: Exception = ConfigError(message) if is_config else error_type(message)
+    raise exc from original
+
+
+def _write_json(path: Path, data: dict, comm) -> None:
+    def write() -> None:
         tmp = path.with_suffix(f".tmp{os.getpid()}")
         tmp.write_text(json.dumps(data, indent=2))
         os.replace(tmp, path)
-    comm.barrier()
+
+    _on_rank0(comm, OSError, write)
+
+
+def _remove_artifacts(folder: Path) -> None:
+    paths = [folder / name for name in _ARTIFACT_NAMES]
+    paths += [p for pattern in _ARTIFACT_GLOBS for p in folder.glob(pattern)]
+    for p in paths:
+        if p.is_dir() and not p.is_symlink():
+            shutil.rmtree(p)
+        elif p.exists() or p.is_symlink():
+            p.unlink()
 
 
 def read_result_times(path: Path, comm, name: str = "v") -> np.ndarray:
@@ -116,6 +169,7 @@ def prepare_output(conf: Config, restart: bool, overwrite: bool, comm) -> None:
 
     The decision is made on rank 0 only and broadcast, so that every rank raises the same
     :class:`ConfigError` together (never one rank raising while the others wait in a barrier).
+    ``overwrite`` deletes only beat's own artifacts (see ``_ARTIFACT_NAMES``), never other files.
     """
     decision = None
     if comm.rank == 0:
@@ -128,12 +182,17 @@ def prepare_output(conf: Config, restart: bool, overwrite: bool, comm) -> None:
         raise ConfigError(message)
     if action == "restart":
         return
-    if action == "wipe" and comm.rank == 0:
-        shutil.rmtree(conf.output.folder)
-    comm.barrier()
-    if comm.rank == 0:
-        conf.output.folder.mkdir(parents=True, exist_ok=True)
-    comm.barrier()
+    folder = conf.output.folder
+
+    def prepare() -> None:
+        if action == "wipe":
+            _remove_artifacts(folder)
+        folder.mkdir(parents=True, exist_ok=True)
+
+    try:
+        _on_rank0(comm, ConfigError, prepare)
+    except ConfigError as e:
+        raise ConfigError(f"Cannot prepare output folder {folder}: {e}") from e
 
 
 def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulation:
@@ -176,11 +235,22 @@ def _save_results(sim: Simulation, t: float) -> None:
             io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=name)
 
 
-def _write_restart(sim: Simulation, t: float, step: int) -> None:
+def _write_restart(sim: Simulation, t: float, step: int, write_data: bool = True) -> None:
+    """Write a checkpoint at ``t`` and point restart.json at it.
+
+    ``write_data=False`` only updates restart.json: used when restart.bp already holds a
+    checkpoint at ``t`` (a run killed between writing restart.bp and restart.json, then
+    restarted from the earlier checkpoint). io4dolfinx would append a duplicate timestamp and
+    ``read_function`` returns the *first* one, i.e. the existing data -- which is the same state,
+    recomputed from the same checkpoint with the same physics.
+    """
     folder = sim.conf.output.folder
-    io4dolfinx.write_function_on_input_mesh(folder / RESTART, sim.pde.state, time=t, name="v")
-    for name, f in zip(sim.cell.state_names, sim.ode.states_to_dolfin(sim.cell.state_names)):
-        io4dolfinx.write_function_on_input_mesh(folder / RESTART, f, time=t, name=f"state_{name}")
+    if write_data:
+        path = folder / RESTART
+        io4dolfinx.write_function_on_input_mesh(path, sim.pde.state, time=t, name="v")
+        states = sim.ode.states_to_dolfin(sim.cell.state_names)
+        for name, f in zip(sim.cell.state_names, states):
+            io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=f"state_{name}")
     # restart.json is written last (atomically): it only ever points at a complete checkpoint.
     _write_json(
         folder / RESTART_META,
@@ -194,7 +264,7 @@ def _write_restart(sim: Simulation, t: float, step: int) -> None:
     )
 
 
-def _load_restart(sim: Simulation) -> tuple[int, float]:
+def _load_restart(sim: Simulation) -> tuple[int, float, np.ndarray]:
     """Restore the PDE and ODE state from the latest checkpoint.
 
     This is all the state the splitting scheme carries between steps: every step starts from
@@ -213,9 +283,20 @@ def _load_restart(sim: Simulation) -> tuple[int, float]:
         )
     t = float(meta["t"])
     # restart.bp may hold several checkpoints (checkpoint_every); pick the one restart.json
-    # names by its exact stored timestamp (avoids float-equality surprises).
-    stored = io4dolfinx.read_timestamps(filename=folder / RESTART, comm=comm, function_name="v")
-    t_file = float(stored[np.argmin(np.abs(np.asarray(stored, dtype=float) - t))])
+    # names by its exact stored timestamp (avoids float-equality surprises), but refuse to
+    # silently fall back to a *different* checkpoint. Every rank reads the same file, so every
+    # rank raises together.
+    stored = np.asarray(
+        io4dolfinx.read_timestamps(filename=folder / RESTART, comm=comm, function_name="v"),
+        dtype=float,
+    )
+    tol = 1e-9 * ms(sim.conf.solver.dt)
+    if stored.size == 0 or np.min(np.abs(stored - t)) >= tol:
+        raise ConfigError(
+            f"Cannot restart: {folder / RESTART} has no checkpoint at t={t} ms named by "
+            f"{folder / RESTART_META} (stored: {sorted(set(stored.tolist()))})",
+        )
+    t_file = float(stored[np.argmin(np.abs(stored - t))])
     io4dolfinx.read_function(folder / RESTART, sim.pde.state, time=t_file, name="v")
     sim.pde.state.x.scatter_forward()
     funcs = sim.ode.states_to_dolfin(sim.cell.state_names)
@@ -225,7 +306,18 @@ def _load_restart(sim: Simulation) -> tuple[int, float]:
     sim.ode.load_all_states(funcs)
     sim.pde.assign_previous()
     logger.info(f"Restarting from t={t} ms (step {meta['step']})")
-    return int(meta["step"]), t
+    # Checkpoint times whose data is *complete* in restart.bp (a kill mid-checkpoint can leave
+    # ``v`` written but not every state): only these may be reused instead of rewritten.
+    complete = stored
+    for name in sim.cell.state_names:
+        times = io4dolfinx.read_timestamps(
+            filename=folder / RESTART,
+            comm=comm,
+            function_name=f"state_{name}",
+        )
+        times = np.asarray(times, dtype=float)
+        complete = complete[[bool(np.any(np.abs(times - c) < tol)) for c in complete]]
+    return int(meta["step"]), t, complete
 
 
 def run(
@@ -250,8 +342,7 @@ def run(
 
 def _run(conf: Config, comm, restart: bool) -> Path:
     folder = conf.output.folder
-    if comm.rank == 0:
-        dump_config(conf, folder / "config.resolved.toml")
+    _on_rank0(comm, OSError, lambda: dump_config(conf, folder / "config.resolved.toml"))
     from .. import __version__
 
     record: dict[str, Any] = {
@@ -299,9 +390,9 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
     ckpt_stride = round(ckpt_every / dt) if ckpt_every > 0 else 0
     comm = sim.geo.mesh.comm
 
-    step0, last_saved = 0, -np.inf
+    step0, last_saved, checkpoints = 0, -np.inf, np.zeros(0)
     if restart:
-        step0, _ = _load_restart(sim)
+        step0, _, checkpoints = _load_restart(sim)
         results = conf.output.folder / RESULTS
         if results.exists():
             last_saved = float(read_result_times(results, comm).max())
@@ -318,6 +409,16 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
             _save_results(sim, t)
             last_saved = t
 
+    def checkpoint(step: int) -> None:
+        nonlocal checkpoints
+        t = step * dt
+        # Never append a timestamp restart.bp already holds (see _write_restart). Membership,
+        # not "<= last": checkpoint_every may differ from the original run's, and restart.json
+        # must only ever name a timestamp that is actually in restart.bp.
+        exists = bool(np.any(np.abs(checkpoints - t) < 1e-9 * dt))
+        _write_restart(sim, t, step, write_data=not exists)
+        checkpoints = np.append(checkpoints, t)
+
     tic = perf_counter()
     for step in range(step0, n_steps):
         if step % save_stride == 0:
@@ -332,7 +433,7 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
         if not comm.allreduce(finite, op=MPI.LAND):
             raise SolverFailure(f"Non-finite transmembrane potential at t={t + dt} ms")
         if ckpt_stride and (step + 1) % ckpt_stride == 0 and step + 1 < n_steps:
-            _write_restart(sim, (step + 1) * dt, step + 1)
+            checkpoint(step + 1)
         if (step + 1) % conf.output.log_every == 0:
             elapsed = perf_counter() - tic
             rate = (step + 1 - step0) / elapsed
@@ -341,4 +442,4 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
                 f"{rate:.1f} steps/s  ETA {(n_steps - step - 1) / rate:.0f} s",
             )
     maybe_save(n_steps)
-    _write_restart(sim, n_steps * dt, n_steps)
+    checkpoint(n_steps)
