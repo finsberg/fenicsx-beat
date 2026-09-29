@@ -75,6 +75,7 @@ genexpr
 geodir
 geometriesx
 geox
+getpid
 Gilles
 gmsh
 gotran

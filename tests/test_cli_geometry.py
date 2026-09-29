@@ -1,3 +1,5 @@
+import json
+
 from mpi4py import MPI
 
 import numpy as np
@@ -83,3 +85,27 @@ def test_generated_slab_is_cached(tmp_path):
     stamp = (tmp_path / "geo" / "beat_geometry.json").stat().st_mtime_ns
     build_geometry(conf.geometry, MPI.COMM_WORLD)
     assert (tmp_path / "geo" / "beat_geometry.json").stat().st_mtime_ns == stamp
+
+
+@pytest.mark.skip_in_parallel
+def test_generated_slab_recovers_from_corrupt_cache_metadata(tmp_path):
+    pytest.importorskip("cardiac_geometries")
+    conf = geom(
+        tmp_path,
+        type="slab",
+        lx=1.0,
+        ly=0.3,
+        lz=0.3,
+        dx=0.15,
+        folder=str(tmp_path / "geo"),
+    )
+    build_geometry(conf.geometry, MPI.COMM_WORLD)
+    meta = tmp_path / "geo" / "beat_geometry.json"
+    meta.write_text("{not valid json")
+
+    # A corrupt/truncated metadata file (e.g. left behind by a killed job) must be treated as
+    # "needs regeneration", not raise (which would deadlock the other ranks under MPI).
+    geo = build_geometry(conf.geometry, MPI.COMM_WORLD)
+    assert geo.f0 is not None and "X0" in geo.markers
+    # Regeneration must have replaced the corrupt file with a valid one.
+    assert json.loads(meta.read_text())["hash"]

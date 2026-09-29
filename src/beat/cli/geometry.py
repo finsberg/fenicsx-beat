@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,8 +68,45 @@ def _axis_facet_tags(
 
 
 def _geometry_hash(conf: GeometryConfig) -> str:
-    blob = json.dumps(conf.model_dump(mode="json", exclude={"folder"}), sort_keys=True)
+    # `unit` doesn't affect the generated mesh (only how the CLI later interprets its
+    # coordinates), so excluding it avoids needless regeneration; `folder` is the cache
+    # location itself and would make the hash location-dependent; `fibers` stays IN the hash
+    # since it drives `create_fibers` below.
+    blob = json.dumps(conf.model_dump(mode="json", exclude={"folder", "unit"}), sort_keys=True)
     return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def _needs_regeneration(meta: Path, current_hash: str) -> tuple[bool, str | None]:
+    """Whether the cached geometry at ``meta`` is stale.
+
+    Called on rank 0 only, before the result is broadcast to the other ranks: must never raise,
+    or the other ranks would deadlock waiting on the broadcast. A missing, unreadable or corrupt
+    metadata file (e.g. left behind by a job killed mid-write) just means "regenerate".
+    """
+    if not meta.is_file():
+        return True, None
+    try:
+        cached_hash = json.loads(meta.read_text()).get("hash")
+    except (OSError, ValueError) as e:
+        # ValueError also catches json.JSONDecodeError and UnicodeDecodeError.
+        return True, f"Ignoring unreadable/corrupt {meta} ({e}); regenerating geometry"
+    return cached_hash != current_hash, None
+
+
+def _write_meta_atomically(meta: Path, geometry_type: str, h: str) -> None:
+    """Write the cache metadata file atomically.
+
+    Called on rank 0 only, before ``comm.barrier()``: must never raise, or the other ranks
+    would deadlock waiting on the barrier. Writes to a temp file and ``os.replace``s it into
+    place so a job killed mid-write can never leave a partially-written ``meta`` behind (the
+    next run would then see a corrupt file, harmlessly handled by ``_needs_regeneration``).
+    """
+    try:
+        tmp = meta.with_name(f".{meta.name}.tmp{os.getpid()}")
+        tmp.write_text(json.dumps({"type": geometry_type, "hash": h}, indent=2))
+        os.replace(tmp, meta)
+    except OSError as e:
+        logger.warning(f"Could not write geometry cache metadata {meta}: {e}")
 
 
 def ensure_generated(conf: GeometryConfig, comm: MPI.Intracomm) -> Path:
@@ -79,8 +117,10 @@ def ensure_generated(conf: GeometryConfig, comm: MPI.Intracomm) -> Path:
     meta = folder / META_FILE
     h = _geometry_hash(conf)
     need = True
-    if comm.rank == 0 and meta.is_file():
-        need = json.loads(meta.read_text()).get("hash") != h
+    if comm.rank == 0:
+        need, warning = _needs_regeneration(meta, h)
+        if warning:
+            logger.warning(warning)
     need = comm.bcast(need, root=0)
     if not need:
         logger.info(f"Reusing cached {conf.type} geometry in {folder}")
@@ -95,7 +135,7 @@ def ensure_generated(conf: GeometryConfig, comm: MPI.Intracomm) -> Path:
     kwargs["create_fibers"] = conf.fibers.type == "from_geometry"
     generator(outdir=folder, comm=comm, **kwargs)
     if comm.rank == 0:
-        meta.write_text(json.dumps({"type": conf.type, "hash": h}, indent=2))
+        _write_meta_atomically(meta, conf.type, h)
     comm.barrier()
     return folder
 
