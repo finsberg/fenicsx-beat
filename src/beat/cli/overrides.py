@@ -155,8 +155,9 @@ def _format_quantity(q: Quantity) -> str:
     (``"1400 centimeter**-1"``) avoids the division and round-trips losslessly, which matters
     because ``physics_hash`` must not change just because a config was dumped and reloaded.
     """
-    parts = [f"{name}**{exp}" if exp != 1 else name for name, exp in q.units._units.items()]
-    return f"{q.magnitude} {' * '.join(parts)}".strip()
+    magnitude, unit_exponents = q.to_tuple()
+    parts = [f"{name}**{exp}" if exp != 1 else name for name, exp in unit_exponents]
+    return f"{magnitude} {' * '.join(parts)}".strip()
 
 
 def _toml_safe(value: Any) -> Any:
