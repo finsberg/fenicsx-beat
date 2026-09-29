@@ -17,5 +17,6 @@ ignoreWords: [
     operatorname,
     docname,
     docnames,
-    automodule
+    automodule,
+    endoo
   ]

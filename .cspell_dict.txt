@@ -201,6 +201,7 @@ Tomek
 TRAME
 transmembrane
 transmurally
+transmural
 travelling
 Tusscher
 Tveito
