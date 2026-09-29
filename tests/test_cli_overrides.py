@@ -2,13 +2,14 @@ from pathlib import Path
 
 import pytest
 import toml
-from cli_helpers import minimal_config_dict
+from cli_helpers import MITCHELL_SCHAEFFER_ODE, minimal_config_dict
 
 from beat.cli.config import ConfigError, ms
 from beat.cli.overrides import (
     apply_override,
     dump_config,
     env_overrides,
+    file_hash,
     load_config,
     parse_petsc_options,
     parse_value,
@@ -133,3 +134,65 @@ def test_physics_hash_changes_with_dt_and_ode_contents(cfg_file):
     assert hash_a != physics_hash(b)
     a.cell.ode_file.write_text(a.cell.ode_file.read_text() + "\n# changed\n")
     assert physics_hash(load_config(cfg_file, environ={})) != hash_a
+
+
+def _folder_geometry_cfg_file(tmp_path, folder_name="mesh_a"):
+    ode = tmp_path / "ms.ode"
+    ode.write_text(MITCHELL_SCHAEFFER_ODE)
+    data = {
+        "geometry": {"type": "folder", "unit": "mm", "folder": folder_name},
+        "cell": {"ode_file": str(ode), "v_name": "v"},
+        "solver": {"dt": "0.1 ms", "end_time": "0.3 ms"},
+        "output": {"folder": str(tmp_path / "output"), "save_every": "0.1 ms"},
+    }
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps(data))
+    return path
+
+
+def test_physics_hash_folder_geometry_tracks_folder(tmp_path):
+    cfg = _folder_geometry_cfg_file(tmp_path)
+    a = load_config(cfg, environ={})
+    b = load_config(cfg, environ={}, sets=['geometry.folder="mesh_b"'])
+    assert physics_hash(a) != physics_hash(b)  # type="folder": folder IS the mesh
+
+
+def test_physics_hash_ignores_folder_for_non_folder_geometry(cfg_file, tmp_path):
+    # cfg_file's geometry.type is "rectangle": folder is just a mesh cache location.
+    a = load_config(cfg_file, environ={})
+    b = load_config(cfg_file, environ={}, sets=['geometry.folder="elsewhere"'])
+    assert physics_hash(a) == physics_hash(b)
+
+    data = minimal_config_dict(tmp_path, geometry={"type": "slab"})
+    for key in ("lx", "ly", "dx"):
+        data["geometry"].pop(key, None)
+    slab_path = tmp_path / "slab.toml"
+    slab_path.write_text(toml.dumps(data))
+    c = load_config(slab_path, environ={})
+    d = load_config(slab_path, environ={}, sets=['geometry.folder="elsewhere"'])
+    assert physics_hash(c) == physics_hash(d)
+
+
+def test_apply_override_through_scalar_errors():
+    with pytest.raises(ConfigError, match="solver.dt.foo"):
+        apply_override({"solver": {"dt": "0.1 ms"}}, "solver.dt.foo", "5")
+
+
+def test_petsc_options_negative_number_value():
+    assert parse_petsc_options("-ksp_rtol -1e-6 -pc_type hypre") == {
+        "ksp_rtol": "-1e-6",
+        "pc_type": "hypre",
+    }
+    assert parse_petsc_options("-ksp_max_it -3") == {"ksp_max_it": "-3"}
+
+
+def test_file_hash_missing_file_errors(tmp_path):
+    with pytest.raises(ConfigError, match="not found"):
+        file_hash(tmp_path / "nope.txt")
+
+
+def test_physics_hash_missing_ode_file_errors(cfg_file):
+    conf = load_config(cfg_file, environ={})
+    conf.cell.ode_file.unlink()
+    with pytest.raises(ConfigError, match="not found"):
+        physics_hash(conf)

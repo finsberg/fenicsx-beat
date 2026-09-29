@@ -5,7 +5,6 @@ Precedence (lowest to highest): TOML file < ``BEAT_*`` env vars < ``--set`` < fl
 
 import hashlib
 import json
-import logging
 import os
 import shlex
 import warnings
@@ -17,8 +16,6 @@ from pint import Quantity
 from pydantic import ValidationError
 
 from .config import ALL_MODELS, Config, ConfigError
-
-logger = logging.getLogger(__name__)
 
 ENV_PREFIX = "BEAT_"
 
@@ -56,6 +53,10 @@ def apply_override(data: dict, dotted: str, value: Any) -> None:
             else:
                 node = node[int(part)]
             continue
+        if not isinstance(node, dict):
+            raise ConfigError(
+                f"{dotted}: {'.'.join(parts[:i])!r} is not a table, cannot set {part!r}",
+            )
         if last:
             node[part] = value
         else:
@@ -79,13 +80,29 @@ def _parse_set(item: str) -> tuple[str, Any]:
     return key.strip(), parse_value(raw.strip())
 
 
+def _looks_like_value(token: str) -> bool:
+    """True if ``token`` is a PETSc option *value*, not the next ``-option`` flag.
+
+    A token that doesn't start with ``-`` is always a value. One that does start with ``-`` is
+    normally the next flag (``-ksp_type cg -pc_type hypre``), but PETSc options also take
+    negative numbers as values (``-ksp_rtol -1e-6``); those must not be mistaken for a flag.
+    """
+    if not token.startswith("-"):
+        return True
+    try:
+        float(token)
+    except ValueError:
+        return False
+    return True
+
+
 def parse_petsc_options(s: str) -> dict[str, str | bool]:
     tokens = shlex.split(s)
     out: dict[str, str | bool] = {}
     i = 0
     while i < len(tokens):
         key = tokens[i].lstrip("-")
-        if i + 1 < len(tokens) and not tokens[i + 1].startswith("-"):
+        if i + 1 < len(tokens) and _looks_like_value(tokens[i + 1]):
             out[key] = tokens[i + 1]
             i += 2
         else:
@@ -186,7 +203,11 @@ def dump_config(conf: Config, path: Path) -> None:
 
 
 def file_hash(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    path = Path(path)
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except FileNotFoundError as e:
+        raise ConfigError(f"{path}: file not found") from e
 
 
 def physics_hash(conf: Config) -> str:
@@ -194,12 +215,16 @@ def physics_hash(conf: Config) -> str:
 
     Excludes run length (solver.end_time/num_beats), output and postprocess settings, and
     replaces cell.ode_file's path by its contents' hash (so a moved run can still restart).
+    geometry.folder is kept only for geometry.type == "folder", where it *is* the mesh being
+    simulated; for every other (generated) geometry type it's just a cache location, so it's
+    dropped like any other non-physics path.
     """
     data = conf.model_dump(
         mode="json",
         exclude={"output": True, "postprocess": True, "solver": {"end_time", "num_beats"}},
     )
     data["cell"]["ode_file"] = file_hash(conf.cell.ode_file)
-    data["geometry"].pop("folder", None)
+    if data["geometry"].get("type") != "folder":
+        data["geometry"].pop("folder", None)
     blob = json.dumps(data, sort_keys=True).encode()
     return hashlib.sha256(blob).hexdigest()
