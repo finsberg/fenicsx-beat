@@ -56,14 +56,20 @@ beat ecg case/config.toml                    # pseudo-ECG at [postprocess.points
 `.ode` model) from the package's built-in templates -- see the [templates table](#templates) for
 the full list, one per row. Without `--template`, it defaults to `slab`, a thin box of tissue
 stimulated at one end (the simplest possible geometry, good for checking the CLI wiring itself)
-with `geometry.type = "box_slab"` -- a structured tetrahedral box built directly by `beat`, no
-`gmsh`/mesh-generation tool of your own needed. `beat geometry` (also run implicitly by `beat run`)
-builds it once into `geometry.folder` and reuses it on every later invocation, keyed on a hash of
-the geometry section; `beat init --template lv_endocardial`/`biv_endocardial`/`ukb_atlas` instead
-generate a real gmsh mesh (via `cardiac-geometriesx`, and `ukb-atlas` for the last one), which can
-take from seconds to minutes depending on resolution -- run `beat geometry` on its own first if you
-just want to warm that cache (e.g. on a cluster login node, see
-[Running on a cluster](cli_cluster.md)).
+with `geometry.type = "box_slab"` -- a structured tetrahedral box built directly by `beat` in
+memory on every run (cheap; nothing is written to disk), no `gmsh`/mesh-generation tool of your own
+needed. `beat init --template lv_endocardial`/`biv_endocardial`/`ukb_atlas` instead generate a real
+gmsh mesh (`geometry.type = "slab"`/`"lv_ellipsoid"`/`"biv_ellipsoid"`/`"ukb"`, via
+`cardiac-geometriesx`, and `ukb-atlas` for the last one), which can take from seconds to minutes
+depending on resolution. `beat geometry` (also run implicitly by `beat run`, `beat post` and `beat
+ecg`) generates such a mesh once and reuses it on every later invocation: it is cached in its own
+subfolder `geometry.folder/<hash>/`, keyed on a hash of the `[geometry]` section (everything except
+`folder` and `unit`). Changing a geometry parameter therefore creates a *new* subfolder next to the
+old one rather than replacing it, and `beat` never deletes `geometry.folder` itself or anything in
+it that it didn't create -- `geometry.folder = "."` (the config's own directory) is safe. Delete
+stale `<hash>/` subfolders by hand when you no longer need them. Run `beat geometry` on its own
+first if you just want to warm that cache (e.g. on a cluster login node, see [Running on a
+cluster](cli_cluster.md)); it logs the subfolder it used.
 
 `geometry.type = "folder"` is the other case: point `folder` at a mesh you (or `geox`, or another
 `cardiac-geometriesx`-compatible tool) already generated externally, with a `markers.json` describing
@@ -84,16 +90,15 @@ roughly in `[0, 1]`, so its threshold should be something like `0.5` instead.
 `validate-config`, `geometry`, `run`, `ecg` and `post` all take a config path and accept repeatable
 `--set KEY=VALUE` overrides. `init` takes an optional config path (default `config.toml`) but no
 `--set` (there's no existing config to override yet). `version` takes neither -- it only prints
-version numbers. The global `-v/--verbose`, `--log-all-cpus` and `--dry-run` flags belong to every
-subcommand, but (being defined on the top-level parser, not each subparser) must come **before**
-the subcommand name: `beat -v run config.toml`, not `beat run config.toml -v` (the latter is an
-argparse error, `unrecognized arguments: -v`).
+version numbers. The global `-v/--verbose`, `--log-all-cpus` and `--dry-run` flags are accepted
+by every subcommand, either before or after the subcommand name: `beat -v run config.toml` and
+`beat run config.toml -v` are equivalent.
 
 | Command | Behaviour |
 |---|---|
 | `beat init [config.toml] [--template NAME] [--force]` | Write a starter config from a template (default: `slab`); `--force` overwrites existing files. |
 | `beat validate-config config.toml` | Parse + validate + print the resolved config. Builds nothing (no mesh, no MPI-collective work). |
-| `beat geometry config.toml` | Generate (or load) the geometry into `geometry.folder` and stop. Idempotent -- cached and reused across the other commands and reruns. |
+| `beat geometry config.toml` | Generate (or load) the geometry and stop. For a generated type the mesh is cached in `geometry.folder/<hash>/` and reused across the other commands and reruns. |
 | `beat run config.toml [--restart] [--overwrite] [--output-folder P] [--petsc-options "..."]` | Run the simulation. |
 | `beat post config.toml [--output-folder P]` | Activation times, VTX conversion and visualizations from `results.bp`. |
 | `beat ecg config.toml [--output-folder P]` | Pseudo-ECG at `postprocess.points` from `results.bp`. |
@@ -109,11 +114,21 @@ the fully resolved result.
 (exit-codes)=
 ### Exit codes
 
-`0` success, `1` a configuration/validation error (`ConfigError`), `2` a runtime or solver failure
-(e.g. a non-finite transmembrane potential). A failure of either kind sets `run.json: status =
-"failed"` in the output folder (`1` never gets that far if the output folder couldn't be prepared
-at all). Not every `ConfigError` is caught at the same point, though all of them are caught well
-before the actual PDE/ODE solve loop:
+- `0` success.
+- `1` a configuration/validation error (`ConfigError`), a command-line usage error (unknown flag,
+  missing argument), or a missing `cli` extra (the error names the `pip install
+  "fenicsx-beat[cli]"` fix).
+- `2` a runtime failure: a solver failure (e.g. a non-finite transmembrane potential), or any
+  other unexpected error (mesh generation, I/O, ...). It is logged as a one-line error; run with
+  `-v` for the full traceback.
+
+`beat run` builds the whole simulation -- cell model, geometry, markers, stimuli, solvers -- before
+it touches the output folder, so a failure during that setup leaves the output folder exactly as it
+was (no `run.json`, and with `--overwrite` the previous results are *not* deleted). Only once the
+run has started does a failure set `run.json: status = "failed"` (with the error message). Not
+every `ConfigError` is caught at the same point, though all of them are caught before the actual
+PDE/ODE solve loop (except a restart checkpoint that doesn't match, which is found when it's
+loaded):
 
 - Bad TOML, wrong units, an unknown TOML key or geometry/stimulus/solver `type`, a missing
   `cell.ode_file`, an unknown `cell.scheme`, or a `cell.parameters`/`cell.regions.*.parameters` name
@@ -183,8 +198,8 @@ output/
   config.resolved.toml     # the fully resolved configuration of the (latest) run
   run.json                 # versions, n_ranks, start/end wall time, status: running/finished/failed
   output.log               # log file (output_all_cpus.log too when running on >1 rank)
-  cell_model_<hash>.py      # gotranx-generated code for cell.ode_file (hash: file contents + scheme)
-  init_states/<region>_<hash>.npy   # cached single-cell steady state (only if cell.steady_state is set)
+  cell_model_<hash>.py      # gotranx-generated code for cell.ode_file (hash: file contents + scheme); kept by --overwrite
+  init_states/<region>_<hash>.npy   # cached single-cell steady state (only if cell.steady_state is set); kept by --overwrite
   results.bp               # io4dolfinx: v (+ output.fields), every output.save_every
   restart.bp                # io4dolfinx: v and every ODE state, every output.checkpoint_every and at the end
   restart.json              # the latest complete checkpoint's time/step and a hash of the run's physics
@@ -194,7 +209,12 @@ output/
 
 `beat run` never writes VTX itself -- only the io4dolfinx files above. `beat post config.toml`
 reads `results.bp` (which can happen later, on any number of ranks, independent of how many ranks
-the run itself used) and writes into `post/`:
+the run itself used) and writes into `post/`. The config given to `beat post`/`beat ecg` must
+describe the same physics as the run that wrote `results.bp` -- the same check as for `--restart`
+(below), against the hash in `restart.json`, or, if the run stopped before writing its first
+checkpoint, against `config.resolved.toml`. Only `[output]`, `[postprocess]` and the run length may
+differ; anything else (e.g. an edited `geometry.dx`) is refused with a `ConfigError` naming
+`config.resolved.toml` to compare with, rather than crashing or silently producing wrong results.
 
 ```text
 output/post/
@@ -209,23 +229,33 @@ output/post/
 `beat ecg config.toml` additionally writes `post/ecg.csv` (and `post/ecg.png`, if matplotlib is
 installed) with the recovered extracellular potential at `postprocess.points`.
 
+On more than one rank, the PNG/GIF previews show only rank 0's partition of the mesh (with a log
+warning); the VTX files are always complete. Run `beat post` on a single rank for full previews.
+
 ### `--overwrite` and `--restart`
 
 Re-running into a non-empty output folder (e.g. an array-job index collision, or simply rerunning
 by hand) is refused by default -- `beat` never silently deletes anything:
 
 - `--overwrite` deletes *only the artifacts `beat` itself wrote* (everything listed above, plus
-  `post/`) and starts fresh. Anything else in that folder -- notably your own `config.toml`/`.ode`
-  files, if the output folder happens to be the config's own directory -- is left untouched.
+  `post/`, except the content-hashed `cell_model_<hash>.py`/`init_states/` caches, which stay valid
+  and are reused) and starts fresh. It does so only *after* the new config has been fully
+  validated (the simulation is built first), so a mistake in the config never costs the previous
+  results. Anything else in that folder -- notably your own `config.toml`/`.ode` files, if the
+  output folder happens to be the config's own directory -- is left untouched.
 - `--restart` continues from `restart.json`/`restart.bp` instead. It refuses if the run's
   **physics** has changed since the checkpoint was written: the check is a hash of the whole
-  resolved config *excluding* `solver.end_time`/`solver.num_beats` (so extending the simulated
-  time, or switching from `end_time` to `num_beats`/`BCL`, is fine) and excluding `[output]` and
+  resolved config *excluding* the run length `solver.end_time`/`solver.num_beats`/`solver.BCL` (so
+  extending the simulated time, or switching from `end_time` to `num_beats`/`BCL`, is fine;
+  `BCL` only sets the run length, `num_beats x BCL` -- it doesn't pace anything, use a stimulus
+  `period` for that, and `beat run` warns if no stimulus has one) and excluding `[output]` and
   `[postprocess]` entirely (change `save_every`, `checkpoint_every`, `performance`, any
   `[postprocess]` setting, freely across a restart). `geometry.folder` only matters for
   `geometry.type = "folder"` (where it *is* the mesh being simulated); for every generated
   geometry type it's just a cache location and is excluded like any other non-physics path.
-  Restarting on a **different number of MPI ranks** than the original run is allowed.
+  Restarting on a **different number of MPI ranks** than the original run is allowed. If the run
+  stopped before its first checkpoint there is no `restart.json` yet, and both `--restart` and a
+  plain rerun are refused with a message saying so -- use `--overwrite` to start over.
 - A restart never rewrites a `results.bp` timestamp that's already there: io4dolfinx *appends* a
   duplicate write at an existing timestamp, and its reader returns the *first* match, so
   re-writing the same time would be silently ignored on read anyway -- the runner simply skips it.
@@ -249,7 +279,10 @@ equals `mesh.topology.dim`, always cancelling to `effective_dim = 3`. In short:
 - A `marker` stimulus on a **cell** marker, a `box` stimulus, and a `random_endocardial` stimulus
   are all always volumetric, `uA/cm**3`, likewise regardless of the mesh's own dimension.
 
-Get the dimension wrong and validation rejects the config before any solve, naming the mismatch.
+A current per length (`uA/cm`) is therefore never valid. Get the dimension wrong and the config is
+rejected before any solve, naming the mismatch: at parse time (`beat validate-config`) for `uA/cm`
+and for a `box`/`random_endocardial` amplitude that isn't per volume; once the mesh is loaded for
+a `marker` stimulus, whose facet-or-cell dimension is a property of the mesh.
 
 (templates)=
 ## Templates
@@ -270,7 +303,7 @@ summarized here:
 | `pace_train` | [pace_train.py](../demos/pace_train.py) | The demo switches its stimulus off at runtime (a parameter schedule, future work); this template uses a fixed PDE pulse train for the whole run instead. |
 | `lv_endocardial` | [lv_endocardial.py](../demos/lv_endocardial.py) | -- |
 | `biv_endocardial` | [biv_endocardial.py](../demos/biv_endocardial.py) | -- |
-| `ukb_atlas` | [ukb_atlas.py](../demos/ukb_atlas.py) | Needs network access on first run (atlas download, cached afterwards in `geometry.folder`). |
+| `ukb_atlas` | [ukb_atlas.py](../demos/ukb_atlas.py) | Needs network access on first run (atlas download, cached afterwards with the mesh in `geometry.folder/<hash>/`). |
 | `irksome_model_gotranx` | [irksome_model_gotranx.py](../demos/irksome_model_gotranx.py) | Uses `RadauIIA`/`stages=1` rather than the demo's `BackwardEuler()` (not expressible via `tableau`/`stages`); PDE stimulus box instead of the demo's non-default initial condition; uniform conductivity preset instead of the demo's piecewise-constant one. |
 | `external_operator_gotranx` | [external_operator_gotranx.py](../demos/external_operator_gotranx.py) | Conductivity built from `[ep]` (the `Niederer` preset) rather than the demo's raw scalar `M`. |
 

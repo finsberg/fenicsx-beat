@@ -19,9 +19,15 @@ beat geometry config.toml          # build/cache the mesh once
 ```
 
 `beat geometry` is exactly the same step `beat run` would do lazily on first use, cached in
-`geometry.folder` and keyed by a hash of the `[geometry]` section -- so running it up front is
-purely an optimization, not a separate code path; every array-job task's own `beat run` reuses the
-cache rather than rebuilding it. It's also the cheapest way to surface a marker-name typo
+`geometry.folder/<hash>/`, a subfolder keyed by a hash of the `[geometry]` section -- so running it
+up front is purely an optimization, not a separate code path; every array-job task's own `beat run`
+reuses the cache rather than rebuilding it. A sweep over a *geometry* parameter (e.g.
+`--set geometry.dx=...` per task) is safe too: each distinct geometry gets its own subfolder, so
+tasks never overwrite or delete each other's mesh. Tasks that need the same, not yet cached mesh
+may each generate it, but every job generates into a private temporary folder that is atomically
+renamed into place; whichever finishes first wins, and the others reuse its mesh and discard their
+own copy. Warming the cache with `beat geometry` first (once per distinct geometry) avoids that
+duplicated work. It's also the cheapest way to surface a marker-name typo
 (`[[stimulus]]`, `cell.layers`) or a missing fiber field (`fibers = "from_geometry"`) ahead of the
 timed sweep: those checks need the actual mesh, so they only run once `beat run` has built or
 loaded the geometry (see [Exit codes](cli.md#exit-codes)) -- with the mesh already cached, that
@@ -66,21 +72,27 @@ interval and let the job resubmit itself onto the same output folder:
 #SBATCH --ntasks=64
 
 # output.checkpoint_every = "50 ms" in config.toml
-if [ -f output/restart.json ]; then RESTART=--restart; fi
-srun beat run config.toml $RESTART
+if [ -f output/restart.json ]; then FLAG=--restart; else FLAG=--overwrite; fi
+srun beat run config.toml $FLAG
 ```
 
 Resubmit the same script (e.g. from a scheduler dependency chain, `sbatch --dependency=afterany`,
 or cron) until `run.json: status == "finished"`. Each resubmission picks up `--restart`
 automatically once `output/restart.json` exists (written after the first successful checkpoint).
+Before that -- the first submission, or a job killed before its first checkpoint, which leaves a
+`results.bp` but no `restart.json` -- there is nothing to continue from, so the script starts over
+with `--overwrite` (without it, `beat` refuses to touch the existing `results.bp`, saying that no
+restart checkpoint exists yet). `--overwrite` is safe here: it only deletes `beat`'s own
+artifacts, and only after the config has been validated.
 
 **What may change across a restart, and what may not:** `beat` refuses `--restart` if the run's
 *physics* has changed since the last checkpoint, comparing a hash of the whole resolved config
-except `solver.end_time`/`solver.num_beats` and everything under `[output]`/`[postprocess]`. So
-between restarts you may freely:
+except the run length (`solver.end_time`/`solver.num_beats`/`solver.BCL`) and everything under
+`[output]`/`[postprocess]`. So between restarts you may freely:
 
-- Extend `solver.end_time` (or switch between `end_time` and `num_beats`/`BCL`) to run longer than
-  originally configured.
+- Extend `solver.end_time` or `solver.num_beats`, or switch between `end_time` and
+  `num_beats`/`BCL`, to run longer than originally configured. (`BCL` only sets the run length,
+  `num_beats x BCL`; it doesn't pace anything -- pacing comes from a stimulus `period`.)
 - Change anything under `[output]` (`save_every`, `checkpoint_every`, `performance`, `log_every`,
   `fields`) or `[postprocess]`.
 - Run on a **different number of MPI ranks** than the original job used (the checkpoint is read
@@ -96,8 +108,9 @@ But not, without `beat` refusing with an error naming the mismatch:
 
 ## Exit codes for job-script branching
 
-`0` success, `1` a configuration error (`ConfigError`), `2` a runtime/solver failure (e.g. a
-blown-up, non-finite transmembrane potential). A parse-time mistake (bad TOML, wrong units, an
+`0` success, `1` a configuration error (`ConfigError`, a command-line usage error, or a missing
+`cli` extra), `2` a runtime failure (a blown-up, non-finite transmembrane potential, or any other
+unexpected error, e.g. from mesh generation or I/O). A parse-time mistake (bad TOML, wrong units, an
 unknown key, an unknown `cell.parameters` name) is always caught before any mesh is built or
 loaded; a marker-name or fiber-availability mistake (which needs the actual mesh to check) is
 caught right after that -- still well before the collective solve loop, but only cheap in wall-time
@@ -105,17 +118,19 @@ if the geometry was already built/cached ahead of time (see [Mesh once, run
 many](#mesh-once-run-many)). Either way, a job script can branch on the exit code directly:
 
 ```bash
-srun beat run config.toml --restart
+srun beat run config.toml $FLAG
 case $? in
   0) echo "done" ;;
-  1) echo "config error, not retrying" >&2; exit 1 ;;
-  2) echo "solver failed, resubmitting is unlikely to help without changing the config" >&2; exit 1 ;;
+  1) echo "config or usage error, not retrying" >&2; exit 1 ;;
+  2) echo "runtime failure (solver, I/O, mesh generation): check output/run.json and the log" >&2; exit 1 ;;
 esac
 ```
 
 `output/run.json` (`status: "running"|"finished"|"failed"`, plus `n_ranks`, wall-clock start/end,
-and -- on a runtime failure -- the exception) is the same information in a form a later step or a
-monitoring script can read back out of the output folder itself.
+and -- on a failure -- the error) is the same information in a form a later step or a monitoring
+script can read back out of the output folder itself. It is only written once the run has started:
+a failure while setting up the simulation (config, cell model, mesh, markers) leaves the output
+folder untouched, so check the exit code and the job's own log for those.
 
 ## Env var overrides with scheduler-provided variables
 
