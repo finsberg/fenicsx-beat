@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Callable
 
 from mpi4py import MPI
 
@@ -20,7 +20,15 @@ from ..stimulation import (
 )
 from ..units import ureg
 from ..utils import interpolation_points
-from .config import ConfigError, EPConfig, StimulusConfig, ms
+from .config import (
+    BoxStimulus,
+    ConfigError,
+    EPConfig,
+    MarkerStimulus,
+    RandomEndocardialStimulus,
+    StimulusConfig,
+    ms,
+)
 from .geometry import CLIGeometry, get_marker
 
 logger = logging.getLogger(__name__)
@@ -33,7 +41,7 @@ class StimulusSet:
 
 
 def _scaled_amplitude(
-    conf: Any,
+    conf: MarkerStimulus | BoxStimulus | RandomEndocardialStimulus,
     ep: EPConfig,
     mesh: dolfinx.mesh.Mesh,
     entity_dim: int,
@@ -53,7 +61,12 @@ def _scaled_amplitude(
         ) from e
 
 
-def _pulses(time: dolfinx.fem.Constant, starts: list[float], duration: float, amp: float) -> Any:
+def _pulses(
+    time: dolfinx.fem.Constant,
+    starts: list[float],
+    duration: float,
+    amp: float,
+) -> ufl.core.expr.Expr:
     terms = [
         ufl.conditional(ufl.And(ufl.ge(time, s), ufl.le(time, s + duration)), amp, 0.0)
         for s in starts
@@ -62,7 +75,7 @@ def _pulses(time: dolfinx.fem.Constant, starts: list[float], duration: float, am
 
 
 def _marker(
-    conf: Any,
+    conf: MarkerStimulus,
     geo: CLIGeometry,
     ep: EPConfig,
     time: dolfinx.fem.Constant,
@@ -80,7 +93,7 @@ def _marker(
 
 
 def _box(
-    conf: Any,
+    conf: BoxStimulus,
     geo: CLIGeometry,
     ep: EPConfig,
     time: dolfinx.fem.Constant,
@@ -111,7 +124,7 @@ def _box(
 
 
 def _random(
-    conf: Any,
+    conf: RandomEndocardialStimulus,
     geo: CLIGeometry,
     ep: EPConfig,
     time: dolfinx.fem.Constant,

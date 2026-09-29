@@ -105,6 +105,12 @@ def test_box_min_max_checked(tmp_path):
         Config.model_validate(base(tmp_path, stimulus=[stim]))
 
 
+def test_random_endocardial_requires_at_least_one_marker(tmp_path):
+    stim = {"type": "random_endocardial", "markers": [], "amplitude": "1 uA/cm**3"}
+    with pytest.raises(ValidationError, match="at least 1 item"):
+        Config.model_validate(base(tmp_path, stimulus=[stim]))
+
+
 def test_regions_require_layers(tmp_path):
     cell = {"ode_file": "m.ode", "regions": {"endo": {"parameters": {"celltype": 0}}}}
     with pytest.raises(ValidationError, match="layers"):

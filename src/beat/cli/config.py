@@ -383,7 +383,7 @@ class BoxStimulus(_StimulusBase):
 
 class RandomEndocardialStimulus(_StimulusBase):
     type: Literal["random_endocardial"] = "random_endocardial"
-    markers: list[str] = Field(default_factory=lambda: ["LV", "RV"])
+    markers: list[str] = Field(default_factory=lambda: ["LV", "RV"], min_length=1)
     num_points: int = Field(default=200, ge=1)
     delay_range: tuple[Time, Time] = Field(
         default_factory=lambda: (_q("0 ms"), _q("4 ms")),
