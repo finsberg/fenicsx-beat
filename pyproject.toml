@@ -49,6 +49,7 @@ dev = [
     "bump-my-version",
     "pre-commit",
     "mypy",
+    "types-toml",
     "fenicsx-beat[test]",
     "fenicsx-beat[docs]",
 ]
