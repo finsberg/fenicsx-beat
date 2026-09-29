@@ -82,6 +82,7 @@ geometriesx
 geox
 getpid
 Gilles
+gmres
 gmsh
 gotran
 gotranx

@@ -29,6 +29,14 @@ class CellModel:
     init_states: dict[int, np.ndarray]
     parameters: dict[int, np.ndarray]
     region_ids: dict[str, int]
+    ode_file: Path
+    """Source ``.ode`` file ``module``/``fun`` were generated from.
+
+    Kept so a consumer that needs a *different* code-generation backend from the same ODE --
+    e.g. ``beat.cli.solvers`` building the continuous-time UFL right-hand side the Irksome ODE
+    backend needs, as opposed to ``fun``'s discrete-time stepping scheme -- can regenerate from
+    it without threading ``CellConfig``/``cache_dir`` through every solver-builder signature.
+    """
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -192,6 +200,7 @@ def build_cell_model(
         init_states=init_states,
         parameters=parameters,
         region_ids=region_ids,
+        ode_file=cell.ode_file,
     )
 
 
