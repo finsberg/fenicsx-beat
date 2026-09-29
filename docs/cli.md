@@ -1,303 +1,255 @@
 # Command line interface
 
 `fenicsx-beat` ships a `beat` command line tool that runs a tissue-level monodomain simulation
-(and some postprocessing) purely from a `config.toml` file, so you don't need to write a Python
-script for routine runs. This page walks through the full workflow — building a mesh, writing a
-`config.toml`, and running/postprocessing a simulation — for three geometries:
-a [slab](#example-1-a-slab), an idealized [left-ventricle ellipsoid](#example-2-a-left-ventricle-ellipsoid),
-and a realistic [UK Biobank bi-ventricular atlas](#example-3-a-uk-biobank-bi-ventricular-geometry)
-mesh.
+(and its postprocessing) purely from a `config.toml` file, so routine runs — including batch/array
+jobs on an HPC cluster — don't need a Python script. This page covers installation, the workflow,
+the commands and override mechanisms, the output folder layout, and the built-in templates. See
+also [Running on a cluster](cli_cluster.md) and the generated [configuration
+reference](cli_reference.md).
 
 ```{note}
-The `beat` CLI currently supports a single, spatially homogeneous cell model per simulation (one
-`.ode` file, one parameter set for the whole tissue). The [demos](../demos/index.md) — e.g.
-[lv_endocardial.py](../demos/lv_endocardial.py) — go further, with transmurally varying cell
-models (endocardial/mid-myocardial/epicardial) via `beat.odesolver.DolfinMultiODESolver`; that
-isn't exposed through `config.toml` yet.
+The CLI drives one spatially homogeneous-or-layered cell model per simulation from one `.ode` file
+(shared parameters, or per-region overrides via `[cell.regions.<name>]` — see the
+[config reference](cli_reference.md)). Per-region *different* `.ode` files, and changing
+ODE parameters at specific times during a run (`parameter_schedule`), are future work; the
+[demos](../demos/index.md) that need them (e.g. [pvc.py](../demos/pvc.py),
+[pace_train.py](../demos/pace_train.py)) are not fully reproducible via `config.toml` yet — see the
+[templates table](#templates) below for the exact deviations.
 ```
 
 ## Installation
 
-The CLI's dependencies (`pydantic`, `cardiac-geometriesx`, `gotranx`, `io4dolfinx`, ...) are
-bundled in the `cli` extra:
+The CLI's dependencies (`pydantic`, `pydantic-pint`, `cardiac-geometriesx`, `gotranx`,
+`io4dolfinx`, ...) are bundled in the `cli` extra:
 
 ```bash
 pip install "fenicsx-beat[cli]"
 ```
 
 Visualization from `beat post` additionally needs `pyvista` (e.g. via `pip install
-"fenicsx-beat[docs]"`, or just `pip install pyvista`) — it's optional and silently skipped with a
+"fenicsx-beat[docs]"`, or just `pip install pyvista`); it's optional and silently skipped with a
 log warning if not installed.
 
-## Overview of the workflow
+```{warning}
+If your config uses `solver.pde.type = "irksome"` / `solver.ode.type = "irksome"`, install the
+`irksome` extra too -- but **not** straight from PyPI: `irksome[dolfinx]` on PyPI ignores
+`backend="dolfinx"` and imports `firedrake` regardless. Install the `git+` version instead:
 
-1. **Build a mesh.** `cardiac-geometriesx` installs a `geox` command line tool that generates
-   meshes (with fibres) for several standard geometries — run `geox --help` for the full list.
-   This page covers `geox slab`, `geox lv-ellipsoid` and `geox ukb`.
-2. **Get a cell model.** Point `cell.ode_file` at any `.ode`/CellML-derived model, e.g. one of the
-   ones under [`odes/`](https://github.com/finsberg/fenicsx-beat/tree/main/odes) in the repository,
-   or your own. `beat run` generates the Python code for it (via
-   [`gotranx`](https://finsberg.github.io/gotranx)) the first time it's needed and reuses it after
-   that.
-3. **Write a `config.toml`.** `beat init config.toml` writes one with default values you can edit;
-   `beat validate-config config.toml` checks it parses without actually running anything.
-4. **Run it.** `beat run config.toml` runs the simulation and writes a VTX file (for viewing in
-   ParaView) plus a checkpoint used by the postprocessing commands below.
-5. **Postprocess it.** `beat ecg config.toml` recovers a pseudo-ECG at configured points; `beat
-   post config.toml` computes local activation times (as a full-mesh map and at configured points)
-   and, if `pyvista` is installed, renders PNG/GIF visualizations.
+    pip install "irksome[dolfinx] @ git+https://github.com/firedrakeproject/Irksome.git"
 
-## The `config.toml` sections
+Without it, any config that needs it fails fast with an install hint before doing any mesh/MPI
+work; it does *not* fail silently.
+```
 
-| Section | Field | Meaning |
+## Quick start
+
+```bash
+beat init case/config.toml --template slab   # write a starter config (+ its .ode file)
+beat validate-config case/config.toml        # parse + validate, print the resolved config
+beat geometry case/config.toml               # generate/cache the mesh, then stop
+beat run case/config.toml                    # run the simulation
+beat post case/config.toml                   # activation times, VTX, PNG/GIF
+beat ecg case/config.toml                    # pseudo-ECG at [postprocess.points]
+```
+
+`beat init --template NAME` copies `NAME`'s `config.toml` (and any companion files, e.g. its
+`.ode` model) from the package's built-in templates -- see the [templates table](#templates) for
+the full list, one per row. Without `--template`, it defaults to `slab`, a thin box of tissue
+stimulated at one end (the simplest possible geometry, good for checking the CLI wiring itself)
+with `geometry.type = "box_slab"` -- a structured tetrahedral box built directly by `beat`, no
+`gmsh`/mesh-generation tool of your own needed. `beat geometry` (also run implicitly by `beat run`)
+builds it once into `geometry.folder` and reuses it on every later invocation, keyed on a hash of
+the geometry section; `beat init --template lv_endocardial`/`biv_endocardial`/`ukb_atlas` instead
+generate a real gmsh mesh (via `cardiac-geometriesx`, and `ukb-atlas` for the last one), which can
+take from seconds to minutes depending on resolution -- run `beat geometry` on its own first if you
+just want to warm that cache (e.g. on a cluster login node, see
+[Running on a cluster](cli_cluster.md)).
+
+`geometry.type = "folder"` is the other case: point `folder` at a mesh you (or `geox`, or another
+`cardiac-geometriesx`-compatible tool) already generated externally, with a `markers.json` describing
+its facet/cell tags -- `beat` then only *loads* it, via
+`cardiac_geometries.geometry.Geometry.from_folder`.
+
+A point in `[postprocess.points]` used only for `beat ecg` doesn't need to lie inside the mesh --
+e.g. a far-field "electrode" position -- but `beat post` can't report an activation time there and
+records `null` for it (with a log warning), which is distinct from the `-1.0` it uses for a point
+that's inside the mesh but simply hadn't activated by the end of the recorded run. Also note that
+`postprocess.activation_threshold` is in the cell model's own units for `v`: a real ionic model's
+`v` is in mV (so a physiological threshold is around `0.0`), while a normalized two-variable model
+like Mitchell-Schaeffer (used by a couple of templates, e.g. `irksome_model_gotranx`) has `v`
+roughly in `[0, 1]`, so its threshold should be something like `0.5` instead.
+
+## Commands
+
+Every command takes a config path (except `init`, where it's optional and defaults to
+`config.toml`) and accepts repeatable `--set KEY=VALUE` overrides, plus the global `-v/--verbose`
+and `--log-all-cpus` flags.
+
+| Command | Behaviour |
+|---|---|
+| `beat init [config.toml] [--template NAME] [--force]` | Write a starter config from a template (default: `slab`); `--force` overwrites existing files. |
+| `beat validate-config config.toml` | Parse + validate + print the resolved config. Builds nothing (no mesh, no MPI-collective work). |
+| `beat geometry config.toml` | Generate (or load) the geometry into `geometry.folder` and stop. Idempotent -- cached and reused across the other commands and reruns. |
+| `beat run config.toml [--restart] [--overwrite] [--output-folder P] [--petsc-options "..."]` | Run the simulation. |
+| `beat post config.toml [--output-folder P]` | Activation times, VTX conversion and visualizations from `results.bp`. |
+| `beat ecg config.toml [--output-folder P]` | Pseudo-ECG at `postprocess.points` from `results.bp`. |
+| `beat version` | Versions of beat, dolfinx, mpi4py, petsc4py. |
+
+Every command also accepts `beat --dry-run <command> ...` to print what would run without doing
+anything, useful for sanity-checking overrides in a job script.
+
+### Exit codes
+
+`0` success, `1` a configuration/validation error (`ConfigError` -- typos, wrong units, unknown
+marker/parameter names, ...; always raised before any collective mesh/solve work), `2` a runtime
+or solver failure (e.g. a non-finite transmembrane potential). A failure of either kind sets
+`run.json: status = "failed"` in the output folder (`1` never gets that far if the output folder
+couldn't be prepared at all).
+
+(overrides)=
+## Overrides
+
+Config values can come from four places, in order of increasing precedence:
+
+1. The TOML file itself.
+2. Environment variables: `BEAT_<SECTION>__<KEY>`, e.g. `BEAT_SOLVER__DT="0.02 ms"`. The `BEAT_`
+   prefix and `__` (double underscore) nesting delimiter are fixed, but the section/key names
+   themselves are matched **case-insensitively** against the config schema, so `BEAT_EP__C_M` and
+   `BEAT_ep__c_m` both resolve to `ep.C_m` (whose field name is mixed-case).
+3. `--set dotted.key=value` (repeatable). `value` is parsed as a TOML literal, the same way it
+   would appear on the right-hand side of a `key = value` line in the file:
+   - `--set 'solver.dt="0.02 ms"'` (a quantity is still a quoted string)
+   - `--set ep.conductivity.sigma_il=0.2`
+   - `--set 'postprocess.points.P1=[0,0,0]'`
+   - List elements are addressed **by index**: `--set 'stimulus.0.start="10 ms"'` sets the first
+     `[[stimulus]]` table's `start`.
+   - Unknown keys are an error (`ConfigError`), never silently dropped.
+4. Dedicated flags on `beat run`/`beat post`/`beat ecg`: `--output-folder` and (on `beat run`)
+   `--petsc-options`.
+
+`--output-folder` overrides `output.folder` and, unlike every path *inside* the config file,
+resolves against the **current working directory** rather than the config file's directory --
+handy for array jobs launched from one shared directory (see
+[Running on a cluster](cli_cluster.md)).
+
+`--petsc-options "-ksp_type cg -pc_type hypre"` merges into `solver.petsc_options` (parsed with
+`shlex`, each `-key value` pair; a bare `-flag` becomes `True`). Negative numbers are accepted as
+option *values*, not mistaken for the next flag, e.g. `--petsc-options "-ksp_rtol -1e-6"`.
+
+Relative paths written *inside* the config file (`cell.ode_file`, `geometry.folder` for
+`type = "folder"`, `output.folder`) resolve against **the config file's own directory**, not the
+current working directory -- so `beat run /abs/path/to/config.toml` from anywhere still finds
+`ode_file`/the mesh next to the config, which matters once a cluster job script `cd`s elsewhere
+before running `srun beat run ...`.
+
+Whatever the config resolves to after all four layers, it's written out in full to
+`output/config.resolved.toml` at the start of every `beat run` -- the single source of truth for
+"what actually ran".
+
+pydantic-settings' `CliSettingsSource` is deliberately not used here (poor support for lists of
+discriminated unions, and an unwieldy auto-generated `--help`).
+
+## Output folder layout
+
+`beat run` writes into `output.folder` (default `output`, relative to the config file):
+
+```text
+output/
+  config.resolved.toml     # the fully resolved configuration of the (latest) run
+  run.json                 # versions, n_ranks, start/end wall time, status: running/finished/failed
+  output.log               # log file (output_all_cpus.log too when running on >1 rank)
+  cell_model_<hash>.py      # gotranx-generated code for cell.ode_file (hash: file contents + scheme)
+  init_states/<region>_<hash>.npy   # cached single-cell steady state (only if cell.steady_state is set)
+  results.bp               # io4dolfinx: v (+ output.fields), every output.save_every
+  restart.bp                # io4dolfinx: v and every ODE state, every output.checkpoint_every and at the end
+  restart.json              # the latest complete checkpoint's time/step and a hash of the run's physics
+  performance.json          # timing summary (only with output.performance = true)
+  post/                     # written by `beat post` / `beat ecg`, see below
+```
+
+`beat run` never writes VTX itself -- only the io4dolfinx files above. `beat post config.toml`
+reads `results.bp` (which can happen later, on any number of ranks, independent of how many ranks
+the run itself used) and writes into `post/`:
+
+```text
+output/post/
+  v.bp                       # results.bp converted to VTX (ParaView), if postprocess.vtx (default true)
+  activation_time.bp          # full-mesh local activation-time map (VTX)
+  activation_times.json       # activation times at postprocess.points (null if a point is outside the mesh)
+  voltage_final.png            # snapshot of v at the last saved time (needs pyvista)
+  activation_time_map.png      # snapshot of the activation-time map (needs pyvista)
+  voltage.gif                  # animation of v(t) over the whole run, if postprocess.make_gif (needs pyvista)
+```
+
+`beat ecg config.toml` additionally writes `post/ecg.csv` (and `post/ecg.png`, if matplotlib is
+installed) with the recovered extracellular potential at `postprocess.points`.
+
+### `--overwrite` and `--restart`
+
+Re-running into a non-empty output folder (e.g. an array-job index collision, or simply rerunning
+by hand) is refused by default -- `beat` never silently deletes anything:
+
+- `--overwrite` deletes *only the artifacts `beat` itself wrote* (everything listed above, plus
+  `post/`) and starts fresh. Anything else in that folder -- notably your own `config.toml`/`.ode`
+  files, if the output folder happens to be the config's own directory -- is left untouched.
+- `--restart` continues from `restart.json`/`restart.bp` instead. It refuses if the run's
+  **physics** has changed since the checkpoint was written: the check is a hash of the whole
+  resolved config *excluding* `solver.end_time`/`solver.num_beats` (so extending the simulated
+  time, or switching from `end_time` to `num_beats`/`BCL`, is fine) and excluding `[output]` and
+  `[postprocess]` entirely (change `save_every`, `checkpoint_every`, `performance`, any
+  `[postprocess]` setting, freely across a restart). `geometry.folder` only matters for
+  `geometry.type = "folder"` (where it *is* the mesh being simulated); for every generated
+  geometry type it's just a cache location and is excluded like any other non-physics path.
+  Restarting on a **different number of MPI ranks** than the original run is allowed.
+- A restart never rewrites a `results.bp` timestamp that's already there: io4dolfinx *appends* a
+  duplicate write at an existing timestamp, and its reader returns the *first* match, so
+  re-writing the same time would be silently ignored on read anyway -- the runner simply skips it.
+
+## Units
+
+Every physical quantity in the config is a pint string, `"<value> <unit>"` (e.g. `dt = "0.05 ms"`,
+`sigma_el = "0.62 S/m"`) -- a bare number is rejected with a validation error naming the field.
+The one field that needs a moment's thought is `stimulus.amplitude`: it's a *current density*, but
+which dimension depends on the **dimensionality of the stimulus domain**, not the mesh:
+
+- A `box` stimulus is always volumetric, `uA/cm**3`, regardless of the mesh's own dimension (a box
+  carves out a sub-volume of however many topological dimensions the mesh has, but `beat` always
+  treats it as a 3D current density -- see `beat.stimulation.define_stimulus`).
+- A `marker`/`random_endocardial` stimulus on a **facet** marker of a 3D mesh is areal, `uA/cm**2`;
+  on a facet marker of a 2D mesh it's `uA/cm`; on a **cell** marker it's volumetric, `uA/cm**3` (2D)
+  or matches the mesh's own topological dimension otherwise.
+
+Get the dimension wrong and validation rejects the config before any solve, naming the mismatch.
+
+(templates)=
+## Templates
+
+Each template under `src/beat/cli/templates/<name>/` is a runnable `config.toml` (plus any
+companion `.ode` file) reproducing one of the tissue-level demos as closely as the CLI schema
+allows; `beat init --template NAME` copies it (and its companions) into place. Where a demo does
+something the schema can't express yet, the template's header comment documents the deviation --
+summarized here:
+
+| Template | Demo | Known deviation |
 |---|---|---|
-| `[mesh]` | `unit` | Length unit the mesh coordinates are in, e.g. `"mm"` or `"cm"` |
-| | `folder` | Folder written by `geox` (or `cardiac_geometries.geometry.Geometry.save_folder`) |
-| `[cell]` | `ode_file` | Path to the `.ode` cell model |
-| | `module_name` | Where to cache the `gotranx`-generated Python module |
-| | `scheme` | Integration scheme, e.g. `"generalized_rush_larsen"` |
-| | `v_name` | Name of the transmembrane-potential state in the `.ode` file (usually `"v"` or `"V"`) |
-| | `num_beats`, `BCL`, `dt` | Pacing protocol used to compute a steady-state initial condition for the single cell, before the tissue simulation starts |
-| | `track_indices` | State names to record while computing the steady state (diagnostic plot/array in `output/init_states/`) |
-| `[simulation]` | `num_beats`, `BCL` | Simulated time is `num_beats * BCL` |
-| | `dt` | PDE (and ODE) time step |
-| | `theta` | Splitting scheme parameter (`1.0` = Godunov, the default; `0.5` = Strang) |
-| | `save_every_ms` | How often to write output |
-| | `output_folder` | Where results/logs/checkpoints go (cleared at the start of each `beat run`) |
-| `[stimulus]` | `marker` | Name of a **facet** marker (from the mesh's `markers.json`) where the stimulus is applied |
-| | `amplitude`, `duration`, `start` | Stimulus current parameters, see {py:func}`beat.stimulation.define_stimulus` |
-| `[ep]` | `chi`, `C_m` | Surface-to-volume ratio and membrane capacitance, see the [mathematical background](math_background.md) |
-| | `conductivity.sigma_{i,e}{l,t}` | Intracellular/extracellular, longitudinal/transverse conductivities |
-| `[postprocess]` | `points` | Named points (in `mesh.unit` coordinates), e.g. `{P1 = [0.0, 0.0, 0.0]}`, used by both `beat ecg` and `beat post` |
-| | `activation_threshold` | Threshold on `v` used to determine local activation time |
-| | `sigma_b` | Bath conductivity used by the ECG recovery, see {py:class}`beat.ecg.ECGRecovery` |
-| | `make_gif` | If true, `beat post` also renders an animated GIF of `v(t)` (requires `pyvista`) |
+| `slab` | [slab.py](../demos/slab.py) | Cable partitioned into endo/mid/epi celltypes by raw x-position isn't expressible via `[cell.layers]` yet; homogeneous ToR-ORd region instead. |
+| `niederer_benchmark` | [niederer_benchmark.py](../demos/niederer_benchmark.py) | -- |
+| `fitzhughnagumo` | [fitzhughnagumo.py](../demos/fitzhughnagumo.py) | Rescaled from a dimensionless unit square to 100x100 mm; conductivity from the `Niederer` preset rather than the demo's arbitrary scalar `M`. |
+| `diffusion` | [diffusion.py](../demos/diffusion.py) | The demo has no ODE/cell model at all (pure diffusion); the CLI always couples an ODE step, so this template ships a trivial `passive.ode` (`dv/dt = 0`) instead. |
+| `pvc` | [pvc.py](../demos/pvc.py) | The demo's per-DOF g_Kr/g_Ks heterogeneity (right half of the cable) has no marker to key `[cell.layers]` off on an `interval` geometry; homogeneous cable instead (no PVC emerges, but pacing/cell model match). |
+| `pace_train` | [pace_train.py](../demos/pace_train.py) | The demo switches its stimulus off at runtime (a parameter schedule, future work); this template uses a fixed PDE pulse train for the whole run instead. |
+| `lv_endocardial` | [lv_endocardial.py](../demos/lv_endocardial.py) | -- |
+| `biv_endocardial` | [biv_endocardial.py](../demos/biv_endocardial.py) | -- |
+| `ukb_atlas` | [ukb_atlas.py](../demos/ukb_atlas.py) | Needs network access on first run (atlas download, cached afterwards in `geometry.folder`). |
+| `irksome_model_gotranx` | [irksome_model_gotranx.py](../demos/irksome_model_gotranx.py) | Uses `RadauIIA`/`stages=1` rather than the demo's `BackwardEuler()` (not expressible via `tableau`/`stages`); PDE stimulus box instead of the demo's non-default initial condition; uniform conductivity preset instead of the demo's piecewise-constant one. |
+| `external_operator_gotranx` | [external_operator_gotranx.py](../demos/external_operator_gotranx.py) | Conductivity built from `[ep]` (the `Niederer` preset) rather than the demo's raw scalar `M`. |
 
-Any field with physical units (`BCL`, `dt`, `duration`, `chi`, `C_m`, the conductivities, ...)
-accepts a `"<value> <unit>"` string parsed by [pint](https://pint.readthedocs.io) — e.g. `dt =
-"0.05 ms"` or `sigma_el = "6.2 mS/cm"`. `stimulus.amplitude` is the one exception: it's a plain
-number, interpreted in the unit implied by the marker's dimension and `mesh.unit` (see
-{py:func}`beat.stimulation.define_stimulus`).
+`examples/cli/README.md` in the repository points at the same templates for anyone browsing the
+source tree directly rather than an installed package.
 
-A point used only for `beat ecg` doesn't need to lie inside the mesh — e.g. a far-field
-"electrode" position — but `beat post` can't report an activation time there and records `null`
-for it (with a log warning), instead of the `-1.0` it uses for a point that's inside the mesh but
-simply hadn't activated by the end of the recorded run.
+## See also
 
-(example-1-a-slab)=
-## Example 1: a slab
-
-A thin slab of tissue, stimulated at one end — the simplest possible 3D geometry, good for
-checking the CLI wiring itself. `geox slab` requires [gmsh](https://gmsh.info/); pass
-`--no-create-fibers`'s opposite, `--create-fibers`, to also generate an analytic fibre field
-(required — `beat run` needs one to build the conductivity tensor $M$).
-
-```bash
-geox slab mesh --lx 20 --ly 7 --lz 3 --dx 1.0 --create-fibers
-```
-
-This writes `mesh/markers.json` with facet markers `X0`, `X1`, `Y0`, `Y1`, `Z0`, `Z1` (the six
-faces of the box) — `X0` is the natural place to stimulate to trigger a wave travelling down the
-slab's long axis.
-
-```toml
-# config.toml
-[mesh]
-unit = "mm"
-folder = "mesh"
-
-[cell]
-ode_file = "mitchell_schaeffer.ode"   # or e.g. odes/tentusscher_panfilov_2006/*.ode for a real run
-num_beats = 20
-BCL = "1000 ms"
-dt = "0.05 ms"
-module_name = "mitchell_schaeffer.py"
-v_name = "v"
-track_indices = ["v", "h"]
-
-[simulation]
-num_beats = 1
-BCL = "20 ms"
-dt = "0.05 ms"
-save_every_ms = 1.0
-output_folder = "output"
-
-[stimulus]
-marker = "X0"
-amplitude = 5000.0
-duration = "2.0 ms"
-
-[postprocess]
-activation_threshold = 0.5
-sigma_b = 1.0
-
-[postprocess.points]
-P1 = [5.0, 3.5, 1.5]
-P2 = [15.0, 3.5, 1.5]
-```
-
-```bash
-beat run config.toml
-beat ecg config.toml    # -> output/ecg.csv, output/ecg.png
-beat post config.toml   # -> output/activation_time.xdmf, output/activation_times.json, ...
-```
-
-This mirrors the [conduction-velocity/ECG slab demo](../demos/slab.py), which computes conduction
-velocity from the same kind of point-activation-time data by hand.
-
-(example-2-a-left-ventricle-ellipsoid)=
-## Example 2: a left-ventricle ellipsoid
-
-An idealized LV geometry (a truncated ellipsoid) — see the
-[endocardial-stimulation demo](../demos/lv_endocardial.py) for the full multi-region version of
-this same geometry.
-
-```bash
-geox lv-ellipsoid mesh --psize-ref 2.0 --create-fibers
-```
-
-(`--psize-ref` sets the target element size, in `cm`; `2.0` gives a coarse-but-fast mesh for a
-quick trial run — the [demo](../demos/lv_endocardial.py) uses `0.15` for a much finer, much
-slower mesh, more representative of a real study.)
-
-`markers.json` has `ENDO`, `EPI` and `BASE` facet markers (plus point/ring markers used
-internally by `cardiac_geometries`). Stimulating `ENDO` mimics activation spreading in from the
-endocardium.
-
-```toml
-# config.toml
-[mesh]
-unit = "cm"
-folder = "mesh"
-
-[cell]
-ode_file = "mitchell_schaeffer.ode"
-num_beats = 20
-BCL = "1000 ms"
-dt = "0.05 ms"
-module_name = "mitchell_schaeffer.py"
-v_name = "v"
-track_indices = ["v", "h"]
-
-[simulation]
-num_beats = 1
-BCL = "20 ms"
-dt = "0.05 ms"
-save_every_ms = 1.0
-output_folder = "output"
-
-[stimulus]
-marker = "ENDO"
-amplitude = 5000.0
-duration = "1.0 ms"
-
-[postprocess]
-activation_threshold = 0.5
-
-[postprocess.points]
-Epicardium = [0.0, 0.0, -9.5]
-```
-
-```bash
-beat run config.toml
-beat post config.toml
-```
-
-`output/activation_time_map.png` should show activation starting at the endocardium (dark) and
-spreading outward to the epicardium (lighter) as the wave crosses the wall.
-
-(example-3-a-uk-biobank-bi-ventricular-geometry)=
-## Example 3: a UK Biobank bi-ventricular geometry
-
-A realistic bi-ventricular geometry built from the UK Biobank statistical shape atlas (via the
-optional [`ukb-atlas`](https://github.com/ComputationalPhysiology/ukb-atlas) dependency, pulled in
-by `geox`) — see the [Purkinje-like stimulation demo](../demos/ukb_atlas.py) for a more elaborate
-random-activation-pattern version of this geometry.
-
-```bash
-geox ukb mesh --char-length-max 2.0 --char-length-min 2.0 --create-fibers
-```
-
-The first run downloads the atlas data (cached under `~/.ukb/`) and can take a while, especially
-at the default (fine) resolution — use a coarser `--char-length-max/min` (e.g. `5.0`) for a
-quicker trial run. `markers.json` has `LV`, `RV` and `EPI` facet markers (plus the four valve
-markers `MV`/`AV`/`PV`/`TV`); stimulating `LV` or `RV` mimics endocardial activation in one
-chamber.
-
-```toml
-# config.toml
-[mesh]
-unit = "mm"
-folder = "mesh"
-
-[cell]
-ode_file = "mitchell_schaeffer.ode"
-num_beats = 20
-BCL = "1000 ms"
-dt = "0.05 ms"
-module_name = "mitchell_schaeffer.py"
-v_name = "v"
-track_indices = ["v", "h"]
-
-[simulation]
-num_beats = 1
-BCL = "20 ms"
-dt = "0.05 ms"
-save_every_ms = 1.0
-output_folder = "output"
-
-[stimulus]
-marker = "LV"
-amplitude = 500.0
-duration = "1.0 ms"
-
-[postprocess]
-activation_threshold = 0.5
-
-[postprocess.points]
-# A far-field point outside the mesh: valid for `beat ecg`, reported as `null` (not an error)
-# by `beat post`, which only reports activation times for points inside the tissue.
-Torso = [200.0, 0.0, 0.0]
-```
-
-```bash
-beat run config.toml
-beat ecg config.toml
-beat post config.toml
-```
-
-## A minimal `.ode` file, for trying this quickly
-
-The examples above use the two-state
-[Mitchell–Schaeffer model](https://www.sciencedirect.com/science/article/pii/S0092822302000809)
-rather than a full ionic current model, purely so a first end-to-end run finishes in seconds:
-
-```
-parameters(
-    tau_in = 0.3,
-    tau_out = 6.0,
-    tau_open = 120.0,
-    tau_close = 150.0,
-    v_gate = 0.13
-)
-states(
-    v = 0.0,
-    h = 1.0
-)
-
-h_inf = Conditional(Lt(v, v_gate), 1.0, 0.0)
-tau_h = Conditional(Lt(v, v_gate), tau_open, tau_close)
-
-dv_dt = h * (v**2 * (1.0 - v)) / tau_in - v / tau_out
-dh_dt = (h_inf - h) / tau_h
-```
-
-Note that Mitchell–Schaeffer's `v` is a normalized action potential (roughly `0` to `1`, resting at
-exactly `0`), not millivolts — that's why the examples above use
-`postprocess.activation_threshold = 0.5` rather than a physiological voltage like `0.0` mV (which,
-for this particular model, every point would trivially "cross" at rest, at `t=0`). For a real
-study, swap in one of the ionic current models under
-[`odes/`](https://github.com/finsberg/fenicsx-beat/tree/main/odes) (e.g. the ten
-Tusscher–Panfilov or ToR-ORd models used in the other demos), a `num_beats` of at least 200 for
-the single-cell steady state, and an activation threshold appropriate to that model's `v` (e.g.
-`0.0` mV).
+- [Configuration reference](cli_reference.md) -- every section/field, generated from the pydantic
+  models, so it can't drift from the code.
+- [Running on a cluster](cli_cluster.md) -- SLURM array jobs, wall-time/`--restart` patterns, and
+  solver advice for large meshes.
