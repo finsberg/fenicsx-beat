@@ -32,6 +32,7 @@ cardiomyocytes
 carputils
 cbcbeat
 cellname
+cfun
 Chiara
 Clermont
 clim
@@ -69,6 +70,7 @@ Francesco
 Frederik
 fridericia
 functionspace
+gdim
 genexpr
 geodir
 geometriesx
