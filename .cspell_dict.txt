@@ -216,6 +216,7 @@ Stefano
 stim
 Strang
 stringifying
+subparser
 subplus
 Sundnes
 tdim

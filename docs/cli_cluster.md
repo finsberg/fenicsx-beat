@@ -5,6 +5,7 @@ run can survive a wall-time kill and be continued (`--restart`), possibly on a d
 allocation. This page assumes SLURM but the same ideas (override flags, exit codes, restart) apply
 to any scheduler.
 
+(mesh-once-run-many)=
 ## Mesh once, run many
 
 Generating a mesh (especially a realistic `lv_ellipsoid`/`biv_ellipsoid`/`ukb` geometry) can take
@@ -13,13 +14,18 @@ one `config.toml` would otherwise regenerate (or race to regenerate) it independ
 once, on a login node or a short single-task job, before submitting the sweep:
 
 ```bash
-beat geometry config.toml
+beat validate-config config.toml   # parse-time checks only: no mesh, no MPI-collective work
+beat geometry config.toml          # build/cache the mesh once
 ```
 
-This is exactly the same step `beat run` would do lazily on first use, cached in `geometry.folder`
-and keyed by a hash of the `[geometry]` section -- so running it up front is purely an
-optimization, not a separate code path; every array-job task's own `beat run` reuses the cache
-rather than rebuilding it.
+`beat geometry` is exactly the same step `beat run` would do lazily on first use, cached in
+`geometry.folder` and keyed by a hash of the `[geometry]` section -- so running it up front is
+purely an optimization, not a separate code path; every array-job task's own `beat run` reuses the
+cache rather than rebuilding it. It's also the cheapest way to surface a marker-name typo
+(`[[stimulus]]`, `cell.layers`) or a missing fiber field (`fibers = "from_geometry"`) ahead of the
+timed sweep: those checks need the actual mesh, so they only run once `beat run` has built or
+loaded the geometry (see [Exit codes](cli.md#exit-codes)) -- with the mesh already cached, that
+happens within seconds rather than after a from-scratch mesh generation inside the job.
 
 ## A SLURM array job for a parameter sweep
 
@@ -90,10 +96,13 @@ But not, without `beat` refusing with an error naming the mismatch:
 
 ## Exit codes for job-script branching
 
-`0` success, `1` a configuration error (bad TOML, wrong units, unknown marker/parameter names --
-always caught before any collective mesh/solve work, so a config typo can't waste an allocation's
-wall-time), `2` a runtime/solver failure (e.g. a blown-up, non-finite transmembrane potential). A
-job script can branch on these directly:
+`0` success, `1` a configuration error (`ConfigError`), `2` a runtime/solver failure (e.g. a
+blown-up, non-finite transmembrane potential). A parse-time mistake (bad TOML, wrong units, an
+unknown key, an unknown `cell.parameters` name) is always caught before any mesh is built or
+loaded; a marker-name or fiber-availability mistake (which needs the actual mesh to check) is
+caught right after that -- still well before the collective solve loop, but only cheap in wall-time
+if the geometry was already built/cached ahead of time (see [Mesh once, run
+many](#mesh-once-run-many)). Either way, a job script can branch on the exit code directly:
 
 ```bash
 srun beat run config.toml --restart

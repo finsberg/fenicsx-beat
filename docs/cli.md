@@ -81,9 +81,13 @@ roughly in `[0, 1]`, so its threshold should be something like `0.5` instead.
 
 ## Commands
 
-Every command takes a config path (except `init`, where it's optional and defaults to
-`config.toml`) and accepts repeatable `--set KEY=VALUE` overrides, plus the global `-v/--verbose`
-and `--log-all-cpus` flags.
+`validate-config`, `geometry`, `run`, `ecg` and `post` all take a config path and accept repeatable
+`--set KEY=VALUE` overrides. `init` takes an optional config path (default `config.toml`) but no
+`--set` (there's no existing config to override yet). `version` takes neither -- it only prints
+version numbers. The global `-v/--verbose`, `--log-all-cpus` and `--dry-run` flags belong to every
+subcommand, but (being defined on the top-level parser, not each subparser) must come **before**
+the subcommand name: `beat -v run config.toml`, not `beat run config.toml -v` (the latter is an
+argparse error, `unrecognized arguments: -v`).
 
 | Command | Behaviour |
 |---|---|
@@ -95,16 +99,37 @@ and `--log-all-cpus` flags.
 | `beat ecg config.toml [--output-folder P]` | Pseudo-ECG at `postprocess.points` from `results.bp`. |
 | `beat version` | Versions of beat, dolfinx, mpi4py, petsc4py. |
 
-Every command also accepts `beat --dry-run <command> ...` to print what would run without doing
-anything, useful for sanity-checking overrides in a job script.
+`beat --dry-run <command> ...` (e.g. `beat --dry-run run config.toml --set 'solver.dt="0.02 ms"'`)
+logs the raw, argparse-parsed arguments and exits -- it does **not** load the TOML file or resolve
+`--set`/env overrides, so it can't catch a config or override mistake, only confirm which flags
+argparse itself accepted. To actually check that a config (with its overrides applied) parses and
+validates, use `beat validate-config` instead, which does load and resolve everything and prints
+the fully resolved result.
 
+(exit-codes)=
 ### Exit codes
 
-`0` success, `1` a configuration/validation error (`ConfigError` -- typos, wrong units, unknown
-marker/parameter names, ...; always raised before any collective mesh/solve work), `2` a runtime
-or solver failure (e.g. a non-finite transmembrane potential). A failure of either kind sets
-`run.json: status = "failed"` in the output folder (`1` never gets that far if the output folder
-couldn't be prepared at all).
+`0` success, `1` a configuration/validation error (`ConfigError`), `2` a runtime or solver failure
+(e.g. a non-finite transmembrane potential). A failure of either kind sets `run.json: status =
+"failed"` in the output folder (`1` never gets that far if the output folder couldn't be prepared
+at all). Not every `ConfigError` is caught at the same point, though all of them are caught well
+before the actual PDE/ODE solve loop:
+
+- Bad TOML, wrong units, an unknown TOML key or geometry/stimulus/solver `type`, a missing
+  `cell.ode_file`, an unknown `cell.scheme`, or a `cell.parameters`/`cell.regions.*.parameters` name
+  the generated cell model doesn't have -- all reported before any mesh is built or loaded (the
+  cell-model code is generated from `cell.ode_file` itself and doesn't need a mesh).
+- Marker names (`[[stimulus]]`, `cell.layers`) and fiber availability (`fibers = "from_geometry"`
+  needing an `f0` from the geometry) can only be checked once the mesh has actually been built or
+  loaded, since they *are* properties of that mesh -- so these are reported early in `beat run`,
+  right after the geometry step, but not before it.
+
+For a **generated** geometry (`slab`/`lv_ellipsoid`/`biv_ellipsoid`/`ukb`), building the mesh itself
+can be by far the most expensive part of that early setup -- run `beat validate-config` (parse-time
+checks only, no mesh) and then `beat geometry` (builds/caches the mesh once, cheaply reused by every
+later command) before submitting a long or queued job, so that if a marker/fiber-config mistake
+*is* still there, `beat run` fails within seconds against the already-cached mesh, rather than after
+regenerating it inside the timed job.
 
 (overrides)=
 ## Overrides
@@ -210,14 +235,19 @@ by hand) is refused by default -- `beat` never silently deletes anything:
 Every physical quantity in the config is a pint string, `"<value> <unit>"` (e.g. `dt = "0.05 ms"`,
 `sigma_el = "0.62 S/m"`) -- a bare number is rejected with a validation error naming the field.
 The one field that needs a moment's thought is `stimulus.amplitude`: it's a *current density*, but
-which dimension depends on the **dimensionality of the stimulus domain**, not the mesh:
+which dimension depends on the **stimulus type and, for a marker, the marker's own dimension** --
+not the mesh's topological dimension. Precisely (`src/beat/cli/stimulus.py::_scaled_amplitude`,
+mirroring `beat.stimulation.compute_effective_dim`):
+`effective_dim = entity_dim + (3 - mesh.topology.dim)`, where `entity_dim` is the dimension of the
+marked entity (facet or cell) for a `marker` stimulus, and the mesh's own topological dimension for
+`box`/`random_endocardial`. A facet's `entity_dim` is always `mesh.topology.dim - 1`, so it always
+cancels out to `effective_dim = 2` regardless of the mesh dimension; a cell marker's `entity_dim`
+equals `mesh.topology.dim`, always cancelling to `effective_dim = 3`. In short:
 
-- A `box` stimulus is always volumetric, `uA/cm**3`, regardless of the mesh's own dimension (a box
-  carves out a sub-volume of however many topological dimensions the mesh has, but `beat` always
-  treats it as a 3D current density -- see `beat.stimulation.define_stimulus`).
-- A `marker`/`random_endocardial` stimulus on a **facet** marker of a 3D mesh is areal, `uA/cm**2`;
-  on a facet marker of a 2D mesh it's `uA/cm`; on a **cell** marker it's volumetric, `uA/cm**3` (2D)
-  or matches the mesh's own topological dimension otherwise.
+- A `marker` stimulus on a **facet** marker is always areal, `uA/cm**2`, whatever the mesh's own
+  dimension (1D, 2D or 3D).
+- A `marker` stimulus on a **cell** marker, a `box` stimulus, and a `random_endocardial` stimulus
+  are all always volumetric, `uA/cm**3`, likewise regardless of the mesh's own dimension.
 
 Get the dimension wrong and validation rejects the config before any solve, naming the mismatch.
 
