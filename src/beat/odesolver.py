@@ -131,6 +131,12 @@ class BaseDolfinODESolver(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
+        """Inverse of :meth:`assign_all_states`: overwrite every ODE state from ``functions``
+        (one per state, on ``v_ode``'s function space), e.g. when restarting from a checkpoint.
+        """
+
+    @abc.abstractmethod
     def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
         pass
 
@@ -204,6 +210,13 @@ class DolfinODESolver(BaseDolfinODESolver):
         assert len(functions) == num_states, "Number of functions must match number of states"
         for index, f in enumerate(functions):
             f.x.array[:] = self._values[index, :]
+
+    def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
+        num_states = self._values.shape[0]
+        assert len(functions) == num_states, "Number of functions must match number of states"
+        for index, f in enumerate(functions):
+            self._values[index, :] = f.x.array
+        self.to_dolfin()
 
     def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
         V = self.v_ode.function_space
@@ -318,6 +331,14 @@ class DolfinMultiODESolver(BaseDolfinODESolver):
         for index, f in enumerate(functions):
             for marker in self._marker_values:
                 f.x.array[self._inds[marker]] = self._values[marker][index, :]
+
+    def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
+        num_states = self._values[self._marker_values[0]].shape[0]
+        assert len(functions) == num_states, "Number of functions must match number of states"
+        for index, f in enumerate(functions):
+            for marker in self._marker_values:
+                self._values[marker][index, :] = f.x.array[self._inds[marker]]
+        self.to_dolfin()
 
     def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
         V = self.v_ode.function_space

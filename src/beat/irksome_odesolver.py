@@ -113,6 +113,11 @@ class IrksomeODESolver(BaseDolfinODESolver):
         for i, f in enumerate(functions):
             f.x.array[:] = self.states.x.array[self._maps[i]]
 
+    def load_all_states(self, functions) -> None:
+        for i, f in enumerate(functions):
+            self.states.x.array[self._maps[i]] = f.x.array
+        self.to_dolfin()
+
     def states_to_dolfin(self, names=None):
         functions = []
         for i in range(self.num_states):
@@ -320,6 +325,19 @@ class IrksomeMultiODESolver(BaseDolfinODESolver):
                 where = self._inds[marker]
                 map_i = self._maps[marker][index]
                 f.x.array[where] = self._states[marker].x.array[map_i][where]
+
+    def load_all_states(self, functions) -> None:
+        num_states = self.num_states[self._marker_values[0]]
+        assert len(functions) == num_states, "Number of functions must match number of states"
+        for index, f in enumerate(functions):
+            for marker in self._marker_values:
+                where = self._inds[marker]
+                # `x.array[map_i][where] = ...` would write into a copy of x.array (fancy
+                # indexing by map_i copies); index the map itself so the assignment lands
+                # on x.array directly.
+                map_i = np.asarray(self._maps[marker][index])
+                self._states[marker].x.array[map_i[where]] = f.x.array[where]
+        self.to_dolfin()
 
     def states_to_dolfin(self, names=None):
         functions = []

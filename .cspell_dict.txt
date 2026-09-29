@@ -58,6 +58,7 @@ Elsevier
 endo
 epicardial
 Erlicher
+extop
 Favino
 fdim
 Fedele
@@ -72,6 +73,7 @@ fitzhughnagumo
 Francesco
 Frederik
 fridericia
+funcs
 functionspace
 gdim
 genexpr

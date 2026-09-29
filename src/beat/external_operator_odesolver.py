@@ -149,6 +149,11 @@ class ExternalOperatorODESolver(BaseDolfinODESolver):
         for i, f in enumerate(functions):
             f.x.array[:] = self.states.x.array[i :: self.num_states]
 
+    def load_all_states(self, functions) -> None:
+        for i, f in enumerate(functions):
+            self.states.x.array[i :: self.num_states] = f.x.array
+        self.to_dolfin()
+
     def states_to_dolfin(self, names=None):
         functions = []
         for i in range(self.num_states):
@@ -347,6 +352,17 @@ class ExternalOperatorMultiODESolver(BaseDolfinODESolver):
                 where = self._inds[marker]
                 n = self.num_states[marker]
                 f.x.array[where] = self._states[marker].x.array[index::n][where]
+
+    def load_all_states(self, functions) -> None:
+        num_states = self.num_states[self._marker_values[0]]
+        assert len(functions) == num_states, "Number of functions must match number of states"
+        for index, f in enumerate(functions):
+            for marker in self._marker_values:
+                where = self._inds[marker]
+                n = self.num_states[marker]
+                view = self._states[marker].x.array[index::n]  # basic slice -> a view
+                view[where] = f.x.array[where]
+        self.to_dolfin()
 
     def states_to_dolfin(self, names=None):
         functions = []
