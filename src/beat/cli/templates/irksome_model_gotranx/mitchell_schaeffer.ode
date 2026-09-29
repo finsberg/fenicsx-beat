@@ -1,0 +1,19 @@
+# Mitchell-Schaeffer two-variable cell model, verbatim from the `ms_ode_code` string in
+# demos/irksome_model_gotranx.py.
+parameters(
+    tau_in = 0.3,
+    tau_out = 6.0,
+    tau_open = 120.0,
+    tau_close = 150.0,
+    v_gate = 0.13
+)
+states(
+    v = 0.0,
+    h = 1.0
+)
+
+h_inf = Conditional(Lt(v, v_gate), 1.0, 0.0)
+tau_h = Conditional(Lt(v, v_gate), tau_open, tau_close)
+
+dv_dt = h * (v**2 * (1.0 - v)) / tau_in - v / tau_out
+dh_dt = (h_inf - h) / tau_h

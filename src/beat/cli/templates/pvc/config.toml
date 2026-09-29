@@ -1,0 +1,37 @@
+# Premature Ventricular Complex (PVC) 1D cable with ten Tusscher-Panfilov 2006.
+# Equivalent to demos/pvc.py.
+#
+# Deviation: the demo reduces g_Kr/g_Ks to zero in the right half of the cable (via a per-DOF
+# parameter array) to create a heterogeneous repolarization-reserve region; [cell.layers] on an
+# `interval` geometry has no facet/cell markers to key that heterogeneity off (`cell_markers`
+# needs geometry cell tags, `transmural` needs endo/epi facet markers), so this template uses the
+# homogeneous cable instead -- no PVC will emerge, but the periodic whole-cable pacing and cell
+# model match the demo. The demo also sets a raw scalar diffusion coefficient D=0.0005 cm**2/ms
+# directly (not through chi/conductivities); [ep] here uses the default ("Niederer") conductivity
+# preset instead, which gives a comparable-order (not identical) conduction spread.
+
+[geometry]
+type = "interval"           # 200 cells x 0.015 cm, as in the demo
+unit = "cm"
+length = 3.0
+dx = 0.015
+fibers = { type = "isotropic" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+conductivity = { preset = "Niederer" }
+
+[cell]
+ode_file = "tentusscher_panfilov_2006_epi_cell.ode"
+v_name = "V"
+# No [[stimulus]]: all cells are paced simultaneously by the cell model's own internal periodic
+# stimulus (stim_start/stim_period below), exactly as in the demo.
+parameters = { stim_start = 100.0, stim_period = 1000.0 }
+
+[solver]
+dt = "0.01 ms"
+end_time = "1000 ms"
+
+[output]
+save_every = "1 ms"

@@ -1,0 +1,64 @@
+# Purkinje-like random endocardial activation of a realistic UK Biobank atlas BiV geometry, with
+# endo/mid/epi ToR-ORd cells. Equivalent to demos/ukb_atlas.py.
+#
+# Notes:
+# - Downloading/meshing the atlas needs network access the first time (cached afterwards in
+#   `geometry.folder`).
+# - The demo builds M directly from a single longitudinal/transverse conductivity pair
+#   (sigma_l=0.24 S/cm, sigma_t=0.0456 S/cm), bypassing [ep.conductivity]'s intra-/extracellular
+#   harmonic mean. sigma_il = sigma_el and sigma_it = sigma_et below reproduce those exact values,
+#   since harmonic_mean(a, a) = a / 2.
+# - The demo's stimulus amplitude (2.5, unscaled) is replaced by a physical current density
+#   (divided by chi, as beat.stimulation.define_stimulus does).
+
+[geometry]
+type = "ukb"                # generated with cardiac-geometriesx/ukb-atlas, cached in `folder`
+unit = "mm"
+folder = "geometry"
+char_length_max = 2.0
+char_length_min = 2.0
+fibers = { type = "from_geometry" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+[ep.conductivity]
+sigma_il = "0.48 S/cm"
+sigma_el = "0.48 S/cm"
+sigma_it = "0.0912 S/cm"
+sigma_et = "0.0912 S/cm"
+
+[cell]
+ode_file = "ToRORd_dynCl_endo.ode"
+v_name = "v"
+parameters = { i_Stim_Amplitude = 0.0 }   # PDE stimulus only, as in the demo
+
+[cell.layers]
+method = "transmural"       # endo_markers default to ["LV", "RV"] (no single "ENDO" marker)
+endo_size = 0.3
+epi_size = 0.3
+
+# ToR-ORd celltype: 0 = endo, 1 = epi, 2 = mid (as in the demo)
+[cell.regions.mid]
+parameters = { celltype = 2 }
+[cell.regions.endo]
+parameters = { celltype = 0 }
+[cell.regions.epi]
+parameters = { celltype = 1 }
+
+[[stimulus]]
+type = "random_endocardial"   # mimics Purkinje-fibre-like near-simultaneous activation
+markers = ["LV", "RV"]
+num_points = 900
+delay_range = ["0 ms", "4 ms"]
+tol = 1.0
+amplitude = "50000 uA/cm**3"
+duration = "2 ms"
+start = "0 ms"
+
+[solver]
+dt = "0.05 ms"
+end_time = "500 ms"        # demo itself only runs 10 ms as a short demo
+
+[output]
+save_every = "1 ms"

@@ -33,6 +33,8 @@ carputils
 cbcbeat
 cellmodel
 cellname
+celltype
+celltypes
 cfun
 Chiara
 Clermont
@@ -80,6 +82,7 @@ genexpr
 geodir
 geometriesx
 geox
+getattr
 getpid
 Gilles
 gmres
@@ -133,6 +136,7 @@ Monodomain
 mpirun
 monolithically
 multiplicatively
+mycase
 myocyte
 nabla
 Nagumo

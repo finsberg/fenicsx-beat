@@ -1,0 +1,46 @@
+# Conduction velocity / ECG slab with ToR-ORd. Equivalent to demos/slab.py.
+#
+# Deviation: the demo partitions the cable into thirds along x (endo/mid/epi ToR-ORd celltypes by
+# raw x-position), which is neither `transmural` (distance-from-facet) nor `cell_markers`
+# (geometry cell tags) as currently supported by [cell.layers] -- so this template uses a single,
+# homogeneous ToR-ORd region instead (celltype defaults to 0/endo). The intracellular/
+# extracellular conductivities below are transcribed directly from the demo (not a preset).
+
+[geometry]
+type = "slab"               # generated with cardiac-geometriesx and cached in `folder`
+unit = "cm"
+folder = "geometry"
+lx = 1.0
+ly = 0.3
+lz = 0.3
+dx = 0.15
+fibers = { type = "from_geometry" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+[ep.conductivity]
+sigma_il = "0.16069 S/m"
+sigma_it = "0.04258 S/m"
+sigma_el = "0.625 S/m"
+sigma_et = "0.236 S/m"
+
+[cell]
+ode_file = "ToRORd_dynCl_endo.ode"
+v_name = "v"
+parameters = { i_Stim_Amplitude = 0.0 }   # PDE stimulus only, as in the demo
+
+[[stimulus]]
+type = "marker"
+marker = "X0"               # the x=0 end face, as in the demo's S1_subdomain
+amplitude = "5000 uA/cm**2"
+
+[solver]
+dt = "0.05 ms"
+end_time = "20 ms"
+
+[output]
+save_every = "1 ms"
+
+[postprocess]
+points = { P1 = [0.25, 0.15, 0.15], P2 = [0.75, 0.15, 0.15] }

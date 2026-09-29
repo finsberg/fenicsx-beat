@@ -102,7 +102,6 @@ def test_solver_failure_exit_2(cfg, monkeypatch):
     assert main(["run", str(cfg)]) == 2
 
 
-@pytest.mark.xfail(reason="templates added in Task 12", strict=False)
 def test_init_template(tmp_path):
     target = tmp_path / "case" / "config.toml"
     assert main(["init", str(target), "--template", "niederer_benchmark"]) == 0
@@ -131,11 +130,6 @@ def test_init_filesystem_error_becomes_config_error(tmp_path, monkeypatch, caplo
     assert "disk full" in caplog.text
 
 
-# NOTE (deviation from the literal brief, flagged for the controller): with no templates
-# shipped yet (Task 12 adds them; Task 12's own RED step expects _available_templates() == set()
-# beforehand), there is no "slab" template to list here. Marked xfail like test_init_template
-# until Task 12 lands; remove this mark there too.
-@pytest.mark.xfail(reason="templates added in Task 12", strict=False)
 def test_init_unknown_template(tmp_path, caplog):
     assert main(["init", str(tmp_path / "c.toml"), "--template", "nope"]) == 1
     assert "slab" in caplog.text  # lists available templates
