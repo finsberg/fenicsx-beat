@@ -39,8 +39,11 @@ SHRINK = {
     "lv_endocardial": ["geometry.psize_ref=10.0"],
     "biv_endocardial": ["geometry.char_length=2.0"],
     "ukb_atlas": [
-        "geometry.char_length_max=15.0",
-        "geometry.char_length_min=15.0",
+        # 15.0 (the brief's suggested value) makes gmsh fail on this atlas/gmsh version with
+        # "PLC Error: A segment and a facet intersect at point" (verified); 8.0 meshes reliably
+        # while still being much coarser than the template's default (2.0).
+        "geometry.char_length_max=8.0",
+        "geometry.char_length_min=8.0",
         "stimulus.0.num_points=10",
     ],
     "irksome_model_gotranx": ["geometry.dx=0.25"],
