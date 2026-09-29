@@ -123,3 +123,55 @@ def test_post_requires_prior_run(tmp_path):
     conf = Config.model_validate(minimal_config_dict(tmp_path))
     with pytest.raises(ConfigError, match="beat run"):
         run_post(conf, MPI.COMM_WORLD)
+
+
+@pytest.mark.parametrize("fn", [run_post, run_ecg])
+def test_post_rejects_config_changed_since_run(finished, fn):
+    """beat post/ecg must refuse a config whose physics differ from the run that wrote
+    results.bp (e.g. an edited geometry), instead of crashing or silently mixing them."""
+    from beat.cli.config import ConfigError
+
+    changed = load_config(
+        finished.output.folder.parent / "config.toml",
+        environ={},
+        sets=["geometry.dx=0.5"],
+    )
+    with pytest.raises(ConfigError, match="config.resolved.toml"):
+        fn(changed, MPI.COMM_WORLD)
+    # Without restart.json (run killed before its first checkpoint) the check falls back to
+    # config.resolved.toml.
+    if MPI.COMM_WORLD.rank == 0:
+        (finished.output.folder / "restart.json").unlink()
+    MPI.COMM_WORLD.barrier()
+    with pytest.raises(ConfigError, match="config.resolved.toml"):
+        fn(changed, MPI.COMM_WORLD)
+    fn(finished, MPI.COMM_WORLD)  # the unchanged config still works
+
+
+def test_visualize_warns_previews_are_rank0_partition_only(finished, caplog):
+    pytest.importorskip("pyvista")
+    import dolfinx
+
+    from beat.cli.geometry import build_geometry
+    from beat.cli.postprocess import _visualize
+    from beat.cli.runner import RESULTS, read_result_times
+
+    class _TwoRanks:  # pretend to run on 2 ranks: only size is consulted for the warning
+        size = 2
+        rank = MPI.COMM_WORLD.rank
+
+        def bcast(self, obj, root=0):
+            return MPI.COMM_WORLD.bcast(obj, root=root)
+
+    geo = build_geometry(finished.geometry, MPI.COMM_WORLD)
+    V = dolfinx.fem.functionspace(geo.mesh, ("Lagrange", 1))
+    v, tact = dolfinx.fem.Function(V), dolfinx.fem.Function(V)
+    path = finished.output.folder / RESULTS
+    post = finished.output.folder / "post"
+    if MPI.COMM_WORLD.rank == 0:
+        post.mkdir(exist_ok=True)
+    MPI.COMM_WORLD.barrier()
+    times = read_result_times(path, MPI.COMM_WORLD)
+    _visualize(finished, v=v, tact=tact, path=path, times=times, post=post, comm=_TwoRanks())
+    if MPI.COMM_WORLD.rank == 0:
+        assert "only rank 0's" in caplog.text

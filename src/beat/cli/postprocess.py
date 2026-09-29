@@ -22,9 +22,45 @@ import scifem
 from ..ecg import ECGRecovery
 from .config import Config, ConfigError
 from .geometry import build_conductivity, build_geometry
-from .runner import RESULTS, _on_rank0, read_result_times
+from .overrides import load_config, physics_hash
+from .runner import RESTART_META, RESULTS, _on_rank0, read_result_times
 
 logger = logging.getLogger(__name__)
+
+
+def _check_matches_run(conf: Config, comm) -> None:
+    """Refuse a config whose physics differ from the run that wrote ``results.bp``.
+
+    ``beat post``/``beat ecg`` rebuild the geometry (and, for the ECG, the conductivity) from
+    the config, so e.g. an edited ``geometry.dx`` would otherwise crash reading ``results.bp``
+    or, on a same-topology mesh, silently produce wrong results. Only what ``physics_hash``
+    excludes (``[output]``, ``[postprocess]``, the run length) may differ. The recorded hash is
+    taken from ``restart.json`` or, if the run was killed before its first checkpoint, recomputed
+    from ``config.resolved.toml``; if neither exists the results are refused as unverifiable.
+    Checked on rank 0 and broadcast, so every rank raises together.
+    """
+    folder = conf.output.folder
+    resolved = folder / "config.resolved.toml"
+
+    def check() -> None:
+        meta = folder / RESTART_META
+        if meta.is_file():
+            recorded = json.loads(meta.read_text())["physics_hash"]
+        elif resolved.is_file():
+            recorded = physics_hash(load_config(resolved, environ={}))
+        else:
+            raise ConfigError(
+                f"Cannot verify that {folder / RESULTS} was written with this config: neither "
+                f"{meta} nor {resolved} exists",
+            )
+        if recorded != physics_hash(conf):
+            raise ConfigError(
+                f"The config's physics settings differ from the run that wrote "
+                f"{folder / RESULTS} (only [output], [postprocess] and the run length may "
+                f"change for beat post/ecg). Compare with {resolved}",
+            )
+
+    _on_rank0(comm, ConfigError, check)
 
 
 def _open_results(conf: Config, comm):
@@ -39,6 +75,7 @@ def _open_results(conf: Config, comm):
     path = conf.output.folder / RESULTS
     if not path.exists():
         raise ConfigError(f"No results found at {path}. Run `beat run <config>` first.")
+    _check_matches_run(conf, comm)
     geo = build_geometry(conf.geometry, comm)
     V = dolfinx.fem.functionspace(geo.mesh, ("Lagrange", 1))
     v = dolfinx.fem.Function(V, name="v")
@@ -231,6 +268,13 @@ def _visualize(
                 "`beat post`.",
             )
         return
+
+    if comm.size > 1 and comm.rank == 0:
+        logger.warning(
+            "beat post is running on more than one rank: the PNG/GIF previews show only rank "
+            "0's partition of the mesh (the VTX output is complete). Run `beat post` on a "
+            "single rank for full previews.",
+        )
 
     import dolfinx.plot
     import pyvista

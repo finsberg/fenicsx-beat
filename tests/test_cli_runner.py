@@ -229,3 +229,55 @@ def test_rank0_write_failure_raises_on_every_rank(tmp_path, monkeypatch):
     conf = load_config(write_cfg(tmp_path), environ={})
     with pytest.raises(OSError, match="disk full"):
         run(conf)
+
+
+def test_overwrite_with_invalid_config_keeps_previous_results(tmp_path):
+    """--overwrite must validate the config (cell model, markers, ...) *before* deleting the
+    previous run's results, so a typo can never cost the old results."""
+    cfg = write_cfg(tmp_path)
+    conf = load_config(cfg, environ={})
+    run(conf)
+    before = json.loads((conf.output.folder / "run.json").read_text())
+    bad = load_config(cfg, environ={}, sets=["cell.parameters.nonexistent=1"])
+    with pytest.raises(ConfigError, match="nonexistent"):
+        run(bad, overwrite=True)
+    bad_marker = load_config(
+        cfg,
+        environ={},
+        sets=['stimulus.0={type="marker", marker="NOPE", amplitude="1 uA/cm**2"}'],
+    )
+    with pytest.raises(ConfigError, match="NOPE"):
+        run(bad_marker, overwrite=True)
+    folder = conf.output.folder
+    for name in ("results.bp", "restart.bp", "restart.json", "config.resolved.toml"):
+        assert (folder / name).exists(), name
+    assert json.loads((folder / "run.json").read_text()) == before
+    assert np.allclose(read_result_times(folder / RESULTS, MPI.COMM_WORLD), [0.0, 0.1, 0.2, 0.3])
+    run(conf, overwrite=True)  # a valid overwrite still works, reusing the cell-model cache
+
+
+def test_config_error_after_run_json_is_recorded(tmp_path):
+    cfg = write_cfg(tmp_path)
+    conf = load_config(cfg, environ={})
+    run(conf)
+    _edit_restart_meta(conf.output.folder, t=0.25)
+    ext = load_config(cfg, environ={}, sets=['solver.end_time="0.6 ms"'])
+    with pytest.raises(ConfigError, match="restart.bp"):
+        run(ext, restart=True)
+    meta = json.loads((conf.output.folder / "run.json").read_text())
+    assert meta["status"] == "failed"
+    assert "restart.bp" in meta["error"]
+
+
+def test_rerun_before_first_checkpoint_suggests_overwrite(tmp_path):
+    """A job killed before its first checkpoint leaves results.bp but no restart.json: a
+    resubmission is refused (never silently deleted) with a message pointing at --overwrite."""
+    conf = load_config(write_cfg(tmp_path), environ={})
+    run(conf)
+    if MPI.COMM_WORLD.rank == 0:
+        (conf.output.folder / "restart.json").unlink()
+    MPI.COMM_WORLD.barrier()
+    with pytest.raises(ConfigError, match="no restart checkpoint exists yet.*--overwrite"):
+        run(conf)
+    with pytest.raises(ConfigError, match="no restart checkpoint exists yet.*--overwrite"):
+        run(conf, restart=True)

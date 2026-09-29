@@ -136,3 +136,73 @@ def test_malformed_ode_file_raises_config_error(tmp_path):
     conf = conf_with(tmp_path, ode_file=str(bad_ode))
     with pytest.raises(ConfigError):
         build_cell_model(conf.cell, tmp_path / "c_bad", MPI.COMM_WORLD)
+
+
+def _two_region_geometry(tag: str = "all"):
+    """Unit square with cell markers A (x < 0.5, value 1) and B (x >= 0.5, value 2).
+
+    ``tag`` selects which of this rank's cells are tagged: ``"all"``, only ``"A"`` (so the B
+    cells are uncovered) or ``"none"`` -- per rank, if the caller varies it by rank.
+    """
+    from beat.cli.geometry import CLIGeometry
+
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8)
+    tdim = mesh.topology.dim
+    imap = mesh.topology.index_map(tdim)
+    cells = np.arange(imap.size_local + imap.num_ghosts, dtype=np.int32)  # incl. ghost cells
+    mid = dolfinx.mesh.compute_midpoints(mesh, tdim, cells)
+    values = np.where(mid[:, 0] < 0.5, 1, 2).astype(np.int32)
+    keep = {"all": values > 0, "A": values == 1, "none": values < 0}[tag]
+    cells, values = cells[keep], values[keep]
+    cfun = dolfinx.mesh.meshtags(mesh, tdim, cells, values)
+    return CLIGeometry(mesh=mesh, cfun=cfun, markers={"A": (1, tdim), "B": (2, tdim)})
+
+
+def _cell_marker_conf(tmp_path):
+    layers = {"method": "cell_markers", "map": {"left": "A", "right": "B"}}
+    return conf_with(tmp_path, layers=layers)
+
+
+def test_cell_markers_map_regions(tmp_path):
+    conf = _cell_marker_conf(tmp_path)
+    geo = _two_region_geometry("all")
+    V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
+    markers = build_region_markers(conf.cell, geo, V)
+    values = set(np.unique(markers.x.array).astype(int))
+    assert set().union(*MPI.COMM_WORLD.allgather(values)) == {0, 1}
+
+
+def test_cell_markers_uncovered_cells_error_on_every_rank(tmp_path):
+    """Uncovered cells on only *some* ranks must still raise on every rank (a rank-local check
+    would make only those ranks raise, and the rest deadlock in the next collective)."""
+    conf = _cell_marker_conf(tmp_path)
+    comm = MPI.COMM_WORLD
+    # Serial: B untagged. Parallel: every rank but the last is fully covered; the last rank
+    # tags none of its cells.
+    if comm.size == 1:
+        tag = "A"
+    else:
+        tag = "all" if comm.rank < comm.size - 1 else "none"
+    geo = _two_region_geometry(tag)
+    V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
+    with pytest.raises(ConfigError, match="does not cover every mesh cell"):
+        build_region_markers(conf.cell, geo, V)
+
+
+def test_steady_state_cache_check_is_decided_on_rank0(tmp_path, monkeypatch):
+    """Whether the steady-state cache exists must be decided once (rank 0) and broadcast: a
+    rank that (e.g. via NFS lag, or a concurrent job) sees a different answer must not take a
+    different path around the collective broadcast."""
+    from pathlib import Path
+
+    conf = conf_with(tmp_path, steady_state={"num_beats": 1, "BCL": "2 ms", "dt": "0.1 ms"})
+    first = build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    if MPI.COMM_WORLD.rank != 0:
+        real = Path.is_file
+        monkeypatch.setattr(
+            Path,
+            "is_file",
+            lambda self: False if self.suffix == ".npy" else real(self),
+        )
+    again = build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    assert np.allclose(first.init_states[0], again.init_states[0])

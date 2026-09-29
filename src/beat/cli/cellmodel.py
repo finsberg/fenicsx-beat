@@ -129,7 +129,10 @@ def _steady_state(
     h = hashlib.sha256(key.encode()).hexdigest()[:16]
     path = Path(cache_dir) / "init_states" / f"{name}_{h}.npy"
 
-    if not path.is_file():
+    # Decided on rank 0 and broadcast (like load_module): a per-rank check could send ranks
+    # down different paths around the collective bcast below.
+    cached = comm.bcast(path.is_file() if comm.rank == 0 else None, root=0)
+    if not cached:
         from ..single_cell import get_steady_state
 
         error: str | None = None
@@ -252,6 +255,7 @@ def build_region_markers(
     markers = dolfinx.fem.Function(V)
     markers.x.array[:] = -1
     tdim = geo.mesh.topology.dim
+    geo.mesh.topology.create_connectivity(tdim, tdim)  # needed by locate_dofs_topological
     for rid, (_region, marker_name) in enumerate(layers.map.items()):
         value, dim = get_marker(geo, marker_name)
         if dim != tdim:
@@ -259,6 +263,8 @@ def build_region_markers(
         cells = geo.cfun.find(value)
         dofs = dolfinx.fem.locate_dofs_topological(V, tdim, cells)
         markers.x.array[dofs] = rid
-    if np.any(markers.x.array < 0):
+    # Collective: uncovered cells may live on some ranks only, and every rank must raise.
+    uncovered = bool(np.any(markers.x.array < 0))
+    if geo.mesh.comm.allreduce(uncovered, op=MPI.LOR):
         raise ConfigError("cell.layers.map does not cover every mesh cell")
     return markers

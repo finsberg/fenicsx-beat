@@ -68,9 +68,9 @@ class Simulation:
 
 
 # Everything beat itself writes into an output folder (``beat run``: results, restarts,
-# metadata, logs, the cell-model code/steady-state caches; ``beat post``: ``post/``). --overwrite
-# deletes exactly these and nothing else, since the output folder may well be the config's own
-# directory, holding the user's config.toml/.ode files.
+# metadata, logs; ``beat post``: ``post/``). --overwrite deletes exactly these and nothing else,
+# since the output folder may well be the config's own directory, holding the user's
+# config.toml/.ode files.
 _ARTIFACT_NAMES = (
     RESULTS,
     RESTART,
@@ -80,10 +80,13 @@ _ARTIFACT_NAMES = (
     PERFORMANCE,
     "output.log",
     "output_all_cpus.log",
-    "init_states",
     "post",
 )
-_ARTIFACT_GLOBS = ("cell_model_*.py",)
+# The content-hashed cell-model caches (``cell_model_<hash>.py``, ``init_states/``) are beat's
+# too but are *kept* by --overwrite: they are always valid for their hash, and they are built
+# (as part of validating the config) before the old results are wiped.
+_CACHE_NAMES = ("init_states",)
+_CACHE_GLOBS = ("cell_model_*.py",)
 
 
 def _on_rank0(comm, error_type: type[Exception], fn: Callable[[], Any]) -> None:
@@ -120,7 +123,6 @@ def _write_json(path: Path, data: dict, comm) -> None:
 
 def _remove_artifacts(folder: Path) -> None:
     paths = [folder / name for name in _ARTIFACT_NAMES]
-    paths += [p for pattern in _ARTIFACT_GLOBS for p in folder.glob(pattern)]
     for p in paths:
         if p.is_dir() and not p.is_symlink():
             shutil.rmtree(p)
@@ -139,9 +141,13 @@ def _output_decision(conf: Config, restart: bool, overwrite: bool) -> tuple[str,
     Returns ``("error", message)``, ``("restart", "")``, ``("wipe", "")`` or ``("create", "")``.
     """
     folder = conf.output.folder
+    no_checkpoint = (
+        f"no restart checkpoint exists yet in {folder} (no {RESTART_META}; the run stopped "
+        "before its first checkpoint); use --overwrite to start over"
+    )
     if restart:
         if not (folder / RESTART_META).is_file():
-            return "error", f"Cannot restart: no {RESTART_META} in {folder}"
+            return "error", f"Cannot restart: {no_checkpoint}"
         meta = json.loads((folder / RESTART_META).read_text())
         try:
             current = physics_hash(conf)
@@ -150,12 +156,17 @@ def _output_decision(conf: Config, restart: bool, overwrite: bool) -> tuple[str,
         if meta.get("physics_hash") != current:
             return "error", (
                 "Cannot restart: the physics settings differ from the original run "
-                "(only solver.end_time/num_beats, [output] and [postprocess] may change). "
+                "(only solver.end_time/num_beats/BCL, [output] and [postprocess] may change). "
                 f"Compare with {folder / 'config.resolved.toml'}"
             )
         return "restart", ""
     if (folder / RESULTS).exists() or (folder / RESTART_META).exists():
         if not overwrite:
+            if not (folder / RESTART_META).exists():
+                return (
+                    "error",
+                    f"Output folder {folder} already contains results, but {no_checkpoint}",
+                )
             return "error", (
                 f"Output folder {folder} already contains results. Use --overwrite to replace "
                 "them or --restart to continue the run."
@@ -164,12 +175,12 @@ def _output_decision(conf: Config, restart: bool, overwrite: bool) -> tuple[str,
     return "create", ""
 
 
-def prepare_output(conf: Config, restart: bool, overwrite: bool, comm) -> None:
-    """Validate/prepare ``conf.output.folder`` for a fresh run, an overwrite or a restart.
+def decide_output(conf: Config, restart: bool, overwrite: bool, comm) -> str:
+    """Decide what to do with ``conf.output.folder`` without touching it.
 
     The decision is made on rank 0 only and broadcast, so that every rank raises the same
     :class:`ConfigError` together (never one rank raising while the others wait in a barrier).
-    ``overwrite`` deletes only beat's own artifacts (see ``_ARTIFACT_NAMES``), never other files.
+    Returns ``"restart"``, ``"wipe"`` or ``"create"`` for :func:`apply_output`.
     """
     decision = None
     if comm.rank == 0:
@@ -180,6 +191,12 @@ def prepare_output(conf: Config, restart: bool, overwrite: bool, comm) -> None:
     action, message = comm.bcast(decision, root=0)
     if action == "error":
         raise ConfigError(message)
+    return action
+
+
+def apply_output(conf: Config, action: str, comm) -> None:
+    """Carry out :func:`decide_output`'s ``action``: create the folder, and for ``"wipe"``
+    delete only beat's own artifacts (see ``_ARTIFACT_NAMES``), never other files."""
     if action == "restart":
         return
     folder = conf.output.folder
@@ -193,6 +210,11 @@ def prepare_output(conf: Config, restart: bool, overwrite: bool, comm) -> None:
         _on_rank0(comm, ConfigError, prepare)
     except ConfigError as e:
         raise ConfigError(f"Cannot prepare output folder {folder}: {e}") from e
+
+
+def prepare_output(conf: Config, restart: bool, overwrite: bool, comm) -> None:
+    """Validate/prepare ``conf.output.folder`` for a fresh run, an overwrite or a restart."""
+    apply_output(conf, decide_output(conf, restart, overwrite, comm), comm)
 
 
 def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulation:
@@ -330,17 +352,30 @@ def run(
 
     Raises :class:`ConfigError` (exit code 1) for configuration problems and
     :class:`SolverFailure` (exit code 2) for anything failing at runtime.
+
+    The whole simulation (cell model, geometry, markers, stimuli, solvers) is built -- i.e. the
+    config is fully validated -- *before* ``--overwrite`` deletes anything, so an invalid config
+    never costs the previous run's results. Setup errors leave ``run.json`` untouched.
     """
-    prepare_output(conf, restart=restart, overwrite=overwrite, comm=comm)
+    action = decide_output(conf, restart=restart, overwrite=overwrite, comm=comm)
     folder = conf.output.folder
+    monitor = PerformanceMonitor(comm=comm) if conf.output.performance else None
+    try:
+        sim = build_simulation(conf, comm, monitor=monitor)
+    except (ConfigError, SolverFailure):
+        raise
+    except Exception as e:
+        raise SolverFailure(f"Setting up the simulation failed: {e!r}") from e
+    apply_output(conf, action, comm)
     add_logfile_handler(folder, comm=comm)
     try:
-        return _run(conf, comm, restart)
+        return _run(sim, comm, restart, monitor)
     finally:
         remove_logfile_handlers()
 
 
-def _run(conf: Config, comm, restart: bool) -> Path:
+def _run(sim: Simulation, comm, restart: bool, monitor) -> Path:
+    conf = sim.conf
     folder = conf.output.folder
     _on_rank0(comm, OSError, lambda: dump_config(conf, folder / "config.resolved.toml"))
     from .. import __version__
@@ -355,19 +390,13 @@ def _run(conf: Config, comm, restart: bool) -> Path:
     }
     _write_json(folder / RUN_META, record, comm)
 
-    monitor = PerformanceMonitor(comm=comm) if conf.output.performance else None
     try:
-        sim = build_simulation(conf, comm, monitor=monitor)
         _time_loop(sim, restart)
-    except ConfigError:
-        record["status"] = "failed"
-        _write_json(folder / RUN_META, record, comm)
-        raise
     except Exception as e:
         record["status"] = "failed"
-        record["error"] = repr(e)
+        record["error"] = str(e) if isinstance(e, ConfigError) else repr(e)
         _write_json(folder / RUN_META, record, comm)
-        if isinstance(e, SolverFailure):
+        if isinstance(e, (ConfigError, SolverFailure)):
             raise
         raise SolverFailure(str(e)) from e
 
