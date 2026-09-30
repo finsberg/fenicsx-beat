@@ -30,7 +30,7 @@ own copy. Warming the cache with `beat geometry` first (once per distinct geomet
 duplicated work. It's also the cheapest way to surface a marker-name typo
 (`[[stimulus]]`, `cell.layers`) or a missing fiber field (`fibers = "from_geometry"`) ahead of the
 timed sweep: those checks need the actual mesh, so they only run once `beat run` has built or
-loaded the geometry (see [Exit codes](cli.md#exit-codes)) -- with the mesh already cached, that
+loaded the geometry (see {ref}`Exit codes <exit-codes>`) -- with the mesh already cached, that
 happens within seconds rather than after a from-scratch mesh generation inside the job.
 
 ## A SLURM array job for a parameter sweep
@@ -54,7 +54,7 @@ srun beat run config.toml \
 
 `--output-folder` resolves against the **current working directory** the job runs in (unlike every
 path *inside* the config file, which resolves against the config file's own directory -- see
-[Overrides](cli.md#overrides)), so `runs/${SLURM_ARRAY_TASK_ID}` above lands next to wherever the
+{ref}`Overrides <overrides>`), so `runs/${SLURM_ARRAY_TASK_ID}` above lands next to wherever the
 job script itself runs from. `--overwrite` makes the task safe to resubmit: if that array index's
 output folder already has results in it (e.g. a resubmit after a scheduler-level failure, or
 resubmitting the whole array because task 3 failed), `beat` would otherwise refuse to touch it

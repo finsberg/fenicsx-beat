@@ -154,6 +154,22 @@ def test_regeneration_never_deletes_user_files(tmp_path, sub):
     assert (folder / "notes.txt").is_file() and (sub_b / "beat_geometry.json").is_file()
 
 
+@pytest.mark.skip_in_parallel
+def test_generator_missing_optional_package_is_config_error(tmp_path, monkeypatch):
+    """e.g. BiV/UKB fibers need fenicsx-ldrb: a missing optional package is a config error
+    (exit 1) with the package named, not a runtime failure, and leaves no temp folder behind."""
+    cg = pytest.importorskip("cardiac_geometries")
+
+    def needs_ldrb(**kwargs):
+        raise ImportError("To create fibers you need to install the ldrb package")
+
+    monkeypatch.setattr(cg.mesh, "slab", needs_ldrb)
+    conf = _slab(tmp_path, tmp_path / "geo")
+    with pytest.raises(ConfigError, match="ldrb"):
+        build_geometry(conf.geometry, MPI.COMM_WORLD)
+    assert not list((tmp_path / "geo").glob(".tmp-*"))
+
+
 def test_install_generated_reuses_entry_completed_by_another_job(tmp_path):
     """Two jobs generating the same hash concurrently: the second to finish keeps the first's
     complete entry and discards its own temporary folder."""

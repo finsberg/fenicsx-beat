@@ -167,10 +167,15 @@ def ensure_generated(conf: GeometryConfig, comm: MPI.Intracomm) -> Path:
     kwargs["create_fibers"] = conf.fibers.type == "from_geometry"
     try:
         generator(outdir=tmp, comm=comm, **kwargs)
-    except BaseException:
+    except BaseException as e:
         # No collective here (ranks may fail independently): best-effort cleanup only.
         if comm.rank == 0:
             shutil.rmtree(tmp, ignore_errors=True)
+        if isinstance(e, ImportError):
+            # e.g. BiV/UKB fibers need fenicsx-ldrb; every rank hits the same import.
+            raise ConfigError(
+                f"Generating a {conf.type!r} geometry needs an optional package: {e}",
+            ) from e
         raise
     _on_rank0(comm, OSError, lambda: _install_generated(tmp, target, conf.type, h))
     return target

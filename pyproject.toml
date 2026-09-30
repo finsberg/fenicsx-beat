@@ -50,6 +50,7 @@ Tracker = "https://github.com/finsberg/fenicsx-beat/issues"
 test = [
     "pytest",
     "pytest-cov",
+    "types-toml",
     "fenicsx-beat[irksome]",
     "fenicsx-beat[cli]",
 ]
@@ -59,7 +60,6 @@ dev = [
     "bump-my-version",
     "pre-commit",
     "mypy",
-    "types-toml",
     "fenicsx-beat[test]",
     "fenicsx-beat[docs]",
 ]
