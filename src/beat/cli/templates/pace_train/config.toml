@@ -1,0 +1,53 @@
+# Rapid pacing train on a 1D cable with ten Tusscher-Panfilov 2006.
+# Equivalent to demos/pace_train.py.
+#
+# Deviation: the demo eventually switches its stimulus off (`ode.parameters[stim_amplitude] = 0`
+# and `I_s.assign(0.0)` at t=1000 ms) -- a runtime ODE-parameter/stimulus schedule, which is future
+# work (`parameter_schedule`, see the design doc's non-goals). This template instead uses a PDE
+# stimulus box with a fixed `period`/`num_pulses`-less pulse train that simply runs for the whole
+# simulation. As in demos/pvc.py, the demo's heterogeneous g_Kr/g_Ks region (right half of the
+# cable) is not reproducible via [cell.layers] on an `interval` geometry, so this template is
+# homogeneous. The demo also sets a raw scalar diffusion coefficient D=0.0005 cm**2/ms directly
+# (not through chi/conductivities); harmonic_mean(a, a) = a / 2, so setting every sigma_* below to
+# the same value `a` reproduces D exactly (as in the pvc template; see its header comment). The
+# stimulus amplitude is a physical current density (chi-scaled), unlike the demo's raw, unscaled
+# value of 1, and (being a box/volumetric stimulus, regardless of the mesh's own dimension) is in
+# uA/cm**3. The box below is wider than the demo's 2*dx so that it still covers at least one whole
+# element when the mesh is coarsened (e.g. in the CI shrink test).
+
+[geometry]
+type = "interval"           # 200 cells x 0.015 cm, as in the demo
+unit = "cm"
+length = 3.0
+dx = 0.015
+fibers = { type = "isotropic" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+[ep.conductivity]
+sigma_il = "0.14 S/m"
+sigma_it = "0.14 S/m"
+sigma_el = "0.14 S/m"
+sigma_et = "0.14 S/m"
+
+[cell]
+ode_file = "tentusscher_panfilov_2006_epi_cell.ode"
+v_name = "V"
+parameters = { stim_amplitude = 0.0 }   # PDE stimulus only, as in the demo
+
+[[stimulus]]
+type = "box"
+min = [0.0]
+max = [0.9]                 # a left-end region, wider than the demo's 2*dx subdomain
+amplitude = "50000 uA/cm**3"
+duration = "2 ms"            # demo's stim_duration = 2.0
+start = "10 ms"              # demo's start = 10.0
+period = "100 ms"            # demo's (rapid) stim_period = 100.0
+
+[solver]
+dt = "0.01 ms"
+end_time = "500 ms"
+
+[output]
+save_every = "1 ms"

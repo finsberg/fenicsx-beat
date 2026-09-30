@@ -1,0 +1,59 @@
+# Endocardial stimulation of an idealized LV ellipsoid with endo/mid/epi ToR-ORd cells.
+# Equivalent to demos/lv_endocardial.py.
+#
+# Deviation: the demo's r_short_*/r_long_*/mu_* and psize_ref are all transcribed below (base=0,
+# so mu_base_endo = mu_base_epi = -acos(0) = -pi/2), and the stimulus amplitude/duration and
+# conductivity preset ("Bishop", not "Niederer") match the demo exactly.
+
+[geometry]
+type = "lv_ellipsoid"      # generated with cardiac-geometriesx and cached in `folder`
+unit = "cm"
+folder = "geometry"
+r_short_endo = 2.5
+r_short_epi = 3.5
+r_long_endo = 9.0
+r_long_epi = 9.7
+psize_ref = 0.15
+mu_apex_endo = -3.141592653589793    # -pi
+mu_base_endo = -1.5707963267948966   # -acos(base / r_long_endo), base = 0
+mu_apex_epi = -3.141592653589793
+mu_base_epi = -1.5707963267948966
+fibers = { type = "from_geometry" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+conductivity = { preset = "Bishop" }
+
+[cell]
+ode_file = "ToRORd_dynCl_endo.ode"
+v_name = "v"
+parameters = { i_Stim_Amplitude = 0.0 }  # PDE stimulus only, as in the demo
+# steady_state = { num_beats = 20, BCL = "1000 ms", dt = "0.05 ms" }   # opt-in pre-pacing
+
+[cell.layers]
+method = "transmural"
+endo_size = 0.3
+epi_size = 0.3
+
+# ToR-ORd celltype: 0 = endo, 1 = epi, 2 = mid (as in the demo)
+[cell.regions.mid]
+parameters = { celltype = 2 }
+[cell.regions.endo]
+parameters = { celltype = 0 }
+[cell.regions.epi]
+parameters = { celltype = 1 }
+
+[[stimulus]]
+type = "marker"
+marker = "ENDO"
+amplitude = "2000 uA/cm**2"
+duration = "1 ms"
+
+[solver]
+dt = "0.05 ms"
+end_time = "500 ms"        # demo itself only runs 10 ms as a short demo; a real run needs >=1000 ms
+
+[output]
+save_every = "1 ms"
+checkpoint_every = "100 ms"

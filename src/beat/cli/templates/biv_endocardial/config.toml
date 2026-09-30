@@ -1,0 +1,53 @@
+# Endocardial stimulation of a bi-ventricular ellipsoid with endo/mid/epi ToR-ORd cells.
+# Equivalent to demos/biv_endocardial.py.
+
+[geometry]
+type = "biv_ellipsoid"     # generated with cardiac-geometriesx and cached in `folder`
+unit = "cm"
+folder = "geometry"
+char_length = 0.3           # demo's value (should be at least 0.2 for a real run)
+fibers = { type = "from_geometry" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+conductivity = { preset = "Bishop" }
+
+[cell]
+ode_file = "ToRORd_dynCl_endo.ode"
+v_name = "v"
+parameters = { i_Stim_Amplitude = 0.0 }   # PDE stimulus only, as in the demo
+
+[cell.layers]
+method = "transmural"       # endo_markers default to ["LV", "RV"] (no single "ENDO" marker)
+endo_size = 0.3
+epi_size = 0.3
+
+# ToR-ORd celltype: 0 = endo, 1 = epi, 2 = mid (as in the demo)
+[cell.regions.mid]
+parameters = { celltype = 2 }
+[cell.regions.endo]
+parameters = { celltype = 0 }
+[cell.regions.epi]
+parameters = { celltype = 1 }
+
+# Both the left and right ventricle endocardium are stimulated, as in the demo.
+[[stimulus]]
+type = "marker"
+marker = "LV"
+amplitude = "2000 uA/cm**2"
+duration = "1 ms"
+
+[[stimulus]]
+type = "marker"
+marker = "RV"
+amplitude = "2000 uA/cm**2"
+duration = "1 ms"
+
+[solver]
+dt = "0.05 ms"
+end_time = "500 ms"        # demo itself only runs 10 ms as a short demo
+
+[output]
+save_every = "1 ms"
+checkpoint_every = "100 ms"

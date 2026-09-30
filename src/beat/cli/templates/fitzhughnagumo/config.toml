@@ -1,0 +1,45 @@
+# FitzHugh-Nagumo model on a 2D square. Equivalent to demos/fitzhughnagumo.py.
+#
+# Deviations:
+# - The demo's mesh is a dimensionless "unit square" (create_unit_square, N=10); this template
+#   rescales it to 100x100 mm (dx=10 mm gives the same 10x10 grid) so that geometry.unit and a box
+#   stimulus are meaningful; the box below is still the same lower-left-quadrant fraction of the
+#   domain as the demo's `stim_region` (x <= 0.5, y <= 0.5 of a unit square).
+# - The demo uses a raw scalar conductivity M=0.01 with no physical basis; the CLI always builds M
+#   from [ep] (chi + conductivities), so this template uses the default ("Niederer") conductivity
+#   preset instead -- the resulting M differs in magnitude from the demo's arbitrary value, but the
+#   qualitative excitable-wave behaviour is unaffected.
+# - A box stimulus is always volumetric (uA/cm**3), regardless of the mesh's own dimension -- see
+#   beat.stimulation.compute_stimulus_unit.
+
+[geometry]
+type = "rectangle"          # matches the demo's 10x10 unit-square grid, rescaled to 100x100 mm
+unit = "mm"
+lx = 100.0
+ly = 100.0
+dx = 10.0
+fibers = { type = "isotropic" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+conductivity = { preset = "Niederer" }
+
+[cell]
+ode_file = "fitzhughnagumo.ode"   # transcribed from the demo's `rhs`; see the .ode file's header
+v_name = "v"
+
+[[stimulus]]
+type = "box"
+min = [0.0, 0.0]
+max = [50.0, 50.0]           # the demo's stim_region: x <= 0.5 and y <= 0.5 of the unit square
+amplitude = "50000 uA/cm**3"
+duration = "1 ms"            # demo's stim_duration = 1
+start = "1 ms"                # demo's stim_start = 1
+
+[solver]
+dt = "0.01 ms"
+end_time = "50 ms"           # demo's T = 50
+
+[output]
+save_every = "2 ms"

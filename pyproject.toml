@@ -36,11 +36,23 @@ Documentation = "https://finsberg.github.io/fenicsx-beat"
 Source = "https://github.com/finsberg/fenicsx-beat"
 Tracker = "https://github.com/finsberg/fenicsx-beat/issues"
 
+[tool.setuptools.package-data]
+# `[build-system]` lists scikit-build-core in `requires` but has no `build-backend` key, so PEP
+# 517 falls back to the legacy setuptools backend (verified: `pip wheel .` runs setuptools'
+# `bdist_wheel`/`build_py`, not scikit-build-core's own wheel builder) -- there is no
+# `[tool.scikit-build]` table because scikit-build-core never actually runs here. Ship the CLI's
+# `config.toml` templates and their companion `.ode` files (see `beat.cli.TEMPLATES_DIR`,
+# `beat.cli._available_templates()`) so `beat init --template <name>` works from a wheel/sdist
+# install, not just this editable checkout.
+"beat.cli" = ["templates/*/*"]
+
 [project.optional-dependencies]
 test = [
     "pytest",
     "pytest-cov",
+    "types-toml",
     "fenicsx-beat[irksome]",
+    "fenicsx-beat[cli]",
 ]
 dev = [
     "pdbpp",
@@ -60,6 +72,14 @@ irksome = [
 ]
 external_operator = [
     "dolfinx-external-operator",
+]
+cli = [
+    "pydantic>=2",
+    "pydantic-pint",
+    "toml",
+    "cardiac-geometriesx",
+    "gotranx",
+    "io4dolfinx",
 ]
 demos = [
    "cardiac-geometriesx",

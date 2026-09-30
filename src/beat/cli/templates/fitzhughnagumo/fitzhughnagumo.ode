@@ -1,0 +1,25 @@
+# FitzHugh-Nagumo model, transcribed from the `rhs` function in demos/fitzhughnagumo.py.
+# No internal stimulus term: the CLI always applies its own PDE stimulus (see [[stimulus]] in
+# config.toml), so unlike the demo's `rhs` this cell model has no stim_amplitude/stim_start/
+# stim_duration parameters at all.
+parameters(
+    a = 0.13,
+    b = 0.013,
+    c_1 = 0.26,
+    c_2 = 0.1,
+    c_3 = 1.0,
+    v_amp = 125.0,
+    v_rest = -85.0,
+    v_peak = 40.0,
+)
+
+states(
+    s = 0.0,
+    v = -85.0,
+)
+
+v_th = v_amp * a + v_rest
+I = -s * (c_2 / v_amp) * (v - v_rest) + ((c_1 / v_amp**2) * (v - v_rest)) * (v - v_th) * (-v + v_peak)
+
+dv_dt = I
+ds_dt = b * (-c_3 * s + (v - v_rest))

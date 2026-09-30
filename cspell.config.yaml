@@ -4,6 +4,12 @@ dictionaryDefinitions:
     addWords: true
 dictionaries:
   - fenicsx_beat
+ignorePaths: [
+    # Vendored, verbatim copies of odes/**/*.ode (never spell-checked there either, since
+    # cspell's pre-commit hook only scans src/|docs|tests|README.md) shipped as CLI template
+    # companions; their many third-party cell-model variable abbreviations aren't prose.
+    "src/beat/cli/templates/**/*.ode",
+  ]
 ignoreWords: [
     quickstart,
     toctree,
@@ -17,5 +23,6 @@ ignoreWords: [
     operatorname,
     docname,
     docnames,
-    automodule
+    automodule,
+    endoo
   ]

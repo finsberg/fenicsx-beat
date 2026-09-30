@@ -331,21 +331,24 @@ def generate_random_activation(
     """
     assert len(points) == len(delays), "Points and delays must have the same length"
     X = ufl.SpatialCoordinate(mesh)
+    # Only compare against the mesh's own geometric dimension: `points` (e.g. from
+    # dolfinx.mesh.compute_midpoints) may carry extra (unused) trailing columns, since dolfinx
+    # always stores geometry with 3 columns internally regardless of gdim, but `X` itself only
+    # has `gdim` components and indexing beyond that raises.
+    gdim = mesh.geometry.dim
 
     terms = []
     for i, point in enumerate(points):
+        spatial = near(X[0], point[0], tol=tol)
+        for d in range(1, gdim):
+            spatial = ufl.And(spatial, near(X[d], point[d], tol=tol))
+        temporal = ufl.And(
+            ufl.ge(time, stim_start + delays[i]),
+            ufl.le(time, stim_start + stim_duration + delays[i]),
+        )
         terms.append(
             ufl.conditional(
-                ufl.And(
-                    ufl.And(
-                        ufl.And(near(X[0], point[0], tol=tol), near(X[1], point[1], tol=tol)),
-                        ufl.And(
-                            near(X[2], point[2], tol=tol),
-                            ufl.ge(time, stim_start + delays[i]),
-                        ),
-                    ),
-                    ufl.le(time, stim_start + stim_duration + delays[i]),
-                ),
+                ufl.And(spatial, temporal),
                 stim_amplitude,
                 0.0,
             ),

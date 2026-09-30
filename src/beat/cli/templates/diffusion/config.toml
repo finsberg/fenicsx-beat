@@ -1,0 +1,40 @@
+# Pure diffusion + corner stimulus on a 2D square. Equivalent to demos/diffusion.py.
+#
+# Deviation: the demo calls beat.MonodomainModel directly (M=1, no ODE/cell model, no chi-scaling
+# of the stimulus at all). The CLI always couples a PDE step to an ODE step, so this template ships
+# a trivial "passive.ode" (dv/dt = 0, no ionic current) to reproduce pure diffusion, and the
+# stimulus amplitude below is a physical current density (divided by chi, as
+# beat.stimulation.define_stimulus does) rather than the demo's raw, unscaled value of 1. A box
+# stimulus is always volumetric (uA/cm**3), regardless of the mesh's own dimension.
+
+[geometry]
+type = "rectangle"          # unit square, matching demo's create_unit_square(N=20)
+unit = "mm"
+lx = 1.0
+ly = 1.0
+dx = 0.05
+fibers = { type = "isotropic" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+conductivity = { preset = "Niederer" }
+
+[cell]
+ode_file = "passive.ode"    # dv/dt = 0: the ODE step is a no-op, only the PDE diffuses
+v_name = "v"
+
+[[stimulus]]
+type = "box"
+min = [0.0, 0.0]
+max = [0.3, 0.3]             # the demo's S1_subdomain: x <= 0.3 and y <= 0.3
+amplitude = "50000 uA/cm**3"
+duration = "2.5 ms"          # the demo stimulates for the whole 2.5 ms run
+start = "0 ms"
+
+[solver]
+dt = "0.1 ms"
+end_time = "2.5 ms"
+
+[output]
+save_every = "0.5 ms"

@@ -34,3 +34,10 @@ jobs:
 
       - name: Run tests
         run: mpirun -n 2 python3 -m pytest -v  -m "not skip_in_parallel"
+
+      - name: CLI restart on a different number of ranks
+        run: |
+          beat init /tmp/cli-restart/config.toml --template diffusion
+          beat run /tmp/cli-restart/config.toml --set 'solver.end_time="0.5 ms"'
+          mpirun -n 2 beat run /tmp/cli-restart/config.toml --restart --set 'solver.end_time="1.0 ms"'
+          python -c "import json; assert json.load(open('/tmp/cli-restart/output/run.json'))['status'] == 'finished'"

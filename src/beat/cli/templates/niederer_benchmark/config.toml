@@ -1,0 +1,41 @@
+# Niederer et al. (2011) benchmark: cuboid slab, corner stimulus, ten Tusscher-Panfilov 2006.
+# Equivalent to demos/niederer_benchmark.py.
+
+[geometry]
+type = "box_slab"          # structured tetrahedral box, no gmsh needed
+unit = "mm"
+lx = 20.0
+ly = 7.0
+lz = 3.0
+dx = 0.5
+fibers = { type = "axis", direction = "x" }
+
+[ep]
+chi = "140 mm**-1"
+C_m = "0.01 uF/mm**2"
+conductivity = { preset = "Niederer" }
+
+[cell]
+ode_file = "tentusscher_panfilov_2006_epi_cell.ode"
+v_name = "V"
+parameters = { stim_amplitude = 0.0 }   # PDE stimulus only
+
+[[stimulus]]
+type = "box"
+min = [0.0, 0.0, 0.0]
+max = [1.5, 1.5, 1.5]
+amplitude = "50000 uA/cm**3"
+duration = "2 ms"
+start = "0 ms"
+
+[solver]
+dt = "0.05 ms"
+theta = 0.5
+end_time = "150 ms"
+
+[output]
+folder = "output"
+save_every = "1 ms"
+
+[postprocess]
+points = { P1 = [0.0, 0.0, 0.0], P8 = [20.0, 7.0, 3.0] }

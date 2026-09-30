@@ -1,0 +1,43 @@
+# Cell-model stepping via dolfinx-external-operator, ten Tusscher-Panfilov 2006 on a 2D square.
+# Equivalent to demos/external_operator_gotranx.py.
+#
+# Deviation: the demo uses a raw scalar conductivity M=0.1 with no physical basis; the CLI always
+# builds M from [ep] (chi + conductivities), so this template uses the default ("Niederer")
+# conductivity preset instead. The stimulus amplitude is likewise a physical current density
+# (chi-scaled), rather than the demo's raw, unscaled value of 50, and (being a box/volumetric
+# stimulus) is in uA/cm**3. The box below is larger than the demo's so it still covers a whole
+# element when coarsened.
+
+[geometry]
+type = "rectangle"          # unit square, matching demo's create_unit_square(N=25)
+unit = "mm"
+lx = 1.0
+ly = 1.0
+dx = 0.04
+fibers = { type = "isotropic" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+conductivity = { preset = "Niederer" }
+
+[cell]
+ode_file = "tentusscher_panfilov_2006_epi_cell.ode"
+v_name = "V"
+parameters = { stim_amplitude = 0.0 }   # PDE stimulus only, as in the demo
+
+[[stimulus]]
+type = "box"
+min = [0.0, 0.0]
+max = [0.3, 0.3]             # slightly larger than the demo's S1_subdomain (x <= 0.2, y <= 0.2)
+amplitude = "50000 uA/cm**3"
+duration = "2 ms"
+start = "0 ms"
+
+[solver]
+dt = "0.05 ms"
+end_time = "5 ms"
+ode = { type = "external_operator" }
+
+[output]
+save_every = "1 ms"

@@ -1,0 +1,9 @@
+# Trivial "passive" cell model: dv/dt = 0, no ionic current at all. demos/diffusion.py calls
+# beat.MonodomainModel directly with no ODE/cell model whatsoever; the CLI always couples a PDE
+# step to an ODE step, so this is the closest faithful reproduction of pure diffusion + a
+# stimulus current -- the ODE step is a no-op, leaving only the PDE's diffusion + I_stim.
+states(
+    v = 0.0,
+)
+
+dv_dt = 0.0

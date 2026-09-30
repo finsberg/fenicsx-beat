@@ -1,0 +1,51 @@
+# Fully implicit (Irksome) monodomain + Mitchell-Schaeffer on a 2D square.
+# Equivalent to demos/irksome_model_gotranx.py.
+#
+# Deviations:
+# - The demo uses `irksome.BackwardEuler()` (a fixed, zero-argument tableau); the CLI always
+#   instantiates a tableau as `getattr(irksome, tableau)(stages)`, which BackwardEuler does not
+#   accept, so this template uses `RadauIIA` with `stages = 1` instead (also first-order implicit).
+# - The demo triggers activation via a non-default initial condition (v = 1 on a strip along the
+#   left edge); the config schema has no initial-condition mechanism, so this template uses an
+#   equivalent short PDE stimulus box along the left edge instead.
+# - The demo's conductivity M is piecewise-constant in four horizontal bands (a 64x contrast);
+#   [ep.conductivity] only supports a single, uniform value, so this template uses the default
+#   ("Niederer") conductivity preset instead.
+# - A box stimulus is always volumetric (uA/cm**3), regardless of the mesh's own dimension. The
+#   strip below is wider than a minimal one so it still covers a whole element when coarsened.
+
+[geometry]
+type = "rectangle"          # unit square, matching demo's create_unit_square(N=100)
+unit = "mm"
+lx = 1.0
+ly = 1.0
+dx = 0.01
+fibers = { type = "isotropic" }
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+conductivity = { preset = "Niederer" }
+
+[cell]
+ode_file = "mitchell_schaeffer.ode"
+v_name = "v"
+
+[[stimulus]]
+type = "box"
+min = [0.0, 0.0]
+max = [0.3, 1.0]             # a strip along the left edge, replacing the demo's initial condition
+amplitude = "50000 uA/cm**3"
+duration = "2 ms"
+start = "0 ms"
+
+[solver]
+dt = "0.1 ms"
+theta = 1.0                  # Godunov splitting, matching the first-order tableau
+end_time = "2 ms"
+pde = { type = "irksome", tableau = "RadauIIA", stages = 1 }
+ode = { type = "irksome", tableau = "RadauIIA", stages = 1 }
+petsc_options = { ksp_type = "cg", pc_type = "bjacobi", ksp_rtol = 1e-6 }
+
+[output]
+save_every = "0.1 ms"

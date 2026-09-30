@@ -1,0 +1,54 @@
+# Conduction velocity / ECG slab with ToR-ORd. Equivalent to demos/slab.py.
+#
+# The demo builds its mesh directly with beat.geometry.get_3D_slab_mesh + constant, axis-aligned
+# fibers from get_3D_slab_microstructure (not gmsh/cardiac-geometriesx); geometry.type = "box_slab"
+# wraps exactly those two helpers (see beat.cli.geometry.build_geometry), so this template uses it
+# with the demo's real dimensions (Lx=1.0, Ly=Lz=0.05 cm) and element size (dx=0.01 cm) instead of
+# a generated "slab" (gmsh) geometry.
+#
+# Remaining deviation: the demo partitions the cable into thirds along x (endo/mid/epi ToR-ORd
+# celltypes by raw x-position), which is neither `transmural` (distance-from-facet) nor
+# `cell_markers` (geometry cell tags) as currently supported by [cell.layers] -- so this template
+# uses a single, homogeneous ToR-ORd region instead (celltype defaults to 0/endo). The
+# intracellular/extracellular conductivities below are transcribed directly from the demo (not a
+# preset).
+
+[geometry]
+type = "box_slab"           # structured tetrahedral box, no gmsh needed
+unit = "cm"
+lx = 1.0
+ly = 0.05
+lz = 0.05
+dx = 0.01
+fibers = { type = "axis", direction = "x" }   # matches the demo's transverse=False fiber field
+
+[ep]
+chi = "1400 cm**-1"
+C_m = "1 uF/cm**2"
+[ep.conductivity]
+sigma_il = "0.16069 S/m"
+sigma_it = "0.04258 S/m"
+sigma_el = "0.625 S/m"
+sigma_et = "0.236 S/m"
+
+[cell]
+ode_file = "ToRORd_dynCl_endo.ode"
+v_name = "v"
+parameters = { i_Stim_Amplitude = 0.0 }   # PDE stimulus only, as in the demo
+
+[[stimulus]]
+type = "marker"
+marker = "X0"               # the x=0 end face, as in the demo's S1_subdomain
+amplitude = "5000 uA/cm**2"
+
+[solver]
+dt = "0.05 ms"
+end_time = "20 ms"
+
+[output]
+save_every = "1 ms"
+
+[postprocess]
+# The demo's p1/p2: (L*0.25, dx*0.5, dx*0.5) and (L*0.75, dx*0.5, dx*0.5), with L=1.0, dx=0.05
+# (the domain's Ly/Lz thickness there, not the mesh element size of the same name).
+points = { P1 = [0.25, 0.025, 0.025], P2 = [0.75, 0.025, 0.025] }
