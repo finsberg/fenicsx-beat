@@ -132,6 +132,7 @@ testpaths = [
 ]
 markers = [
     "skip_in_parallel: test cannot be run under multi-rank MPI",
+    "postprocess: test is a post-processing script that is not run by default",
 ]
 
 [[tool.mypy.overrides]]

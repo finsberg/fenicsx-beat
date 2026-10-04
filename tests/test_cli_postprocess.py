@@ -56,6 +56,7 @@ def finished(tmp_path):
     return conf
 
 
+@pytest.mark.postprocess
 def test_post_writes_vtx_and_activation(finished):
     run_post(finished, MPI.COMM_WORLD)
     post = finished.output.folder / "post"
@@ -66,12 +67,14 @@ def test_post_writes_vtx_and_activation(finished):
     assert "P1" in data
 
 
+@pytest.mark.postprocess
 def test_post_without_vtx(finished):
     finished.postprocess.vtx = False
     run_post(finished, MPI.COMM_WORLD)
     assert not (finished.output.folder / "post" / "v.bp").exists()
 
 
+@pytest.mark.postprocess
 def test_ecg_csv(finished):
     run_ecg(finished, MPI.COMM_WORLD)
     rows = list(csv.reader((finished.output.folder / "post" / "ecg.csv").open()))
@@ -79,6 +82,7 @@ def test_ecg_csv(finished):
     assert len(rows) == 1 + 4  # 4 unique saved times
 
 
+@pytest.mark.postprocess
 def test_ecg_requires_points(finished):
     from beat.cli.config import ConfigError
 
@@ -87,6 +91,7 @@ def test_ecg_requires_points(finished):
         run_ecg(finished, MPI.COMM_WORLD)
 
 
+@pytest.mark.postprocess
 def test_post_gif_render_failure_does_not_hang(finished, monkeypatch):
     """A rendering failure on rank 0 (e.g. off-screen rendering on a headless node) must not
     leave rank 0 skipping a collective ``io4dolfinx.read_function`` call that the other ranks
@@ -117,6 +122,7 @@ def test_post_gif_render_failure_does_not_hang(finished, monkeypatch):
     assert not (post / "voltage.gif").exists()
 
 
+@pytest.mark.postprocess
 def test_post_requires_prior_run(tmp_path):
     from beat.cli.config import Config, ConfigError
 
@@ -125,6 +131,7 @@ def test_post_requires_prior_run(tmp_path):
         run_post(conf, MPI.COMM_WORLD)
 
 
+@pytest.mark.postprocess
 @pytest.mark.parametrize("fn", [run_post, run_ecg])
 def test_post_rejects_config_changed_since_run(finished, fn):
     """beat post/ecg must refuse a config whose physics differ from the run that wrote
@@ -148,6 +155,7 @@ def test_post_rejects_config_changed_since_run(finished, fn):
     fn(finished, MPI.COMM_WORLD)  # the unchanged config still works
 
 
+@pytest.mark.postprocess
 def test_visualize_warns_previews_are_rank0_partition_only(finished, caplog):
     pytest.importorskip("pyvista")
     import dolfinx
