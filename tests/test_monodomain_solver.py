@@ -44,6 +44,11 @@ class NullODESolver:
 
     def step(self, t0: float, dt: float) -> None: ...
 
+    def states_to_dolfin(self, names=None) -> list[dolfinx.fem.Function]:
+        return []
+
+    def load_all_states(self, functions) -> None: ...
+
 
 def test_splitting_solver_logs_both_ends_of_the_interval(caplog):
     comm = MPI.COMM_WORLD
@@ -402,3 +407,80 @@ def test_external_operator_monodomain_splitting_analytic(odespace):
     mesh.comm.Barrier()
 
     assert E < 0.002
+
+
+# A power of two, so t1 - t0 is the same float at every step. The PDE keeps the matrix it
+# assembled for the first step's dt (within 1e-12), so a solver whose first step has a dt
+# differing in the last bit would not be bit-identical, whatever the restart does.
+RESTART_DT = 2**-7
+
+
+def build_restart_solver(theta):
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8, dolfinx.cpp.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    x = ufl.SpatialCoordinate(mesh)
+    pde = beat.MonodomainModel(time=time, mesh=mesh, M=1.0)
+
+    V_ode = beat.utils.space_from_string("P_1", mesh, dim=1)
+    s = dolfinx.fem.Function(V_ode)
+    s.interpolate(
+        dolfinx.fem.Expression(s_exact_func(x, time), beat.utils.interpolation_points(V_ode)),
+    )
+    init_states = np.zeros((2, s.x.array.size))
+    init_states[1, :] = s.x.array
+
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=dolfinx.fem.Function(V_ode),
+        v_pde=pde.state,
+        fun=simple_ode_forward_euler,
+        init_states=init_states,
+        parameters=None,
+        num_states=2,
+        v_index=0,
+    )
+    return beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=theta)
+
+
+def run_steps(solver, first, last):
+    for i in range(first, last):
+        solver.step((i * RESTART_DT, (i + 1) * RESTART_DT))
+
+
+@pytest.mark.parametrize("theta", [1.0, 0.5])
+def test_restart_functions_restore_the_solver_bit_for_bit(theta):
+    a = build_restart_solver(theta)
+    run_steps(a, 0, 3)
+    saved = [(n, f.x.array.copy()) for n, f in a.restart_functions(["v", "s"])]
+    assert np.any(saved[0][1] != 0.0)
+
+    b = build_restart_solver(theta)
+    functions = b.restart_functions(["v", "s"])
+    for (_, f), (_, arr) in zip(functions, saved):
+        f.x.array[:] = arr
+    b.load_restart(functions)
+
+    run_steps(a, 3, 6)
+    run_steps(b, 3, 6)
+
+    assert np.array_equal(a.pde.v.x.array, b.pde.v.x.array)
+    assert np.array_equal(a.ode.values, b.ode.values)
+
+
+def test_restart_function_names():
+    solver = build_restart_solver(1.0)
+    names = [n for n, _ in solver.restart_functions(["v", "s"])]
+    assert names == ["v", "state_v", "state_s"]
+
+
+def test_restart_functions_hand_out_the_pde_potential_itself():
+    solver = build_restart_solver(1.0)
+    assert solver.restart_functions(["v", "s"])[0][1] is solver.pde.v
+
+
+def test_load_restart_refuses_other_names():
+    solver = build_restart_solver(1.0)
+    functions = solver.restart_functions(["v", "s"])
+    with pytest.raises(ValueError, match="v"):
+        solver.load_restart([("u", functions[0][1]), *functions[1:]])
+    with pytest.raises(ValueError, match="state_"):
+        solver.load_restart([functions[0], ("w", functions[1][1]), functions[2]])

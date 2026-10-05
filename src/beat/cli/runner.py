@@ -269,10 +269,8 @@ def _write_restart(sim: Simulation, t: float, step: int, write_data: bool = True
     folder = sim.conf.output.folder
     if write_data:
         path = folder / RESTART
-        io4dolfinx.write_function_on_input_mesh(path, sim.pde.state, time=t, name="v")
-        states = sim.ode.states_to_dolfin(sim.cell.state_names)
-        for name, f in zip(sim.cell.state_names, states):
-            io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=f"state_{name}")
+        for name, f in sim.solver.restart_functions(sim.cell.state_names):
+            io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=name)
     # restart.json is written last (atomically): it only ever points at a complete checkpoint.
     _write_json(
         folder / RESTART_META,
@@ -319,14 +317,11 @@ def _load_restart(sim: Simulation) -> tuple[int, float, np.ndarray]:
             f"{folder / RESTART_META} (stored: {sorted(set(stored.tolist()))})",
         )
     t_file = float(stored[np.argmin(np.abs(stored - t))])
-    io4dolfinx.read_function(folder / RESTART, sim.pde.state, time=t_file, name="v")
-    sim.pde.state.x.scatter_forward()
-    funcs = sim.ode.states_to_dolfin(sim.cell.state_names)
-    for name, f in zip(sim.cell.state_names, funcs):
-        io4dolfinx.read_function(folder / RESTART, f, time=t_file, name=f"state_{name}")
+    functions = sim.solver.restart_functions(sim.cell.state_names)
+    for name, f in functions:
+        io4dolfinx.read_function(folder / RESTART, f, time=t_file, name=name)
         f.x.scatter_forward()
-    sim.ode.load_all_states(funcs)
-    sim.pde.assign_previous()
+    sim.solver.load_restart(functions)
     logger.info(f"Restarting from t={t} ms (step {meta['step']})")
     # Checkpoint times whose data is *complete* in restart.bp (a kill mid-checkpoint can leave
     # ``v`` written but not every state): only these may be reused instead of rewritten.

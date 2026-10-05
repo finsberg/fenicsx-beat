@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -21,6 +22,10 @@ class ODESolver(Protocol):
     def pde_to_ode(self) -> None: ...
 
     def step(self, t0: float, dt: float) -> None: ...
+
+    def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]: ...
+
+    def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None: ...
 
 
 class PDEModel(Protocol):
@@ -51,6 +56,37 @@ class MonodomainSplittingSolver:
         # assert np.isclose(self.theta, 1.0), "Only first order splitting is implemented"
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
         self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
+        self.pde.assign_previous()
+
+    def restart_functions(
+        self,
+        state_names: Sequence[str],
+    ) -> list[tuple[str, dolfinx.fem.Function]]:
+        """The Functions that hold everything the splitting scheme carries between steps.
+
+        These are ``("v", pde.v)`` followed by ``("state_<name>", f)`` for each ODE state, named
+        by ``state_names`` (one per state). Write them to save a checkpoint. On a fresh solver,
+        read into them and pass them to :meth:`load_restart`.
+        """
+        states = self.ode.states_to_dolfin(list(state_names))
+        return [("v", self.pde.v)] + [(f"state_{name}", f) for name, f in zip(state_names, states)]
+
+    def load_restart(self, functions: Sequence[tuple[str, dolfinx.fem.Function]]) -> None:
+        """Restore the solver from ``functions`` as returned by :meth:`restart_functions`.
+
+        Overwrites ``pde.v`` and every ODE state, then sets the PDE's previous value, exactly
+        as construction does.
+        """
+        names = [name for name, _ in functions]
+        if not names or names[0] != "v" or not all(n.startswith("state_") for n in names[1:]):
+            raise ValueError(
+                f"Restart functions must be 'v' followed by 'state_<name>' ones, got {names}",
+            )
+        v = functions[0][1]
+        if v is not self.pde.v:
+            self.pde.v.x.array[:] = v.x.array
+        self.pde.v.x.scatter_forward()
+        self.ode.load_all_states([f for _, f in functions[1:]])
         self.pde.assign_previous()
 
     def solve(self, interval, dt):
