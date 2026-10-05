@@ -3,7 +3,17 @@ from __future__ import annotations
 import abc
 import logging
 from enum import Enum, auto
-from typing import Any, Callable, Literal, NamedTuple, Optional, Sequence, Union, cast
+from typing import (
+    Any,
+    Callable,
+    Literal,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Union,
+    cast,
+)
 
 from petsc4py import PETSc
 
@@ -232,6 +242,19 @@ class BaseModel:
 
         """
         ...
+
+    def restart_metadata(self) -> dict[str, float]:
+        """The model's own state beyond its fields: the time step its matrix was assembled for.
+
+        The matrix is kept while dt stays within 1e-12 of this, so a restarted run only
+        reproduces the uninterrupted one bit for bit if it assembles at the same time step.
+        """
+        return {"timestep": float(self._timestep.value)}
+
+    def load_restart_metadata(self, data: Mapping[str, Any]) -> None:
+        """Restore what :meth:`restart_metadata` returned, re-assembling the matrix."""
+        self._timestep.value = data["timestep"]
+        self._assemble_matrix()
 
     def _assemble_matrix(self) -> None:
         """(Re-)assemble the system matrix."""

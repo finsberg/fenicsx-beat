@@ -279,6 +279,7 @@ def _write_restart(sim: Simulation, t: float, step: int, write_data: bool = True
             "step": step,
             "physics_hash": physics_hash(sim.conf),
             "state_names": sim.cell.state_names,
+            "solver": sim.solver.restart_metadata(),
         },
         sim.geo.mesh.comm,
     )
@@ -321,7 +322,7 @@ def _load_restart(sim: Simulation) -> tuple[int, float, np.ndarray]:
     for name, f in functions:
         io4dolfinx.read_function(folder / RESTART, f, time=t_file, name=name)
         f.x.scatter_forward()
-    sim.solver.load_restart(functions)
+    sim.solver.load_restart(functions, meta.get("solver"))
     logger.info(f"Restarting from t={t} ms (step {meta['step']})")
     # Checkpoint times whose data is *complete* in restart.bp (a kill mid-checkpoint can leave
     # ``v`` written but not every state): only these may be reused instead of rewritten.

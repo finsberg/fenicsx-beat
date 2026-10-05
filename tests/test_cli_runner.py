@@ -99,7 +99,7 @@ def test_restart_matches_continuous_run(tmp_path, theta):
         function_name="v",
     )
     assert len(raw) == 7
-    assert np.allclose(_final_v(full).x.array, _final_v(ext).x.array, atol=1e-10)
+    assert np.array_equal(_final_v(full).x.array, _final_v(ext).x.array)
     assert part_path.is_file()
     meta = json.loads((ext.output.folder / "run.json").read_text())
     assert meta["restart"] is True
@@ -215,7 +215,7 @@ def test_restart_when_results_are_ahead_of_checkpoint(tmp_path):
         function_name="v",
     )
     assert len(raw_ckpt) == len(np.unique(raw_ckpt))
-    assert np.allclose(_final_v(full).x.array, _final_v(ext).x.array, atol=1e-10)
+    assert np.array_equal(_final_v(full).x.array, _final_v(ext).x.array)
 
 
 def test_rank0_write_failure_raises_on_every_rank(tmp_path, monkeypatch):

@@ -409,10 +409,7 @@ def test_external_operator_monodomain_splitting_analytic(odespace):
     assert E < 0.002
 
 
-# A power of two, so t1 - t0 is the same float at every step. The PDE keeps the matrix it
-# assembled for the first step's dt (within 1e-12), so a solver whose first step has a dt
-# differing in the last bit would not be bit-identical, whatever the restart does.
-RESTART_DT = 2**-7
+RESTART_DT = 0.01
 
 
 def build_restart_solver(theta):
@@ -457,7 +454,7 @@ def test_restart_functions_restore_the_solver_bit_for_bit(theta):
     functions = b.restart_functions(["v", "s"])
     for (_, f), (_, arr) in zip(functions, saved):
         f.x.array[:] = arr
-    b.load_restart(functions)
+    b.load_restart(functions, a.restart_metadata())
 
     run_steps(a, 3, 6)
     run_steps(b, 3, 6)
@@ -484,3 +481,25 @@ def test_load_restart_refuses_other_names():
         solver.load_restart([("u", functions[0][1]), *functions[1:]])
     with pytest.raises(ValueError, match="state_"):
         solver.load_restart([functions[0], ("w", functions[1][1]), functions[2]])
+
+
+def test_restart_metadata_round_trips_the_pde_timestep():
+    a = build_restart_solver(1.0)
+    run_steps(a, 3, 5)  # starts at 0.03: its dt is not the float 0.01
+    metadata = a.restart_metadata()
+    assert metadata["pde"]["timestep"] == float(a.pde._timestep.value)
+
+    b = build_restart_solver(1.0)
+    assert float(b.pde._timestep.value) != metadata["pde"]["timestep"]
+    b.load_restart(b.restart_functions(["v", "s"]), metadata)
+    assert float(b.pde._timestep.value) == metadata["pde"]["timestep"]
+
+
+def test_restart_metadata_is_empty_for_a_pde_without_it():
+    class Bare:
+        v = None
+
+        def assign_previous(self) -> None: ...
+
+    solver = beat.MonodomainSplittingSolver(pde=Bare(), ode=NullODESolver())  # type: ignore[arg-type]
+    assert solver.restart_metadata() == {}

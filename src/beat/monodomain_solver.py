@@ -1,7 +1,7 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 import dolfinx
 import numpy as np
@@ -71,11 +71,25 @@ class MonodomainSplittingSolver:
         states = self.ode.states_to_dolfin(list(state_names))
         return [("v", self.pde.v)] + [(f"state_{name}", f) for name, f in zip(state_names, states)]
 
-    def load_restart(self, functions: Sequence[tuple[str, dolfinx.fem.Function]]) -> None:
+    def restart_metadata(self) -> dict[str, Any]:
+        """State beyond the Functions, to be stored with a checkpoint (JSON-serializable).
+
+        Pass it back to :meth:`load_restart`. It is empty if the PDE model has none.
+        """
+        if hasattr(self.pde, "restart_metadata"):
+            return {"pde": self.pde.restart_metadata()}
+        return {}
+
+    def load_restart(
+        self,
+        functions: Sequence[tuple[str, dolfinx.fem.Function]],
+        metadata: Mapping[str, Any] | None = None,
+    ) -> None:
         """Restore the solver from ``functions`` as returned by :meth:`restart_functions`.
 
-        Overwrites ``pde.v`` and every ODE state, then sets the PDE's previous value, exactly
-        as construction does.
+        Overwrites ``pde.v`` and every ODE state, restores the PDE's metadata if given (as
+        returned by :meth:`restart_metadata`), then sets the PDE's previous value, exactly as
+        construction does.
         """
         names = [name for name, _ in functions]
         if not names or names[0] != "v" or not all(n.startswith("state_") for n in names[1:]):
@@ -87,6 +101,8 @@ class MonodomainSplittingSolver:
             self.pde.v.x.array[:] = v.x.array
         self.pde.v.x.scatter_forward()
         self.ode.load_all_states([f for _, f in functions[1:]])
+        if metadata is not None and "pde" in metadata:
+            self.pde.load_restart_metadata(metadata["pde"])  # type: ignore[attr-defined]
         self.pde.assign_previous()
 
     def solve(self, interval, dt):
