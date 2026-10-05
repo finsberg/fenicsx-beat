@@ -70,7 +70,14 @@ Operator-split PDE/ODE solve per timestep:
   available), for pacing protocols independent of tissue PDEs.
 - **Telemetry** (`telemetry.py`): `BaseMonitor`/`NullMonitor`/`PerformanceMonitor`, threaded through
   `step()` via `monitor.track_time(...)`.
-- **CLI** (`cli.py`, entry point `beat`): `run`/`ecg`/`post` subcommands are stubs (`NotImplemented`).
+- **CLI** (`cli/`, entry point `beat`, `cli` extra): TOML-config-driven `init --template`/
+  `validate-config`/`geometry`/`run`/`ecg`/`post`/`version` (`config.py` pydantic models,
+  `overrides.py` TOML < `BEAT_*` env < `--set` < flags, `runner.py`, `templates/`). Docs:
+  `docs/cli.md`, `docs/cli_cluster.md`, `docs/cli_reference.md` (regenerate with
+  `python scripts/gen_cli_reference.py` after changing `cli/config.py`). `overrides.py`, `log.py`,
+  `_on_rank0`, the output-folder handling and the geometry cache are **copied into fenicsx-pulse's
+  `pulse.cli`** with identical names — keep them in sync until they are extracted into a shared
+  package (to be decided when simcardemsx gets its CLI).
 
 Dolfinx API compat: `base_model.py`/`odesolver.py`/`utils.py`/`ecg.py` branch on
 `packaging.version.Version(dolfinx.__version__)` — check for an existing `_dolfinx_version >=
