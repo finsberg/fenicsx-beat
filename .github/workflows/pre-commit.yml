@@ -88,5 +88,5 @@ jobs:
       # Nightly is here to fail loudly if the dolfinx-facing hooks (mostly
       # mypy) break on the next release, not to drive autofixes off an
       # unstable toolchain.
-      - uses: pre-commit-ci/lite-action@v1.1.0
+      - uses: pre-commit-ci/lite-action@v1.2.0
         if: always() && matrix.container == 'ghcr.io/fenics/dolfinx/dolfinx:stable'
