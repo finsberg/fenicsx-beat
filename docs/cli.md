@@ -202,7 +202,7 @@ output/
   init_states/<region>_<hash>.npy   # cached single-cell steady state (only if cell.steady_state is set); kept by --overwrite
   results.bp               # io4dolfinx: v (+ output.fields), every output.save_every
   restart.bp                # io4dolfinx: v and every ODE state, every output.checkpoint_every and at the end
-  restart.json              # the latest complete checkpoint's time/step and a hash of the run's physics
+  restart.json              # {"ep": {t, step, physics_hash, functions, state_names, solver}}: the latest complete checkpoint and a hash of the run's physics (beat <= 0.7.2 wrote these keys at the top level; still read)
   performance.json          # timing summary (only with output.performance = true)
   post/                     # written by `beat post` / `beat ecg`, see below
 ```

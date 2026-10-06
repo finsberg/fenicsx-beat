@@ -46,7 +46,7 @@ def test_run_writes_results_and_metadata(tmp_path):
     times = read_result_times(out / RESULTS, MPI.COMM_WORLD)
     assert np.allclose(times, [0.0, 0.1, 0.2, 0.3])
     assert len(read_result_times(out / RESULTS, MPI.COMM_WORLD, name="h")) == 4
-    assert json.loads((out / "restart.json").read_text())["step"] == 3
+    assert json.loads((out / "restart.json").read_text())["ep"]["step"] == 3
 
 
 def test_existing_output_requires_overwrite(tmp_path):
@@ -167,9 +167,46 @@ def _edit_restart_meta(folder, **changes):
     if MPI.COMM_WORLD.rank == 0:
         path = folder / "restart.json"
         meta = json.loads(path.read_text())
-        meta.update(changes)
+        meta["ep"].update(changes)
         path.write_text(json.dumps(meta))
     MPI.COMM_WORLD.barrier()
+
+
+def _flatten_restart_meta(folder):
+    """Rewrite restart.json as beat 0.7.1/0.7.2 wrote it: flat, and without ``functions``."""
+    if MPI.COMM_WORLD.rank == 0:
+        path = folder / "restart.json"
+        flat = dict(json.loads(path.read_text())["ep"])
+        flat.pop("functions")
+        path.write_text(json.dumps(flat))
+    MPI.COMM_WORLD.barrier()
+
+
+def test_restart_json_is_namespaced_like_pulse(tmp_path):
+    conf = load_config(write_cfg(tmp_path), environ={})
+    out = run(conf)
+    meta = json.loads((out / "restart.json").read_text())
+    assert set(meta) == {"ep"}
+    assert {"t", "step", "physics_hash", "functions", "state_names", "solver"} <= set(meta["ep"])
+    assert "v" in meta["ep"]["functions"]
+    for name in meta["ep"]["functions"]:
+        stamps = io4dolfinx.read_timestamps(
+            filename=out / "restart.bp",
+            comm=MPI.COMM_WORLD,
+            function_name=name,
+        )
+        assert len(stamps) >= 1, name
+
+
+def test_restart_from_flat_restart_json(tmp_path):
+    cfg = write_cfg(tmp_path)
+    conf = load_config(cfg, environ={})
+    run(conf)
+    _flatten_restart_meta(conf.output.folder)
+    ext = load_config(cfg, environ={}, sets=['solver.end_time="0.6 ms"'])
+    out = run(ext, restart=True)
+    assert json.loads((out / "run.json").read_text())["status"] == "finished"
+    assert json.loads((out / "restart.json").read_text())["ep"]["step"] == 6
 
 
 def test_restart_time_missing_from_checkpoint_errors(tmp_path):
