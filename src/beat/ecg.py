@@ -3,6 +3,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, NamedTuple
 
+from mpi4py import MPI
 from petsc4py import PETSc
 
 import dolfinx
@@ -298,6 +299,37 @@ class ECGRecovery:
         r = ufl.SpatialCoordinate(self.mesh) - dolfinx.fem.Constant(self.mesh, point)
         dist = ufl.sqrt((r**2))
         return dolfinx.fem.form((1 / (4 * ufl.pi * self.sigma_b)) * (self.sol / dist) * self.dx)
+
+
+class ElectrodePotentials:
+    """Potentials at many electrodes from one recovery solve.
+
+    The forms ``recovery.eval(p)`` are compiled once, at construction. Calling the
+    instance solves for the transmembrane current once, assembles each form and sums
+    it over ``mesh.comm``.
+
+    Parameters
+    ----------
+    recovery : ECGRecovery
+        The recovery whose solution is evaluated.
+    points : Mapping[str, ArrayLike]
+        Electrode name to position.
+    """
+
+    def __init__(self, recovery: ECGRecovery, points: Mapping[str, ArrayLike]) -> None:
+        self.recovery = recovery
+        self._forms = {
+            name: recovery.eval(np.asarray(p, dtype=dolfinx.default_scalar_type))
+            for name, p in points.items()
+        }
+
+    def __call__(self) -> dict[str, float]:
+        self.recovery.solve()
+        comm = self.recovery.mesh.comm
+        return {
+            name: float(comm.allreduce(dolfinx.fem.assemble_scalar(form), op=MPI.SUM))
+            for name, form in self._forms.items()
+        }
 
 
 @dataclass(frozen=True)

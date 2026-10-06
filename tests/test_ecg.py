@@ -154,3 +154,75 @@ def test_qt_interval():
     # plt.plot([t[qt.start_index]], [y[qt.start_index]], "ro", label="QT Interval")
     # plt.plot([t[qt.end_index]], [y[qt.end_index]], "go", label="QT Interval")
     # plt.savefig("ecg_qt_interval.png")
+
+
+def test_electrode_potentials_one_solve_bit_for_bit():
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 8, 8)
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    v = dolfinx.fem.Function(V)
+    X = ufl.SpatialCoordinate(mesh)
+    v.interpolate(
+        dolfinx.fem.Expression(ufl.sin(2 * X[0]) * X[1], beat.utils.interpolation_points(V)),
+    )
+    recovery = beat.ECGRecovery(v=v)
+    points = {"b": (1.5, 0.5), "a": (-0.5, 0.5), "c": (0.5, 2.0)}
+
+    probe = beat.ecg.ElectrodePotentials(recovery, points)
+    calls = []
+    solve = recovery.solve
+    recovery.solve = lambda: (calls.append(1), solve())[1]
+    phi = probe()
+
+    assert len(calls) == 1
+    assert list(phi) == ["b", "a", "c"]
+    for name, p in points.items():
+        expected = mesh.comm.allreduce(
+            dolfinx.fem.assemble_scalar(recovery.eval(p)),
+            op=MPI.SUM,
+        )
+        assert expected == phi[name]
+        assert type(phi[name]) is float
+
+
+@pytest.mark.parametrize(("anisotropic", "C_m"), [(False, 1.0), (True, 2.0)])
+def test_recovery_is_the_direct_integral_to_second_order(anisotropic, C_m):
+    """beat's recovery against 1/(4 pi sigma_b C_m) int M grad v . r / |r|^3 dx."""
+    comm = MPI.COMM_WORLD
+    electrodes = {"far": (1.5, 0.5, 0.5), "corner": (-0.5, -0.5, 1.5), "near": (1.1, 0.5, 0.5)}
+
+    def relative_errors(N):
+        mesh = dolfinx.mesh.create_unit_cube(comm, N, N, N)
+        V = dolfinx.fem.functionspace(mesh, ("P", 1))
+        v = dolfinx.fem.Function(V)
+        X = ufl.SpatialCoordinate(mesh)
+        expr = ufl.sin(2 * X[0]) * X[1] + X[2] ** 2 * X[0]
+        v.interpolate(dolfinx.fem.Expression(expr, beat.utils.interpolation_points(V)))
+        M = (
+            ufl.as_matrix([[2.0, 0.3, 0.0], [0.3, 1.0, 0.1], [0.0, 0.1, 0.5]])
+            if anisotropic
+            else 1.0
+        )
+        recovery = beat.ECGRecovery(v=v, sigma_b=1.0, C_m=C_m, M=M)
+        dx = ufl.Measure("dx", domain=mesh, metadata={"quadrature_degree": 4})
+        flux = M * ufl.grad(v) if anisotropic else ufl.grad(v)
+        direct = {}
+        for name, p in electrodes.items():
+            r = X - dolfinx.fem.Constant(mesh, np.asarray(p, dtype=dolfinx.default_scalar_type))
+            direct[name] = dolfinx.fem.form(
+                ufl.inner(flux, r) / ufl.dot(r, r) ** 1.5 / (4 * np.pi * C_m) * dx,
+            )
+        beat_forms = {name: recovery.eval(p) for name, p in electrodes.items()}
+        recovery.solve()
+        errors = {}
+        for name in electrodes:
+            b = mesh.comm.allreduce(dolfinx.fem.assemble_scalar(beat_forms[name]), op=MPI.SUM)
+            d = mesh.comm.allreduce(dolfinx.fem.assemble_scalar(direct[name]), op=MPI.SUM)
+            errors[name] = abs(b - d) / abs(d)
+        return errors
+
+    e16 = relative_errors(16)
+    e32 = relative_errors(32)
+    for name in electrodes:
+        order = np.log2(e16[name] / e32[name])
+        assert order >= 1.8, f"{name}: order {order:.2f}, errors {e16[name]:.3e} -> {e32[name]:.3e}"
