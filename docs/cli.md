@@ -280,6 +280,15 @@ V1 = [-3.0, 4.0, -9.0]
   and refuses (exit 1) a position of the wrong length or a lead set missing an electrode, naming
   them.
 
+A header-less electrode CSV of the legacy simcardems / Alya kind (one `x,y,z` row per electrode,
+in the order LA, RA, LL, RL, V1 to V6) is converted to this table once, with
+`scripts/electrodes_to_toml.py` (standalone; `--names A,B,...` for another order, `-o FILE` instead
+of stdout). Append its output to the config:
+
+```bash
+python scripts/electrodes_to_toml.py electrodes.csv --unit cm > ecg.toml
+```
+
 `[postprocess]` is outside the physics hash, so a finished run can be post-processed again with
 other electrodes or leads. Such a rerun also redoes the activation map and the previews, and the
 VTX conversion unless it is switched off:
