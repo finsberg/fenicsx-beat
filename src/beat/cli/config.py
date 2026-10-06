@@ -505,12 +505,71 @@ class OutputConfig(_Base):
     log_every: int = Field(default=100, ge=1)
 
 
+class ECGConfig(_Base):
+    electrodes: dict[str, list[float]] = Field(
+        min_length=1,
+        description="Electrode name -> position (2 or 3 numbers), in `unit`. Lead systems "
+        "look electrodes up by name (twelve-lead: LA, RA, LL, V1-V6)",
+    )
+    unit: str | None = Field(
+        default=None,
+        description="Length unit of the electrode positions; default geometry.unit",
+    )
+    leads: Literal["none", "twelve-lead"] = Field(
+        default="none",
+        description="Derived lead system written to ecg_leads.csv: none or twelve-lead",
+    )
+    reference: Literal["potential", "position"] = Field(
+        default="potential",
+        description="How the leads' reference points are formed (needs leads != none): "
+        "potential = Wilson terminal from the potentials, position = potentials evaluated "
+        "at the derived points",
+    )
+    sigma_b: float = Field(default=1.0, description="Bath conductivity")
+
+    @field_validator("unit")
+    @classmethod
+    def _is_length(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        try:
+            dim = ureg.Quantity(1, v).dimensionality
+        except pint.errors.PintError as e:
+            raise ValueError(f"postprocess.ecg.unit must be a valid unit, got {v!r}: {e}") from e
+        if dim != ureg.Quantity(1, "m").dimensionality:
+            raise ValueError(f"postprocess.ecg.unit must be a length unit, got {v!r}")
+        return v
+
+    @field_validator("electrodes")
+    @classmethod
+    def _positions(cls, v: dict[str, list[float]]) -> dict[str, list[float]]:
+        for name, pos in v.items():
+            if len(pos) not in (2, 3):
+                raise ValueError(
+                    f"postprocess.ecg.electrodes.{name} must have 2 or 3 numbers, got {len(pos)}",
+                )
+        return v
+
+    @model_validator(mode="after")
+    def _reference_needs_leads(self) -> "ECGConfig":
+        if "reference" in self.model_fields_set and self.leads == "none":
+            raise ValueError("postprocess.ecg.reference only applies when leads = 'twelve-lead'")
+        return self
+
+
 class PostprocessConfig(_Base):
     points: dict[str, list[float]] = Field(default_factory=dict)
     activation_threshold: float = 0.0
-    sigma_b: float = 1.0
+    ecg: ECGConfig | None = None
     vtx: bool = True
     make_gif: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sigma_b_moved(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "sigma_b" in data:
+            raise ValueError("postprocess.sigma_b moved to postprocess.ecg.sigma_b")
+        return data
 
 
 class Config(_Base):

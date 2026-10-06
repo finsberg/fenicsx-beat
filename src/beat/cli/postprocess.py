@@ -105,7 +105,12 @@ def run_ecg(conf: Config, comm=MPI.COMM_WORLD) -> Path:
     M = build_conductivity(conf.ep, geo, conf.geometry.fibers)
     C_m = conf.ep.C_m.to(f"uF/{conf.geometry.unit}**2").magnitude
 
-    ecg = ECGRecovery(v=v, sigma_b=conf.postprocess.sigma_b, C_m=C_m, M=M)
+    ecg = ECGRecovery(
+        v=v,
+        sigma_b=conf.postprocess.ecg.sigma_b if conf.postprocess.ecg else 1.0,
+        C_m=C_m,
+        M=M,
+    )
     names = list(points)
     forms = {name: ecg.eval(points[name]) for name in names}
 
