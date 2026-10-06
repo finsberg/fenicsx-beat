@@ -74,7 +74,7 @@ Operator-split PDE/ODE solve per timestep:
 - **Telemetry** (`telemetry.py`): `BaseMonitor`/`NullMonitor`/`PerformanceMonitor`, threaded through
   `step()` via `monitor.track_time(...)`.
 - **CLI** (`cli/`, entry point `beat`, `cli` extra): TOML-config-driven `init --template`/
-  `validate-config`/`geometry`/`run`/`ecg`/`post`/`version` (`config.py` pydantic models,
+  `validate-config`/`geometry`/`run`/`post`/`version` (`config.py` pydantic models,
   `overrides.py` TOML < `BEAT_*` env < `--set` < flags, `runner.py`, `templates/`). Docs:
   `docs/cli.md`, `docs/cli_cluster.md`, `docs/cli_reference.md` (regenerate with
   `python scripts/gen_cli_reference.py` after changing `cli/config.py`). `overrides.py`, `log.py`,

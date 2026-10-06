@@ -409,7 +409,6 @@ ecg_traces: dict[str, list[float]] = {k: [] for k in electrodes}
 
 for t in times:
     io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
-    ecg.solve()
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
