@@ -423,28 +423,13 @@ plotter_voltage.close()
 # ![volt](voltage_biv_ellipsoid_time.gif "volt")
 
 
-ecg12_lead = beat.ecg.Leads12(**{k: np.array(v) for k, v in ecg_traces.items()})
+ecg12_lead = beat.ecg.twelve_lead().leads({k: np.array(v) for k, v in ecg_traces.items()})
 fig, ax = plt.subplots(3, 4, sharex=True, figsize=(12, 8))
-for i, name in enumerate(
-    [
-        "I",
-        "II",
-        "III",
-        "aVR",
-        "aVL",
-        "aVF",
-        "V1_",
-        "V2_",
-        "V3_",
-        "V4_",
-        "V5_",
-        "V6_",
-    ],
-):
-    y = getattr(ecg12_lead, name)
+for i, name in enumerate(ecg12_lead):
+    y = np.asarray(ecg12_lead[name])
     axi = ax.flatten()[i]
     axi.plot(times[: len(y)], y)
-    axi.set_title(name.strip("_"))
+    axi.set_title(name)
 fig.tight_layout()
 fig.savefig(results_folder / "ecg_12_leads.png")
 

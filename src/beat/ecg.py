@@ -1,12 +1,14 @@
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from petsc4py import PETSc
 
 import dolfinx
 import numpy as np
 import ufl
+from numpy.typing import ArrayLike
 from packaging.version import Version
 
 logger = logging.getLogger(__name__)
@@ -298,102 +300,131 @@ class ECGRecovery:
         return dolfinx.fem.form((1 / (4 * ufl.pi * self.sigma_b)) * (self.sol / dist) * self.dx)
 
 
-def _check_attr(attr: np.ndarray | None):
-    if attr is None:
-        raise AttributeError(f"Missing attribute {attr}")
+@dataclass(frozen=True)
+class Lead:
+    """One lead: a named linear combination of potentials, ``Σ c·φ[p]``."""
+
+    name: str
+    terms: Mapping[str, float]
 
 
-# Taken from https://en.wikipedia.org/wiki/Electrocardiography
-class Leads12(NamedTuple):
-    RA: np.ndarray
-    LA: np.ndarray
-    LL: np.ndarray
-    RL: np.ndarray | None = None  # Do we really need this?
-    V1: np.ndarray | None = None
-    V2: np.ndarray | None = None
-    V3: np.ndarray | None = None
-    V4: np.ndarray | None = None
-    V5: np.ndarray | None = None
-    V6: np.ndarray | None = None
+@dataclass(frozen=True)
+class LeadSystem:
+    """A set of leads, as data.
 
-    @property
-    def I(self) -> np.ndarray:
-        """Voltage between the (positive) left arm (LA)
-        electrode and right arm (RA) electrode"""
-        return self.LA - self.RA
+    Parameters
+    ----------
+    definitions : tuple[Lead, ...]
+        The leads, in output order.
+    derived : Mapping[str, Mapping[str, float]]
+        Points that are not electrodes, each a weighted sum of electrode
+        positions, ``Σ w·x``. The terms of a lead may refer to them.
+    layout : tuple[tuple[str, ...], ...] | None
+        Optional plotting layout, one tuple of lead names per row.
+    """
 
-    @property
-    def II(self) -> np.ndarray:
-        """Voltage between the (positive) left leg (LL)
-        electrode and the right arm (RA) electrode
-        """
-        return self.LL - self.RA
+    definitions: tuple[Lead, ...]
+    derived: Mapping[str, Mapping[str, float]] = field(default_factory=dict)
+    layout: tuple[tuple[str, ...], ...] | None = None
 
     @property
-    def III(self) -> np.ndarray:
-        """Voltage between the (positive) left leg (LL)
-        electrode and the left arm (LA) electrode
-        """
-        return self.LL - self.LA
+    def names(self) -> tuple[str, ...]:
+        return tuple(lead.name for lead in self.definitions)
 
     @property
-    def Vw(self) -> np.ndarray:
-        """Wilson's central terminal"""
-        return (1 / 3) * (self.RA + self.LA + self.LL)
+    def electrodes(self) -> tuple[str, ...]:
+        """The electrodes needed: the non-derived points in the terms, plus those the
+        derived points' weights use, in order of first appearance."""
+        seen: dict[str, None] = {}
+        for lead in self.definitions:
+            for p in lead.terms:
+                if p in self.derived:
+                    for e in self.derived[p]:
+                        seen.setdefault(e)
+                else:
+                    seen.setdefault(p)
+        return tuple(seen)
 
-    @property
-    def aVR(self) -> np.ndarray:
-        """Lead augmented vector right (aVR) has the positive
-        electrode on the right arm. The negative pole is a
-        combination of the left arm electrode and the left leg electrode
-        """
-        return (3 / 2) * (self.RA - self.Vw)
+    def points(self, electrodes: Mapping[str, ArrayLike]) -> dict[str, np.ndarray]:
+        """Every given electrode as a float array, then each derived point as ``Σ w·x``."""
+        missing = [e for e in self.electrodes if e not in electrodes]
+        if missing:
+            raise ValueError(f"Missing electrode positions: {', '.join(missing)}")
+        out = {k: np.asarray(v, dtype=float) for k, v in electrodes.items()}
+        for name, weights in self.derived.items():
+            terms = [w * out[e] for e, w in weights.items()]
+            out[name] = sum(terms[1:], terms[0])
+        return out
 
-    @property
-    def aVL(self) -> np.ndarray:
-        """Lead augmented vector left (aVL) has the positive electrode
-        on the left arm. The negative pole is a combination of the right
-        arm electrode and the left leg electrode
-        """
-        return (3 / 2) * (self.LA - self.Vw)
+    def leads(
+        self,
+        potentials: Mapping[str, float | np.ndarray],
+    ) -> dict[str, float | np.ndarray]:
+        """Each lead's ``Σ c·φ[p]``, in ``definitions`` order."""
+        needed: dict[str, None] = {}
+        for lead in self.definitions:
+            for p in lead.terms:
+                needed.setdefault(p)
+        missing = [p for p in needed if p not in potentials]
+        if missing:
+            raise ValueError(f"Missing potentials: {', '.join(missing)}")
+        out: dict[str, float | np.ndarray] = {}
+        for lead in self.definitions:
+            terms = [c * potentials[p] for p, c in lead.terms.items()]
+            out[lead.name] = sum(terms[1:], terms[0])
+        return out
 
-    @property
-    def aVF(self) -> np.ndarray:
-        """Lead augmented vector foot (aVF) has the positive electrode on the
-        left leg. The negative pole is a combination of the right arm
-        electrode and the left arm electrode
-        """
-        return (3 / 2) * (self.LL - self.Vw)
 
-    @property
-    def V1_(self) -> np.ndarray:
-        _check_attr(self.V1)
-        return self.V1 - self.Vw
+# (lead, positive electrode, negative pole), after
+# https://en.wikipedia.org/wiki/Electrocardiography
+_TWELVE_LEAD_TABLE: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("I", "LA", ("RA",)),
+    ("II", "LL", ("RA",)),
+    ("III", "LL", ("LA",)),
+    ("aVR", "RA", ("LA", "LL")),
+    ("aVL", "LA", ("RA", "LL")),
+    ("aVF", "LL", ("RA", "LA")),
+    *((f"V{i}", f"V{i}", ("LA", "RA", "LL")) for i in range(1, 7)),
+)
+_TWELVE_LEAD_DERIVED = {
+    ("LA", "RA", "LL"): "WCT_pt",
+    ("LA", "LL"): "LA_LL_mid",
+    ("RA", "LL"): "RA_LL_mid",
+    ("RA", "LA"): "RA_LA_mid",
+}
+_TWELVE_LEAD_LAYOUT = (
+    ("I", "aVR", "V1", "V4"),
+    ("II", "aVL", "V2", "V5"),
+    ("III", "aVF", "V3", "V6"),
+)
 
-    @property
-    def V2_(self) -> np.ndarray:
-        _check_attr(self.V2)
-        return self.V2 - self.Vw
 
-    @property
-    def V3_(self) -> np.ndarray:
-        _check_attr(self.V3)
-        return self.V3 - self.Vw
+def twelve_lead(reference: Literal["potential", "position"] = "potential") -> LeadSystem:
+    """The standard 12-lead ECG (Einthoven, Goldberger, Wilson).
 
-    @property
-    def V4_(self) -> np.ndarray:
-        _check_attr(self.V4)
-        return self.V4 - self.Vw
-
-    @property
-    def V5_(self) -> np.ndarray:
-        _check_attr(self.V5)
-        return self.V5 - self.Vw
-
-    @property
-    def V6_(self) -> np.ndarray:
-        _check_attr(self.V6)
-        return self.V6 - self.Vw
+    Parameters
+    ----------
+    reference : {"potential", "position"}
+        ``"potential"``: a negative pole of n electrodes contributes ``-1/n`` of each
+        electrode's potential (the textbook leads). ``"position"``: the legacy simcardems
+        variant, where a negative pole of more than one electrode is a single point at
+        the mean of their positions (``WCT_pt``, ``LA_LL_mid``, ``RA_LL_mid``,
+        ``RA_LA_mid``), and the lead is a difference of two potentials.
+    """
+    if reference not in ("potential", "position"):
+        raise ValueError(f"reference must be 'potential' or 'position', got {reference!r}")
+    leads = []
+    used: dict[str, Mapping[str, float]] = {}
+    for name, positive, pole in _TWELVE_LEAD_TABLE:
+        n = len(pole)
+        if reference == "potential" or n == 1:
+            terms = {positive: 1.0, **{e: -1.0 / n for e in pole}}
+        else:
+            pt = _TWELVE_LEAD_DERIVED[tuple(pole)]
+            used[pt] = {e: 1.0 / n for e in pole}
+            terms = {positive: 1.0, pt: -1.0}
+        leads.append(Lead(name, terms))
+    return LeadSystem(tuple(leads), derived=used, layout=_TWELVE_LEAD_LAYOUT)
 
 
 def example(
