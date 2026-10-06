@@ -521,9 +521,9 @@ class ECGConfig(_Base):
     )
     reference: Literal["potential", "position"] = Field(
         default="potential",
-        description="How the leads' reference points are formed (needs leads != none): "
-        "potential = Wilson terminal from the potentials, position = potentials evaluated "
-        "at the derived points",
+        description="How the leads' reference points are formed: potential = Wilson "
+        "terminal from the potentials, position = potentials evaluated at the derived points "
+        "(needs leads = twelve-lead)",
     )
     sigma_b: float = Field(default=1.0, description="Bath conductivity")
 
@@ -551,9 +551,13 @@ class ECGConfig(_Base):
         return v
 
     @model_validator(mode="after")
-    def _reference_needs_leads(self) -> "ECGConfig":
-        if "reference" in self.model_fields_set and self.leads == "none":
-            raise ValueError("postprocess.ecg.reference only applies when leads = 'twelve-lead'")
+    def _position_needs_leads(self) -> "ECGConfig":
+        # Only "position" is refused without leads: config.resolved.toml writes out the
+        # default reference = "potential" whatever leads is, and must load back.
+        if self.reference == "position" and self.leads == "none":
+            raise ValueError(
+                "postprocess.ecg.reference = 'position' only applies when leads = 'twelve-lead'",
+            )
         return self
 
 

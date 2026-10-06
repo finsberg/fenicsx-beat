@@ -42,16 +42,10 @@ def _run_with_timeout(fn, *args, seconds=60, **kwargs):
         signal.signal(signal.SIGALRM, previous)
 
 
-@pytest.fixture
-def finished(tmp_path):
+def _run_config(tmp_path, postprocess):
+    """``beat run`` of the minimal config with this ``[postprocess]``; its loaded config."""
     tmp_path = MPI.COMM_WORLD.bcast(tmp_path, root=0)
-    data = minimal_config_dict(
-        tmp_path,
-        postprocess={
-            "points": {"P1": [0.5, 0.5], "far": [10.0, 10.0]},
-            "activation_threshold": 0.5,
-        },
-    )
+    data = minimal_config_dict(tmp_path, postprocess=postprocess)
     path = tmp_path / "config.toml"
     if MPI.COMM_WORLD.rank == 0:
         path.write_text(toml.dumps(data))
@@ -59,6 +53,17 @@ def finished(tmp_path):
     conf = load_config(path, environ={})
     run(conf)
     return conf
+
+
+@pytest.fixture
+def finished(tmp_path):
+    return _run_config(
+        tmp_path,
+        postprocess={
+            "points": {"P1": [0.5, 0.5], "far": [10.0, 10.0]},
+            "activation_threshold": 0.5,
+        },
+    )
 
 
 @pytest.mark.postprocess
@@ -185,6 +190,36 @@ def test_post_ecg_unit(finished):
 
 
 @pytest.mark.postprocess
+def test_post_ecg_from_the_run_config_without_restart_json(tmp_path):
+    """A run whose config has [postprocess.ecg], stopped before its first checkpoint: beat post
+    checks the physics against config.resolved.toml, which holds the section with its defaults
+    (reference = "potential" beside leads = "none"), and loads it back."""
+    conf = _run_config(tmp_path, postprocess={"ecg": {"electrodes": _ELECTRODES}})
+    resolved = toml.loads((conf.output.folder / "config.resolved.toml").read_text())
+    assert resolved["postprocess"]["ecg"]["reference"] == "potential"
+    if MPI.COMM_WORLD.rank == 0:
+        (conf.output.folder / "restart.json").unlink()
+    MPI.COMM_WORLD.barrier()
+    run_post(conf, MPI.COMM_WORLD)
+    header, rows = _read_csv(conf.output.folder / "post" / "ecg.csv")
+    assert header == ["time", *_ELECTRODES]
+    assert rows == _expected_potentials(conf, _ELECTRODES)
+
+
+@pytest.mark.postprocess
+def test_post_ecg_sigma_b(finished):
+    """postprocess.ecg.sigma_b reaches the recovery: the potential is 1/(4 pi sigma_b) times an
+    integral that does not depend on it, so sigma_b = 2 halves ecg.csv. The generated code
+    folds the factor into the integrand, which can move the last bit, hence rtol."""
+    _, default = _post_ecg(finished, electrodes=_ELECTRODES)
+    _, halved = _post_ecg(finished, electrodes=_ELECTRODES, sigma_b=2.0)
+    a, b = np.asarray(default), np.asarray(halved)
+    assert np.any(a[:, 1:] != 0.0)
+    assert (b[:, 0] == a[:, 0]).all()
+    np.testing.assert_allclose(b[:, 1:], a[:, 1:] / 2, rtol=1e-14, atol=0.0)
+
+
+@pytest.mark.postprocess
 def test_post_twelve_lead_potential(finished):
     electrodes = _circle()
     header, rows = _post_ecg(finished, electrodes=electrodes, leads="twelve-lead")
@@ -202,29 +237,39 @@ def test_post_twelve_lead_potential(finished):
 
 
 @pytest.mark.postprocess
-def test_post_twelve_lead_position(finished):
-    post = finished.output.folder / "post"
-    electrodes = _circle()
-    _post_ecg(finished, electrodes=electrodes, leads="twelve-lead")
-    names, potential = _read_csv(post / "ecg_leads.csv")
-    header, _ = _post_ecg(
+@pytest.mark.parametrize("unit", [None, "cm"])
+def test_post_twelve_lead_position(finished, unit):
+    """Under reference = "position", ecg_leads.csv is ``twelve_lead("position").leads`` of the
+    potentials at the given electrodes and at the derived points, which are placed from the
+    positions once they are in the geometry's unit (gate E5). Same computation path, so ==."""
+    geometry_unit = finished.geometry.unit
+    scale = float(ureg.Quantity(1, unit or geometry_unit).to(geometry_unit).magnitude)
+    electrodes = {name: [x / scale for x in pos] for name, pos in _circle().items()}
+    header, rows = _post_ecg(
         finished,
         electrodes=electrodes,
+        unit=unit,
         leads="twelve-lead",
         reference="position",
     )
-    assert header == ["time", *electrodes]  # the given electrodes only, no derived points
-    position_names, position = _read_csv(post / "ecg_leads.csv")
-    assert position_names == names
+    system = twelve_lead("position")
+    points = system.points(
+        {name: np.asarray(pos, dtype=float) * scale for name, pos in electrodes.items()},
+    )
+    assert set(system.derived) <= set(points)
+    expected = _expected_potentials(finished, points)
 
-    a, b = np.asarray(potential), np.asarray(position)
-    assert (a[:, 0] == b[:, 0]).all()
-    for i, name in enumerate(names[1:], start=1):
-        if name in ("I", "II", "III"):
-            assert (a[:, i] == b[:, i]).all(), name
-        else:
-            assert np.isfinite(b[:, i]).all(), name
-            assert (a[:, i] != b[:, i]).any(), name
+    # ecg.csv: the given electrodes only, no derived points.
+    assert header == ["time", *electrodes]
+    assert rows == [row[: 1 + len(electrodes)] for row in expected]
+
+    names, position = _read_csv(finished.output.folder / "post" / "ecg_leads.csv")
+    assert names == ["time", *system.names]
+    assert len(position) == len(expected)
+    for lead_row, row in zip(position, expected):
+        assert lead_row[0] == row[0]
+        leads = system.leads(dict(zip(points, row[1:])))
+        assert lead_row[1:] == [leads[name] for name in system.names]
 
 
 @pytest.mark.postprocess
@@ -367,6 +412,27 @@ def test_post_rejects_config_changed_since_run(finished, fn):
     with pytest.raises(ConfigError, match="config.resolved.toml"):
         fn(changed, MPI.COMM_WORLD)
     fn(finished, MPI.COMM_WORLD)  # the unchanged config still works
+
+
+@pytest.mark.postprocess
+def test_post_without_restart_json_ignores_the_resolved_postprocess(finished):
+    """beat 0.7.x wrote its default ``[postprocess] sigma_b = 1.0`` into config.resolved.toml.
+    Without restart.json, beat post checks the physics against that file, whose [postprocess]
+    is outside the physics hash and is not read; the physics are still checked."""
+    folder = finished.output.folder
+    if MPI.COMM_WORLD.rank == 0:
+        resolved = folder / "config.resolved.toml"
+        data = toml.loads(resolved.read_text())
+        data["postprocess"]["sigma_b"] = 1.0
+        resolved.write_text(toml.dumps(data))
+        (folder / "restart.json").unlink()
+    MPI.COMM_WORLD.barrier()
+    run_post(finished, MPI.COMM_WORLD)
+    assert (folder / "post" / "activation_time.bp").exists()
+
+    changed = load_config(folder.parent / "config.toml", environ={}, sets=["geometry.dx=0.5"])
+    with pytest.raises(ConfigError, match="config.resolved.toml"):
+        run_post(changed, MPI.COMM_WORLD)
 
 
 @pytest.mark.postprocess

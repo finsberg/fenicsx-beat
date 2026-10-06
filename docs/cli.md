@@ -211,9 +211,10 @@ reads `results.bp` (which can happen later, on any number of ranks, independent 
 the run itself used) and writes into `post/`. The config given to `beat post` must describe the
 same physics as the run that wrote `results.bp` -- the same check as for `--restart` (below),
 against the hash in `restart.json`, or, if the run stopped before writing its first checkpoint,
-against `config.resolved.toml`. Only `[output]`, `[postprocess]` and the run length may differ;
-anything else (e.g. an edited `geometry.dx`) is refused with a `ConfigError` naming
-`config.resolved.toml` to compare with, rather than crashing or silently producing wrong results.
+against `config.resolved.toml` (whose `[postprocess]` is not read). Only `[output]`,
+`[postprocess]` and the run length may differ; anything else (e.g. an edited `geometry.dx`) is
+refused with a `ConfigError` naming `config.resolved.toml` to compare with, rather than crashing
+or silently producing wrong results.
 
 ```text
 output/post/
@@ -237,15 +238,15 @@ warning); the VTX files are always complete. Run `beat post` on a single rank fo
 
 With a `[postprocess.ecg]` section, `beat post` also recovers the pseudo-ECG: the extracellular
 potential at each electrode, in an infinite homogeneous conductor (`beat.ECGRecovery`), at every
-saved time. It is computed in the same pass over `results.bp` as the activation map, so each saved
-`v` is read once. Without the section, `beat post` writes no ECG. The electrodes are a table of
-name to position:
+saved time. It is computed in the same pass over `results.bp` as the activation map, so the ECG
+adds no extra pass over the saved times. Without the section, `beat post` writes no ECG. The
+electrodes are a table of name to position:
 
 ```toml
 [postprocess.ecg]
 unit = "cm"                     # the electrodes' length unit; default: geometry.unit
 leads = "twelve-lead"           # or "none" (default): electrode potentials only
-reference = "potential"         # or "position" (legacy simcardems); twelve-lead only
+reference = "potential"         # or "position" (legacy simcardems), which needs twelve-lead
 sigma_b = 1.0                   # bath conductivity (default 1.0)
 
 [postprocess.ecg.electrodes]
@@ -281,9 +282,11 @@ V1 = [-3.0, 4.0, -9.0]
   them.
 
 A header-less electrode CSV of the legacy simcardems / Alya kind (one `x,y,z` row per electrode,
-in the order LA, RA, LL, RL, V1 to V6) is converted to this table once, with
-`scripts/electrodes_to_toml.py` (standalone; `--names A,B,...` for another order, `-o FILE` instead
-of stdout). Append its output to the config:
+in the order LA, RA, LL, RL, V1 to V6) is converted to this table once, with the script
+`scripts/electrodes_to_toml.py` in the repository (<https://github.com/finsberg/fenicsx-beat>).
+It is not installed by pip: run it from a clone or a downloaded copy. It needs only numpy.
+`--names A,B,...` gives another order, and `-o FILE` writes to a file instead of stdout. Append
+its output to the config:
 
 ```bash
 python scripts/electrodes_to_toml.py electrodes.csv --unit cm > ecg.toml

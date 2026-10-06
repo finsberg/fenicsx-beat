@@ -49,7 +49,7 @@ def _check_matches_run(conf: Config, comm) -> None:
         if meta.is_file():
             recorded = json.loads(meta.read_text())["physics_hash"]
         elif resolved.is_file():
-            recorded = physics_hash(load_config(resolved, environ={}))
+            recorded = physics_hash(load_config(resolved, environ={}, exclude=("postprocess",)))
         else:
             raise ConfigError(
                 f"Cannot verify that {folder / RESULTS} was written with this config: neither "

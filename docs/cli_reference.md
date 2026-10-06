@@ -348,5 +348,5 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | `electrodes` | dict[str, list[float]] | **required** | Electrode name -> position (2 or 3 numbers), in `unit`. Lead systems look electrodes up by name (twelve-lead: LA, RA, LL, V1-V6) |
 | `unit` | str (optional) | – | Length unit of the electrode positions; default geometry.unit |
 | `leads` | 'none' \| 'twelve-lead' | `'none'` | Derived lead system written to ecg_leads.csv: none or twelve-lead |
-| `reference` | 'potential' \| 'position' | `'potential'` | How the leads' reference points are formed (needs leads != none): potential = Wilson terminal from the potentials, position = potentials evaluated at the derived points |
+| `reference` | 'potential' \| 'position' | `'potential'` | How the leads' reference points are formed: potential = Wilson terminal from the potentials, position = potentials evaluated at the derived points (needs leads = twelve-lead) |
 | `sigma_b` | float | `1.0` | Bath conductivity |

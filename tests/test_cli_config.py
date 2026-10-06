@@ -236,7 +236,7 @@ def _load_with_postprocess(tmp_path, postprocess, sets=()):
         ({"electrodes": {}}, "electrodes"),
         ({"electrodes": {"E": [1.0]}}, "electrodes"),
         ({"electrodes": {"E": [1.0, 2.0]}, "unit": "ms"}, "unit"),
-        ({"electrodes": {"E": [1.0, 2.0]}, "reference": "position"}, "reference"),
+        ({"electrodes": {"E": [1.0, 2.0]}, "reference": "position"}, "reference = 'position'"),
     ],
 )
 def test_postprocess_ecg_invalid(tmp_path, ecg, match):
@@ -272,6 +272,17 @@ def test_postprocess_ecg_reference_with_leads(tmp_path):
         {"ecg": {"electrodes": {"E": [1.0, 2.0]}, "leads": "twelve-lead", "reference": "position"}},
     )
     assert conf.postprocess.ecg.reference == "position"
+
+
+def test_postprocess_ecg_potential_reference_without_leads(tmp_path):
+    """reference = "potential" is the default, which config.resolved.toml writes out also
+    with leads = "none"; only "position" needs a lead system."""
+    conf = _load_with_postprocess(
+        tmp_path,
+        {"ecg": {"electrodes": {"E": [1.0, 2.0]}, "reference": "potential"}},
+    )
+    assert conf.postprocess.ecg.leads == "none"
+    assert conf.postprocess.ecg.reference == "potential"
 
 
 def test_postprocess_ecg_default_none(tmp_path):
