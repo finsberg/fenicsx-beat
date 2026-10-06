@@ -185,6 +185,7 @@ def test_visualize_warns_previews_are_rank0_partition_only(finished, caplog):
         assert "only rank 0's" in caplog.text
 
 
+@pytest.mark.postprocess
 def test_post_reads_flat_restart_json(finished):
     """A restart.json written by beat 0.7.1/0.7.2 (flat) still passes the physics check."""
     if MPI.COMM_WORLD.rank == 0:
