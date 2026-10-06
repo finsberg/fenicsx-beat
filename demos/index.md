@@ -33,6 +33,12 @@ model and notation used throughout, then work through the
 - [Purkinje like stimulation of a realistic BiV geometry](ukb_atlas.py) — a realistic bi-ventricular
   geometry from a UK Biobank atlas, stimulated at many random endocardial points to mimic activation
   via the Purkinje network.
+- [Spiral wave in a 2D sheet of human ventricular tissue](spiral_wave.py) — a single re-entrant
+  spiral wave in the ten Tusscher–Panfilov 2006 model {cite}`tentusscher2006alternans`, initiated with
+  a cross-field S1–S2 protocol, with tracking of the meandering spiral tip.
+- [Spiral wave breakup in a 2D sheet of human ventricular tissue](spiral_wave_breakup.py) — the same
+  setup with the steep-restitution parameter set from {cite}`tentusscher2006alternans`, where the
+  spiral breaks up into many smaller spirals, as in the transition to ventricular fibrillation.
 
 ## Verification
 
