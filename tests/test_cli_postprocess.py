@@ -228,6 +228,30 @@ def test_post_twelve_lead_position(finished):
 
 
 @pytest.mark.postprocess
+def test_post_without_leads_removes_stale_lead_files(finished):
+    """A rerun with leads = "none" deletes an earlier run's ecg_leads.*, which were computed
+    from other electrodes; a rerun without [postprocess.ecg] touches no ecg* file (R6)."""
+    post = finished.output.folder / "post"
+    _post_ecg(finished, electrodes=_circle(), leads="twelve-lead")
+    assert (post / "ecg_leads.csv").exists()
+    with open(post / "ecg_leads.png", "ab"):  # whether or not matplotlib drew it
+        pass
+
+    _post_ecg(finished, electrodes=_ELECTRODES)
+    assert not (post / "ecg_leads.csv").exists()
+    assert not (post / "ecg_leads.png").exists()
+
+    files = sorted(post.glob("ecg*"))
+    assert post / "ecg.csv" in files
+    before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in files}
+    MPI.COMM_WORLD.barrier()  # every rank has read them before anyone reruns
+    finished.postprocess.ecg = None
+    run_post(finished, MPI.COMM_WORLD)
+    assert sorted(post.glob("ecg*")) == files
+    assert {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in files} == before
+
+
+@pytest.mark.postprocess
 def test_post_ecg_wrong_dimension(finished):
     finished.postprocess.ecg = ECGConfig(electrodes={**_ELECTRODES, "Z3": [2.0, 0.5, 0.0]})
     with pytest.raises(ConfigError, match="Z3"):

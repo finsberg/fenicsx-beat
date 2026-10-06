@@ -179,7 +179,8 @@ def _write_ecg(
     comm,
 ) -> None:
     """Write ``ecg.csv``/``ecg.png`` (the given electrodes) and, with a lead system,
-    ``ecg_leads.csv``/``ecg_leads.png``, on rank 0."""
+    ``ecg_leads.csv``/``ecg_leads.png``, on rank 0. Without a lead system, an earlier run's
+    ``ecg_leads.*`` are deleted."""
     rows = [[row[n] for n in names] for row in potentials]
     lead_names = list(system.names) if system is not None else []
     lead_rows: list[list[float]] = []
@@ -197,6 +198,10 @@ def _write_ecg(
         logger.info(f"ECG values saved to {csv_path}")
         _plot_ecg(times, columns(names, rows), post / "ecg.png")
         if system is None:
+            # An earlier run's leads were computed from other electrodes: don't leave them
+            # beside this ecg.csv.
+            for stale in ("ecg_leads.csv", "ecg_leads.png"):
+                (post / stale).unlink(missing_ok=True)
             return
         leads_path = post / "ecg_leads.csv"
         _write_csv(leads_path, lead_names, times, lead_rows)

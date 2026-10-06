@@ -261,7 +261,9 @@ V1 = [-3.0, 4.0, -9.0]
 - `leads = "twelve-lead"` also writes `ecg_leads.csv` (`time`, then `I, II, III, aVR, aVL, aVF,
   V1, ..., V6`) and `ecg_leads.png`. It needs the electrodes `LA`, `RA`, `LL` and `V1` to `V6`.
   Any others (`RL`, or a body-surface set) are written to `ecg.csv` and otherwise unused. The lead
-  `V1` and the electrode `V1` are in separate files, so they never share a column.
+  `V1` and the electrode `V1` are in separate files, so they never share a column. With
+  `leads = "none"`, `beat post` deletes an earlier run's `ecg_leads.*`; without the section it
+  touches no `ecg*` file.
 - `reference` sets how a negative pole of more than one electrode is formed. I, II and III are the
   same under both.
   - `"potential"` (the default; Einthoven, Goldberger, Wilson): the mean of its electrodes'
