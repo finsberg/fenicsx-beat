@@ -72,6 +72,7 @@ fenicsx
 fenicsx_pulse
 ffcx
 ffun
+figsize
 finsberg
 Fitz
 fitzhughnagumo

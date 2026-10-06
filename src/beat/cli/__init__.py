@@ -133,13 +133,13 @@ def setup_parser() -> argparse.ArgumentParser:
         help='PETSc options for the PDE solve, e.g. "-ksp_type cg -pc_type hypre"',
     )
 
-    for name, help_ in (
-        ("ecg", "Recover the pseudo-ECG at [postprocess.points]"),
-        ("post", "Activation times, VTX conversion and visualizations"),
-    ):
-        p = add_parser(name, help=help_)
-        _add_config_args(p)
-        p.add_argument("--output-folder", type=Path, default=None)
+    post = add_parser(
+        "post",
+        help="Activation times, the pseudo-ECG ([postprocess.ecg]), VTX conversion and "
+        "visualizations",
+    )
+    _add_config_args(post)
+    post.add_argument("--output-folder", type=Path, default=None)
     return parser
 
 
@@ -229,10 +229,6 @@ def _dispatch(args: dict, comm) -> None:
         from .runner import run
 
         run(conf, comm=comm, restart=args["restart"], overwrite=args["overwrite"])
-    elif command == "ecg":
-        from .postprocess import run_ecg
-
-        run_ecg(conf, comm=comm)
     elif command == "post":
         from .postprocess import run_post
 
