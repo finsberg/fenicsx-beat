@@ -336,6 +336,8 @@ def test_monodomain_c_matches_numpy(tp06):
     ode, model, fun = tp06
     v_numpy = run_monodomain(model["generalized_rush_larsen"], model, ode.num_states)
     v_c = run_monodomain(fun, model, ode.num_states)
-    assert v_numpy.max() > 0.0  # the stimulus produced an action potential
+    # Reduce before asserting so that every rank reaches both collectives
+    v_peak = comm.allreduce(v_numpy.max(initial=-np.inf), op=MPI.MAX)
     difference = comm.allreduce(np.max(np.abs(v_c - v_numpy), initial=0.0), op=MPI.MAX)
+    assert v_peak > 0.0  # the stimulus produced an action potential
     assert difference <= 1e-9
