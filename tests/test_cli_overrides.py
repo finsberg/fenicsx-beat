@@ -121,6 +121,50 @@ def test_dump_roundtrip(cfg_file, tmp_path):
     assert again.model_dump(mode="json") == conf.model_dump(mode="json")
 
 
+@pytest.mark.parametrize(
+    "ecg",
+    [
+        {"electrodes": {"E": [2.0, 0.5]}},
+        {"electrodes": {"E": [2.0, 0.5]}, "leads": "twelve-lead", "reference": "position"},
+    ],
+)
+def test_dump_roundtrip_with_ecg(tmp_path, ecg):
+    """config.resolved.toml holds the ECG section's defaults, reference = "potential" among
+    them, also with leads = "none"; it loads back unchanged."""
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps(minimal_config_dict(tmp_path, postprocess={"ecg": ecg})))
+    conf = load_config(path, environ={})
+    out = tmp_path / "resolved.toml"
+    dump_config(conf, out)
+    assert toml.loads(out.read_text())["postprocess"]["ecg"]["reference"] == (
+        ecg.get("reference", "potential")
+    )
+    again = load_config(out, environ={})
+    assert again.model_dump(mode="json") == conf.model_dump(mode="json")
+
+
+def test_load_config_exclude_drops_tables_before_validation(tmp_path):
+    """beat 0.7.x's config.resolved.toml has [postprocess] sigma_b, which beat now refuses."""
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps(minimal_config_dict(tmp_path, postprocess={"sigma_b": 1.0})))
+    with pytest.raises(ConfigError, match=r"postprocess\.ecg\.sigma_b"):
+        load_config(path, environ={})
+    conf = load_config(path, environ={}, exclude=("postprocess",))
+    assert conf.postprocess == type(conf.postprocess)()
+
+
+def test_dump_roundtrip_slab_template(tmp_path):
+    """The shipped slab template has [postprocess.ecg] with leads = "none"."""
+    from beat.cli import TEMPLATES_DIR
+
+    conf = load_config(TEMPLATES_DIR / "slab" / "config.toml", environ={})
+    assert conf.postprocess.ecg is not None and conf.postprocess.ecg.leads == "none"
+    out = tmp_path / "resolved.toml"
+    dump_config(conf, out)
+    again = load_config(out, environ={})
+    assert again.model_dump(mode="json") == conf.model_dump(mode="json")
+
+
 def test_physics_hash_ignores_end_time_and_output(cfg_file):
     a = load_config(cfg_file, environ={})
     b = load_config(cfg_file, environ={}, sets=['solver.end_time="5 ms"', "output.log_every=3"])

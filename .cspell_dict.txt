@@ -57,6 +57,7 @@ dolfin
 dolfinx
 dtype
 dvlp
+Einthoven
 Elife
 Elsevier
 endo
@@ -72,6 +73,7 @@ fenicsx
 fenicsx_pulse
 ffcx
 ffun
+figsize
 finsberg
 Fitz
 fitzhughnagumo
@@ -90,6 +92,7 @@ getpid
 Gilles
 gmres
 gmsh
+Goldberger
 gotran
 gotranx
 gradu
@@ -273,3 +276,6 @@ Werror
 fopenmp
 ascontiguousarray
 DBEAT
+alya
+pytestmark
+savetxt

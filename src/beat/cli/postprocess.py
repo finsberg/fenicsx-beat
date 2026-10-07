@@ -15,15 +15,17 @@ from typing import Any, Callable
 from mpi4py import MPI
 
 import dolfinx
+import dolfinx.geometry
 import io4dolfinx
 import numpy as np
 import scifem
 
-from ..ecg import ECGRecovery
+from ..ecg import ECGRecovery, ElectrodePotentials, LeadSystem, twelve_lead
+from ..units import ureg
 from .config import Config, ConfigError
-from .geometry import build_conductivity, build_geometry
+from .geometry import CLIGeometry, build_conductivity, build_geometry
 from .overrides import load_config, physics_hash
-from .runner import RESTART_META, RESULTS, _on_rank0, read_result_times
+from .runner import RESTART_META, RESULTS, _on_rank0, read_restart_meta, read_result_times
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +33,8 @@ logger = logging.getLogger(__name__)
 def _check_matches_run(conf: Config, comm) -> None:
     """Refuse a config whose physics differ from the run that wrote ``results.bp``.
 
-    ``beat post``/``beat ecg`` rebuild the geometry (and, for the ECG, the conductivity) from
-    the config, so e.g. an edited ``geometry.dx`` would otherwise crash reading ``results.bp``
+    ``beat post`` rebuilds the geometry (and, for the ECG, the conductivity) from the
+    config, so e.g. an edited ``geometry.dx`` would otherwise crash reading ``results.bp``
     or, on a same-topology mesh, silently produce wrong results. Only what ``physics_hash``
     excludes (``[output]``, ``[postprocess]``, the run length) may differ. The recorded hash is
     taken from ``restart.json`` or, if the run was killed before its first checkpoint, recomputed
@@ -45,9 +47,9 @@ def _check_matches_run(conf: Config, comm) -> None:
     def check() -> None:
         meta = folder / RESTART_META
         if meta.is_file():
-            recorded = json.loads(meta.read_text())["physics_hash"]
+            recorded = read_restart_meta(folder)["physics_hash"]
         elif resolved.is_file():
-            recorded = physics_hash(load_config(resolved, environ={}))
+            recorded = physics_hash(load_config(resolved, environ={}, exclude=("postprocess",)))
         else:
             raise ConfigError(
                 f"Cannot verify that {folder / RESULTS} was written with this config: neither "
@@ -57,7 +59,7 @@ def _check_matches_run(conf: Config, comm) -> None:
             raise ConfigError(
                 f"The config's physics settings differ from the run that wrote "
                 f"{folder / RESULTS} (only [output], [postprocess] and the run length may "
-                f"change for beat post/ecg). Compare with {resolved}",
+                f"change for beat post). Compare with {resolved}",
             )
 
     _on_rank0(comm, ConfigError, check)
@@ -85,52 +87,133 @@ def _open_results(conf: Config, comm):
     return path, geo, v, times, post
 
 
-def _points_or_raise(conf: Config) -> dict[str, list[float]]:
-    if not conf.postprocess.points:
-        raise ConfigError(
-            "No points configured. Add a [postprocess.points] section to the config, e.g. "
-            "`points = {P1 = [0.0, 0.0, 0.0]}` (coordinates in geometry.unit).",
-        )
-    return conf.postprocess.points
+def _ecg_setup(
+    conf: Config,
+    geo: CLIGeometry,
+    v: dolfinx.fem.Function,
+) -> tuple[ElectrodePotentials, LeadSystem | None, list[str]] | None:
+    """Set up the pseudo-ECG of ``[postprocess.ecg]``, or return ``None`` without it.
 
-
-def run_ecg(conf: Config, comm=MPI.COMM_WORLD) -> Path:
-    """Recover the extracellular potential (pseudo-ECG) at ``postprocess.points`` from a
-    previously saved `beat run` output, and save the resulting time series to
-    ``post/ecg.csv`` (and ``post/ecg.png``, if matplotlib is available).
+    Everything that can refuse the section happens here, before any saved time is read: a
+    position whose length is not the mesh's dimension, and a lead system's missing electrode.
+    Returns the probe (one recovery solve per call, at the given electrodes and the lead
+    system's derived points), the lead system (``None`` for ``leads = "none"``), and the given
+    electrode names in order, which are ``ecg.csv``'s columns.
     """
-    points = _points_or_raise(conf)
-    path, geo, v, times, post = _open_results(conf, comm)
+    ecg = conf.postprocess.ecg
+    if ecg is None:
+        return None
+    unit = conf.geometry.unit
+    scale = float(ureg.Quantity(1, ecg.unit or unit).to(unit).magnitude)
+    gdim = geo.mesh.geometry.dim
+    wrong = [name for name, pos in ecg.electrodes.items() if len(pos) != gdim]
+    if wrong:
+        raise ConfigError(
+            f"postprocess.ecg.electrodes: the mesh is {gdim}-dimensional, but "
+            + ", ".join(f"{name} has {len(ecg.electrodes[name])} coordinates" for name in wrong),
+        )
+    electrodes = {
+        name: np.asarray(pos, dtype=float) * scale for name, pos in ecg.electrodes.items()
+    }
 
-    M = build_conductivity(conf.ep, geo, conf.geometry.fibers)
-    C_m = conf.ep.C_m.to(f"uF/{conf.geometry.unit}**2").magnitude
-
-    ecg = ECGRecovery(v=v, sigma_b=conf.postprocess.sigma_b, C_m=C_m, M=M)
-    names = list(points)
-    forms = {name: ecg.eval(points[name]) for name in names}
-
-    values: dict[str, list[float]] = {name: [] for name in names}
-    for t in times:
-        io4dolfinx.read_function(path, v, time=t, name="v")
-        ecg.solve()
-        for name in names:
-            values[name].append(
-                geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(forms[name]), op=MPI.SUM),
+    system: LeadSystem | None = None
+    points: dict[str, np.ndarray] = electrodes
+    if ecg.leads == "twelve-lead":
+        try:
+            system = twelve_lead(ecg.reference)
+            points = system.points(electrodes)
+        except ValueError as e:
+            raise ConfigError(f"postprocess.ecg (leads = {ecg.leads!r}): {e}") from e
+        clash = [name for name in system.derived if name in electrodes]
+        if clash:
+            raise ConfigError(
+                f"postprocess.ecg.electrodes: {', '.join(clash)} would be replaced by the "
+                f"derived point of that name under reference = {ecg.reference!r}; rename it",
             )
 
-    csv_path = post / "ecg.csv"
+    inside = _inside_mesh(geo.mesh, electrodes)
+    if inside and geo.mesh.comm.rank == 0:
+        logger.warning(
+            f"postprocess.ecg: electrode(s) {', '.join(repr(n) for n in inside)} lie inside "
+            "the mesh; the potential there is a near-field value, not a body-surface one.",
+        )
+
+    recovery = ECGRecovery(
+        v=v,
+        sigma_b=ecg.sigma_b,
+        C_m=conf.ep.C_m.to(f"uF/{unit}**2").magnitude,
+        M=build_conductivity(conf.ep, geo, conf.geometry.fibers),
+    )
+    return ElectrodePotentials(recovery, points), system, list(electrodes)
+
+
+def _inside_mesh(mesh: dolfinx.mesh.Mesh, points: dict[str, np.ndarray]) -> list[str]:
+    """The names of the points inside some cell of ``mesh``, the same on every rank."""
+    names = list(points)
+    x = np.zeros((len(names), 3), dtype=mesh.geometry.x.dtype)
+    for i, name in enumerate(names):
+        x[i, : len(points[name])] = points[name]
+    tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
+    candidates = dolfinx.geometry.compute_collisions_points(tree, x)
+    cells = dolfinx.geometry.compute_colliding_cells(mesh, candidates, x)
+    local = np.array([cells.links(i).size > 0 for i in range(len(names))], dtype=np.int32)
+    found = np.zeros_like(local)
+    mesh.comm.Allreduce(local, found, op=MPI.MAX)
+    return [name for name, f in zip(names, found) if f]
+
+
+def _write_csv(path: Path, header: list[str], times, rows: list[list[float]]) -> None:
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["time", *header])
+        for t, row in zip(times, rows):
+            writer.writerow([t, *row])
+
+
+def _write_ecg(
+    potentials: list[dict[str, float]],
+    system: LeadSystem | None,
+    names: list[str],
+    times,
+    post: Path,
+    comm,
+) -> None:
+    """Write ``ecg.csv``/``ecg.png`` (the given electrodes) and, with a lead system,
+    ``ecg_leads.csv``/``ecg_leads.png``, on rank 0. Without a lead system, an earlier run's
+    ``ecg_leads.*`` are deleted."""
+    rows = [[row[n] for n in names] for row in potentials]
+    lead_names = list(system.names) if system is not None else []
+    lead_rows: list[list[float]] = []
+    if system is not None:
+        for row in potentials:
+            leads = system.leads(row)
+            lead_rows.append([float(leads[n]) for n in lead_names])
+
+    def columns(header: list[str], table: list[list[float]]) -> dict[str, list[float]]:
+        return {n: [r[i] for r in table] for i, n in enumerate(header)}
 
     def write_outputs() -> None:
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(["time", *names])
-            for i, t in enumerate(times):
-                writer.writerow([t, *(values[name][i] for name in names)])
+        csv_path = post / "ecg.csv"
+        _write_csv(csv_path, names, times, rows)
         logger.info(f"ECG values saved to {csv_path}")
-        _plot_ecg(times, values, post / "ecg.png")
+        _plot_ecg(times, columns(names, rows), post / "ecg.png")
+        if system is None:
+            # An earlier run's leads were computed from other electrodes: don't leave them
+            # beside this ecg.csv.
+            for stale in ("ecg_leads.csv", "ecg_leads.png"):
+                (post / stale).unlink(missing_ok=True)
+            return
+        leads_path = post / "ecg_leads.csv"
+        _write_csv(leads_path, lead_names, times, lead_rows)
+        logger.info(f"ECG leads saved to {leads_path}")
+        _plot_leads(
+            times,
+            columns(lead_names, lead_rows),
+            system.layout or tuple((n,) for n in lead_names),
+            post / "ecg_leads.png",
+        )
 
     _on_rank0(comm, OSError, write_outputs)
-    return csv_path
 
 
 def _plot_ecg(times, values: dict[str, list[float]], png_path: Path) -> None:
@@ -151,21 +234,64 @@ def _plot_ecg(times, values: dict[str, list[float]], png_path: Path) -> None:
     logger.info(f"ECG plot saved to {png_path}")
 
 
+def _plot_leads(
+    times,
+    leads: dict[str, list[float]],
+    layout: tuple[tuple[str, ...], ...],
+    png_path: Path,
+) -> None:
+    """One panel per lead, on the lead system's grid, each titled by the lead's name."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning("matplotlib is not installed, skipping the ECG leads plot")
+        return
+
+    nrows, ncols = len(layout), max(len(row) for row in layout)
+    fig, axes = plt.subplots(
+        nrows,
+        ncols,
+        sharex=True,
+        figsize=(3 * ncols, 2 * nrows),
+        squeeze=False,
+    )
+    for ax in axes.flat:
+        ax.set_visible(False)
+    for i, row in enumerate(layout):
+        for j, name in enumerate(row):
+            ax = axes[i, j]
+            ax.set_visible(True)
+            ax.plot(times, leads[name])
+            ax.set_title(name)
+            if i == nrows - 1:
+                ax.set_xlabel("Time (ms)")
+    fig.tight_layout()
+    fig.savefig(png_path)
+    plt.close(fig)
+    logger.info(f"ECG leads plot saved to {png_path}")
+
+
 def run_post(conf: Config, comm=MPI.COMM_WORLD) -> Path:
     """Compute a full-mesh local activation time map (and, at ``postprocess.points``, activation
-    times as scalars) from a previously saved `beat run` output, convert ``v`` to VTX for
-    ParaView (if ``postprocess.vtx``), and (if pyvista is installed) render PNG/GIF
-    visualizations. Everything is written into ``post/``.
+    times as scalars) from a previously saved `beat run` output, the pseudo-ECG (if
+    ``[postprocess.ecg]`` is set), convert ``v`` to VTX for ParaView (if ``postprocess.vtx``),
+    and (if pyvista is installed) render PNG/GIF visualizations. Everything is written into
+    ``post/``.
     """
     path, geo, v, times, post = _open_results(conf, comm)
+    ecg = _ecg_setup(conf, geo, v)  # every [postprocess.ecg] refusal, before any time is read
 
     threshold = conf.postprocess.activation_threshold
     tact = dolfinx.fem.Function(v.function_space, name="activation_time")
     tact.x.array[:] = -1.0
+    potentials: list[dict[str, float]] = []
     for t in times:
         io4dolfinx.read_function(path, v, time=t, name="v")
         pending = tact.x.array < 0.0
         tact.x.array[pending & (v.x.array >= threshold)] = t
+        if ecg is not None:
+            probe, _, _ = ecg
+            potentials.append(probe())
 
     activation_path = post / "activation_time.bp"
     with dolfinx.io.VTXWriter(comm, activation_path, [tact], engine="BP4") as vtx:
@@ -181,19 +307,23 @@ def run_post(conf: Config, comm=MPI.COMM_WORLD) -> Path:
             if np.isfinite(val):
                 point_results[name] = float(val)
             else:
-                # scifem returns a non-finite value for points outside the mesh (e.g. a
-                # far-field point meant only for `beat ecg`) - null rather than -1.0 (our
-                # "not yet activated" sentinel for points inside the mesh) since it's not a
-                # meaningful activation time at all, and -inf/nan aren't valid JSON.
+                # scifem returns a non-finite value for points outside the mesh - null rather
+                # than -1.0 (our "not yet activated" sentinel for points inside the mesh) since
+                # it's not a meaningful activation time at all, and -inf/nan aren't valid JSON.
                 point_results[name] = None
                 logger.warning(
                     f"Point {name!r} ({conf.postprocess.points[name]}) lies outside the mesh "
-                    "domain; activation time is undefined there (recorded as null).",
+                    "domain; activation time is undefined there (recorded as null). "
+                    "Electrodes for the pseudo-ECG go in [postprocess.ecg.electrodes].",
                 )
 
     json_path = post / "activation_times.json"
     _on_rank0(comm, OSError, lambda: json_path.write_text(json.dumps(point_results, indent=2)))
     logger.info(f"Activation times at points saved to {json_path}")
+
+    if ecg is not None:
+        _, system, names = ecg
+        _write_ecg(potentials, system, names, times, post, comm)
 
     if conf.postprocess.vtx:
         _convert_to_vtx(path, v, times, post, comm)

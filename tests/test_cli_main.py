@@ -159,10 +159,19 @@ def test_unexpected_exception_exit_2(cfg, monkeypatch, caplog):
 
 @pytest.mark.parametrize(
     "argv",
-    [["run"], ["run", "c.toml", "--no-such-flag"], ["nope"], []],
+    [["run"], ["run", "c.toml", "--no-such-flag"], ["nope"], [], ["ecg", "c.toml"]],
 )
 def test_usage_errors_exit_1(argv):
     assert main(argv) == 1
+
+
+def test_removed_ecg_command_is_a_usage_error(capsys):
+    """`beat ecg` is gone (the ECG is part of `beat post`): argparse's usage error, listing
+    `post`, not a config error or a crash (Review Focus 5)."""
+    assert main(["ecg", "c.toml"]) == 1
+    err = capsys.readouterr().err
+    assert "invalid choice: 'ecg'" in err
+    assert "post" in err
 
 
 def test_help_exits_0():
