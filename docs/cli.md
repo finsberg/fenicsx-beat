@@ -48,8 +48,7 @@ beat init case/config.toml --template slab   # write a starter config (+ its .od
 beat validate-config case/config.toml        # parse + validate, print the resolved config
 beat geometry case/config.toml               # generate/cache the mesh, then stop
 beat run case/config.toml                    # run the simulation
-beat post case/config.toml                   # activation times, VTX, PNG/GIF
-beat ecg case/config.toml                    # pseudo-ECG at [postprocess.points]
+beat post case/config.toml                   # activation times, pseudo-ECG, VTX, PNG/GIF
 ```
 
 `beat init --template NAME` copies `NAME`'s `config.toml` (and any companion files, e.g. its
@@ -61,8 +60,8 @@ memory on every run (cheap; nothing is written to disk), no `gmsh`/mesh-generati
 needed. `beat init --template lv_endocardial`/`biv_endocardial`/`ukb_atlas` instead generate a real
 gmsh mesh (`geometry.type = "slab"`/`"lv_ellipsoid"`/`"biv_ellipsoid"`/`"ukb"`, via
 `cardiac-geometriesx`, and `ukb-atlas` for the last one), which can take from seconds to minutes
-depending on resolution. `beat geometry` (also run implicitly by `beat run`, `beat post` and `beat
-ecg`) generates such a mesh once and reuses it on every later invocation: it is cached in its own
+depending on resolution. `beat geometry` (also run implicitly by `beat run` and `beat post`)
+generates such a mesh once and reuses it on every later invocation: it is cached in its own
 subfolder `geometry.folder/<hash>/`, keyed on a hash of the `[geometry]` section (everything except
 `folder` and `unit`). Changing a geometry parameter therefore creates a *new* subfolder next to the
 old one rather than replacing it, and `beat` never deletes `geometry.folder` itself or anything in
@@ -76,10 +75,11 @@ cluster](cli_cluster.md)); it logs the subfolder it used.
 its facet/cell tags -- `beat` then only *loads* it, via
 `cardiac_geometries.geometry.Geometry.from_folder`.
 
-A point in `[postprocess.points]` used only for `beat ecg` doesn't need to lie inside the mesh --
-e.g. a far-field "electrode" position -- but `beat post` can't report an activation time there and
-records `null` for it (with a log warning), which is distinct from the `-1.0` it uses for a point
-that's inside the mesh but simply hadn't activated by the end of the recorded run. Also note that
+The points in `[postprocess.points]` are where `beat post` reports activation times; the
+pseudo-ECG's electrodes go in `[postprocess.ecg.electrodes]` instead (see
+[Pseudo-ECG](#pseudo-ecg)). A point outside the mesh has no activation time: `beat post` records
+`null` for it (with a log warning), which is distinct from the `-1.0` it uses for a point that's
+inside the mesh but simply hadn't activated by the end of the recorded run. Also note that
 `postprocess.activation_threshold` is in the cell model's own units for `v`: a real ionic model's
 `v` is in mV (so a physiological threshold is around `0.0`), while a normalized two-variable model
 like Mitchell-Schaeffer (used by a couple of templates, e.g. `irksome_model_gotranx`) has `v`
@@ -87,7 +87,7 @@ roughly in `[0, 1]`, so its threshold should be something like `0.5` instead.
 
 ## Commands
 
-`validate-config`, `geometry`, `run`, `ecg` and `post` all take a config path and accept repeatable
+`validate-config`, `geometry`, `run` and `post` all take a config path and accept repeatable
 `--set KEY=VALUE` overrides. `init` takes an optional config path (default `config.toml`) but no
 `--set` (there's no existing config to override yet). `version` takes neither -- it only prints
 version numbers. The global `-v/--verbose`, `--log-all-cpus` and `--dry-run` flags are accepted
@@ -100,8 +100,7 @@ by every subcommand, either before or after the subcommand name: `beat -v run co
 | `beat validate-config config.toml` | Parse + validate + print the resolved config. Builds nothing (no mesh, no MPI-collective work). |
 | `beat geometry config.toml` | Generate (or load) the geometry and stop. For a generated type the mesh is cached in `geometry.folder/<hash>/` and reused across the other commands and reruns. |
 | `beat run config.toml [--restart] [--overwrite] [--output-folder P] [--petsc-options "..."]` | Run the simulation. |
-| `beat post config.toml [--output-folder P]` | Activation times, VTX conversion and visualizations from `results.bp`. |
-| `beat ecg config.toml [--output-folder P]` | Pseudo-ECG at `postprocess.points` from `results.bp`. |
+| `beat post config.toml [--output-folder P]` | Activation times, the pseudo-ECG (with `[postprocess.ecg]`, see [Pseudo-ECG](#pseudo-ecg)), VTX conversion and visualizations from `results.bp`. |
 | `beat version` | Versions of beat, dolfinx, mpi4py, petsc4py. |
 
 `beat --dry-run <command> ...` (e.g. `beat --dry-run run config.toml --set 'solver.dt="0.02 ms"'`)
@@ -164,7 +163,7 @@ Config values can come from four places, in order of increasing precedence:
    - List elements are addressed **by index**: `--set 'stimulus.0.start="10 ms"'` sets the first
      `[[stimulus]]` table's `start`.
    - Unknown keys are an error (`ConfigError`), never silently dropped.
-4. Dedicated flags on `beat run`/`beat post`/`beat ecg`: `--output-folder` and (on `beat run`)
+4. Dedicated flags on `beat run`/`beat post`: `--output-folder` and (on `beat run`)
    `--petsc-options`.
 
 `--output-folder` overrides `output.folder` and, unlike every path *inside* the config file,
@@ -204,17 +203,18 @@ output/
   restart.bp                # io4dolfinx: v and every ODE state, every output.checkpoint_every and at the end
   restart.json              # {"ep": {t, step, physics_hash, functions, state_names, solver}}: the latest complete checkpoint and a hash of the run's physics (beat <= 0.7.2 wrote these keys at the top level; still read)
   performance.json          # timing summary (only with output.performance = true)
-  post/                     # written by `beat post` / `beat ecg`, see below
+  post/                     # written by `beat post`, see below
 ```
 
 `beat run` never writes VTX itself -- only the io4dolfinx files above. `beat post config.toml`
 reads `results.bp` (which can happen later, on any number of ranks, independent of how many ranks
-the run itself used) and writes into `post/`. The config given to `beat post`/`beat ecg` must
-describe the same physics as the run that wrote `results.bp` -- the same check as for `--restart`
-(below), against the hash in `restart.json`, or, if the run stopped before writing its first
-checkpoint, against `config.resolved.toml`. Only `[output]`, `[postprocess]` and the run length may
-differ; anything else (e.g. an edited `geometry.dx`) is refused with a `ConfigError` naming
-`config.resolved.toml` to compare with, rather than crashing or silently producing wrong results.
+the run itself used) and writes into `post/`. The config given to `beat post` must describe the
+same physics as the run that wrote `results.bp` -- the same check as for `--restart` (below),
+against the hash in `restart.json`, or, if the run stopped before writing its first checkpoint,
+against `config.resolved.toml` (whose `[postprocess]` is not read). Only `[output]`,
+`[postprocess]` and the run length may differ; anything else (e.g. an edited `geometry.dx`) is
+refused with a `ConfigError` naming `config.resolved.toml` to compare with, rather than crashing
+or silently producing wrong results.
 
 ```text
 output/post/
@@ -224,13 +224,82 @@ output/post/
   voltage_final.png            # snapshot of v at the last saved time (needs pyvista)
   activation_time_map.png      # snapshot of the activation-time map (needs pyvista)
   voltage.gif                  # animation of v(t) over the whole run, if postprocess.make_gif (needs pyvista)
+  ecg.csv                      # pseudo-ECG: time, then the potential at each electrode, if [postprocess.ecg]
+  ecg.png                      # plot of ecg.csv (needs matplotlib)
+  ecg_leads.csv                # time, then each lead, if postprocess.ecg.leads = "twelve-lead"
+  ecg_leads.png                # the leads in the clinical 3x4 layout (needs matplotlib)
 ```
-
-`beat ecg config.toml` additionally writes `post/ecg.csv` (and `post/ecg.png`, if matplotlib is
-installed) with the recovered extracellular potential at `postprocess.points`.
 
 On more than one rank, the PNG/GIF previews show only rank 0's partition of the mesh (with a log
 warning); the VTX files are always complete. Run `beat post` on a single rank for full previews.
+
+(pseudo-ecg)=
+### Pseudo-ECG
+
+With a `[postprocess.ecg]` section, `beat post` also recovers the pseudo-ECG: the extracellular
+potential at each electrode, in an infinite homogeneous conductor (`beat.ECGRecovery`), at every
+saved time. It is computed in the same pass over `results.bp` as the activation map, so the ECG
+adds no extra pass over the saved times. Without the section, `beat post` writes no ECG. The
+electrodes are a table of name to position:
+
+```toml
+[postprocess.ecg]
+unit = "cm"                     # the electrodes' length unit; default: geometry.unit
+leads = "twelve-lead"           # or "none" (default): electrode potentials only
+reference = "potential"         # or "position" (legacy simcardems), which needs twelve-lead
+sigma_b = 1.0                   # bath conductivity (default 1.0)
+
+[postprocess.ecg.electrodes]
+LA = [4.0, -12.0, -7.0]
+RA = [-15.0, 0.0, -10.0]
+LL = [17.0, 11.0, 7.0]
+V1 = [-3.0, 4.0, -9.0]
+# ... V2 to V6
+```
+
+- `ecg.csv` has `time`, then one column per electrode, in the order given: the electrodes you
+  give, and nothing else.
+- `leads = "twelve-lead"` also writes `ecg_leads.csv` (`time`, then `I, II, III, aVR, aVL, aVF,
+  V1, ..., V6`) and `ecg_leads.png`. It needs the electrodes `LA`, `RA`, `LL` and `V1` to `V6`.
+  Any others (`RL`, or a body-surface set) are written to `ecg.csv` and otherwise unused. The lead
+  `V1` and the electrode `V1` are in separate files, so they never share a column. With
+  `leads = "none"`, `beat post` deletes an earlier run's `ecg_leads.*`; without the section it
+  touches no `ecg*` file.
+- `reference` sets how a negative pole of more than one electrode is formed. I, II and III are the
+  same under both.
+  - `"potential"` (the default; Einthoven, Goldberger, Wilson): the mean of its electrodes'
+    potentials, e.g. `aVR = φ(RA) - (φ(LA) + φ(LL))/2`, and, against Wilson's central terminal,
+    `V1 = φ(V1) - (φ(LA) + φ(RA) + φ(LL))/3`.
+  - `"position"` (legacy simcardems): the potential at the mean of its electrodes' *positions*,
+    e.g. `aVR = φ(RA) - φ(LA_LL_mid)` and `V1 = φ(V1) - φ(WCT_pt)`. These derived points are not
+    electrodes and are not written to `ecg.csv`; an electrode may not share their names.
+- The positions are converted from `unit` to `geometry.unit`, and each must have as many
+  coordinates as the mesh has dimensions.
+- An electrode may lie inside the mesh, but the value there is a near-field one, not a
+  body-surface potential, and `beat post` logs a warning naming it.
+- `beat post` checks the section once it has built the geometry, before it reads any saved time,
+  and refuses (exit 1) a position of the wrong length or a lead set missing an electrode, naming
+  them.
+
+A header-less electrode CSV of the legacy simcardems / Alya kind (one `x,y,z` row per electrode,
+in the order LA, RA, LL, RL, V1 to V6) is converted to this table once, with the script
+`scripts/electrodes_to_toml.py` in the repository (<https://github.com/finsberg/fenicsx-beat>).
+It is not installed by pip: run it from a clone or a downloaded copy. It needs only numpy.
+`--names A,B,...` gives another order, and `-o FILE` writes to a file instead of stdout. Append
+its output to the config:
+
+```bash
+python scripts/electrodes_to_toml.py electrodes.csv --unit cm > ecg.toml
+```
+
+`[postprocess]` is outside the physics hash, so a finished run can be post-processed again with
+other electrodes or leads. Such a rerun also redoes the activation map and the previews, and the
+VTX conversion unless it is switched off:
+
+```bash
+beat post config.toml --set 'postprocess.ecg.electrodes.V1=[-3.5, 4.0, -9.0]' --set postprocess.vtx=false
+beat post config.toml --set 'postprocess.ecg.reference="position"' --set postprocess.vtx=false
+```
 
 ### `--overwrite` and `--restart`
 

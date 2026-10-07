@@ -213,3 +213,77 @@ def test_solver_run_length_fields_are_documented():
     assert "num_beats" in fields["end_time"].description
     assert "BCL" in fields["num_beats"].description
     assert "period" in fields["BCL"].description
+
+
+# --- [postprocess.ecg] ------------------------------------------------------------------
+
+
+def _load_with_postprocess(tmp_path, postprocess, sets=()):
+    import toml
+    from cli_helpers import minimal_config_dict
+
+    from beat.cli.overrides import load_config
+
+    path = tmp_path / "config.toml"
+    path.write_text(toml.dumps(minimal_config_dict(tmp_path, postprocess=postprocess)))
+    return load_config(path, sets=sets)
+
+
+@pytest.mark.parametrize(
+    "ecg, match",
+    [
+        ({}, "electrodes"),
+        ({"electrodes": {}}, "electrodes"),
+        ({"electrodes": {"E": [1.0]}}, "electrodes"),
+        ({"electrodes": {"E": [1.0, 2.0]}, "unit": "ms"}, "unit"),
+        ({"electrodes": {"E": [1.0, 2.0]}, "reference": "position"}, "reference = 'position'"),
+    ],
+)
+def test_postprocess_ecg_invalid(tmp_path, ecg, match):
+    from beat.cli.config import ConfigError
+
+    with pytest.raises(ConfigError, match=match):
+        _load_with_postprocess(tmp_path, {"ecg": ecg})
+
+
+def test_postprocess_sigma_b_moved(tmp_path):
+    from beat.cli.config import ConfigError
+
+    with pytest.raises(ConfigError, match=r"postprocess\.ecg\.sigma_b"):
+        _load_with_postprocess(tmp_path, {"sigma_b": 2.0})
+
+
+def test_postprocess_ecg_valid_and_set_electrode(tmp_path):
+    conf = _load_with_postprocess(
+        tmp_path,
+        {"ecg": {"electrodes": {"E": [1.0, 2.0, 3.0]}, "unit": "cm", "leads": "twelve-lead"}},
+        sets=["postprocess.ecg.electrodes.V1=[1.0, 2.0]"],
+    )
+    ecg = conf.postprocess.ecg
+    assert ecg.electrodes == {"E": [1.0, 2.0, 3.0], "V1": [1.0, 2.0]}
+    assert ecg.leads == "twelve-lead"
+    assert ecg.reference == "potential"
+    assert ecg.sigma_b == 1.0
+
+
+def test_postprocess_ecg_reference_with_leads(tmp_path):
+    conf = _load_with_postprocess(
+        tmp_path,
+        {"ecg": {"electrodes": {"E": [1.0, 2.0]}, "leads": "twelve-lead", "reference": "position"}},
+    )
+    assert conf.postprocess.ecg.reference == "position"
+
+
+def test_postprocess_ecg_potential_reference_without_leads(tmp_path):
+    """reference = "potential" is the default, which config.resolved.toml writes out also
+    with leads = "none"; only "position" needs a lead system."""
+    conf = _load_with_postprocess(
+        tmp_path,
+        {"ecg": {"electrodes": {"E": [1.0, 2.0]}, "reference": "potential"}},
+    )
+    assert conf.postprocess.ecg.leads == "none"
+    assert conf.postprocess.ecg.reference == "potential"
+
+
+def test_postprocess_ecg_default_none(tmp_path):
+    assert _load_with_postprocess(tmp_path, {}).postprocess.ecg is None

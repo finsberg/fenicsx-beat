@@ -385,7 +385,7 @@ plotter_voltage.open_gif(gif_file.as_posix())
 # ---
 #
 
-leads = dict(
+electrodes = dict(
     RA=(-15.0, 0.0, -10.0),
     LA=(4.0, -12.0, -7.0),
     RL=(0.0, 20.0, 3.0),
@@ -403,19 +403,17 @@ ecg = beat.ecg.ECGRecovery(
     C_m=C_m.to(f"uF/{mesh_unit}**2").magnitude,
     M=M,
 )
-ecg_forms = {k: ecg.eval(p) for k, p in leads.items()}
-ecg_traces: dict[str, list[float]] = {k: [] for k in ecg_forms.keys()}
+system = beat.ecg.twelve_lead()
+probe = beat.ecg.ElectrodePotentials(ecg, system.points(electrodes))
+ecg_traces: dict[str, list[float]] = {k: [] for k in electrodes}
 
 for t in times:
     io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
-    ecg.solve()
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()
-    for k, e in ecg_forms.items():
-        ecg_traces[k].append(
-            geo.mesh.comm.allreduce(dolfinx.fem.assemble_scalar(e), op=MPI.SUM),
-        )
+    for k, value in probe().items():
+        ecg_traces[k].append(value)
 
 plotter_voltage.close()
 # -
@@ -423,28 +421,15 @@ plotter_voltage.close()
 # ![volt](voltage_biv_ellipsoid_time.gif "volt")
 
 
-ecg12_lead = beat.ecg.Leads12(**{k: np.array(v) for k, v in ecg_traces.items()})
+ecg12_lead = system.leads({k: np.array(trace) for k, trace in ecg_traces.items()})
+assert system.layout is not None
 fig, ax = plt.subplots(3, 4, sharex=True, figsize=(12, 8))
-for i, name in enumerate(
-    [
-        "I",
-        "II",
-        "III",
-        "aVR",
-        "aVL",
-        "aVF",
-        "V1_",
-        "V2_",
-        "V3_",
-        "V4_",
-        "V5_",
-        "V6_",
-    ],
-):
-    y = getattr(ecg12_lead, name)
-    axi = ax.flatten()[i]
-    axi.plot(times[: len(y)], y)
-    axi.set_title(name.strip("_"))
+for i, row in enumerate(system.layout):
+    for j, name in enumerate(row):
+        y = np.asarray(ecg12_lead[name])
+        axi = ax[i, j]
+        axi.plot(times[: len(y)], y)
+        axi.set_title(name)
 fig.tight_layout()
 fig.savefig(results_folder / "ecg_12_leads.png")
 

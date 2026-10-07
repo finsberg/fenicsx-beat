@@ -129,7 +129,13 @@ def load_config(
     environ: Mapping[str, str] | None = None,
     output_folder: Path | None = None,
     petsc_options: str | None = None,
+    exclude: Sequence[str] = (),
 ) -> Config:
+    """Load, override and validate the config at ``path``.
+
+    ``exclude`` names top-level tables dropped before validation, e.g. ``("postprocess",)``
+    to read only the physics of a ``config.resolved.toml`` written by an older beat.
+    """
     path = Path(path)
     if not path.is_file():
         raise ConfigError(f"Configuration file {path} does not exist.")
@@ -148,6 +154,8 @@ def load_config(
             **solver.get("petsc_options", {}),
             **parse_petsc_options(petsc_options),
         }
+    for table in exclude:
+        data.pop(table, None)
 
     try:
         conf = Config.model_validate(data)

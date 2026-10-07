@@ -56,6 +56,7 @@ dolfin
 dolfinx
 dtype
 dvlp
+Einthoven
 Elife
 Elsevier
 endo
@@ -71,6 +72,7 @@ fenicsx
 fenicsx_pulse
 ffcx
 ffun
+figsize
 finsberg
 Fitz
 fitzhughnagumo
@@ -89,6 +91,7 @@ getpid
 Gilles
 gmres
 gmsh
+Goldberger
 gotran
 gotranx
 gradu
@@ -263,3 +266,6 @@ Fenton
 alternans
 Flavio
 Alain
+alya
+pytestmark
+savetxt

@@ -52,3 +52,7 @@ save_every = "1 ms"
 # The demo's p1/p2: (L*0.25, dx*0.5, dx*0.5) and (L*0.75, dx*0.5, dx*0.5), with L=1.0, dx=0.05
 # (the domain's Ly/Lz thickness there, not the mesh element size of the same name).
 points = { P1 = [0.25, 0.025, 0.025], P2 = [0.75, 0.025, 0.025] }
+
+[postprocess.ecg]
+# the slab demo's ECG point p_ecg = (2L, dx/2, dx/2), outside the tissue
+electrodes = { E = [2.0, 0.025, 0.025] }

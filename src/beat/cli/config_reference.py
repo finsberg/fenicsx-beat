@@ -44,6 +44,7 @@ SECTIONS: list[tuple[str, list[type[BaseModel]]]] = [
     ("[solver.ode]", [c.DolfinODE, c.IrksomeODE, c.ExternalOperatorODE]),
     ("[output]", [c.OutputConfig]),
     ("[postprocess]", [c.PostprocessConfig]),
+    ("[postprocess.ecg]", [c.ECGConfig]),
 ]
 
 

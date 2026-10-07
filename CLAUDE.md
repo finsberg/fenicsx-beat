@@ -65,13 +65,16 @@ Operator-split PDE/ODE solve per timestep:
   `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop").
 - **Geometry** (`geometry.py`): `Geometry` NamedTuple + 2D/3D slab helpers; real ventricular geometries
   come from `cardiac-geometriesx`/`ukb-atlas`/`fenicsx-ldrb` (`demos`/`docs` extras).
-- **ECG** (`ecg.py`): `ECGRecovery` + R-peak/T-wave detection from simulated extracellular potentials.
+- **ECG** (`ecg.py`): `ECGRecovery`; `ElectrodePotentials` (one solve, potentials at named electrodes);
+  `LeadSystem`/`twelve_lead` (leads from electrode potentials, `reference="potential"|"position"`);
+  R-peak/T-wave interval detection. `scripts/electrodes_to_toml.py` converts an Alya-order electrode CSV
+  into the `[postprocess.ecg.electrodes]` table.
 - **Single-cell** (`single_cell.py`): standalone ODE-only cell-model solving (numba-jitted if
   available), for pacing protocols independent of tissue PDEs.
 - **Telemetry** (`telemetry.py`): `BaseMonitor`/`NullMonitor`/`PerformanceMonitor`, threaded through
   `step()` via `monitor.track_time(...)`.
 - **CLI** (`cli/`, entry point `beat`, `cli` extra): TOML-config-driven `init --template`/
-  `validate-config`/`geometry`/`run`/`ecg`/`post`/`version` (`config.py` pydantic models,
+  `validate-config`/`geometry`/`run`/`post`/`version` (`config.py` pydantic models,
   `overrides.py` TOML < `BEAT_*` env < `--set` < flags, `runner.py`, `templates/`). Docs:
   `docs/cli.md`, `docs/cli_cluster.md`, `docs/cli_reference.md` (regenerate with
   `python scripts/gen_cli_reference.py` after changing `cli/config.py`). `overrides.py`, `log.py`,
