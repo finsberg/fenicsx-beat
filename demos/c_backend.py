@@ -36,7 +36,7 @@ import beat.c_backend
 try:
     import numba
 except ImportError:
-    numba = None
+    numba = None  # type: ignore[assignment]
 # -
 
 comm = MPI.COMM_WORLD
