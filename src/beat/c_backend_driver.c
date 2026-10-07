@@ -12,6 +12,10 @@
  */
 #include <stdlib.h>
 
+#ifdef BEAT_OPENMP
+#include <omp.h>
+#endif
+
 #ifndef BEAT_SCHEME
 #error "BEAT_SCHEME must be defined to the name of the per-cell scheme"
 #endif
@@ -22,7 +26,12 @@ void beat_scheme_vec(int n_states, long n_points, const double *states, double t
                      const double *params, int n_params, long params_stride, double *out,
                      int num_threads)
 {
+#ifdef BEAT_OPENMP
+    int threads = num_threads > 0 ? num_threads : omp_get_max_threads();
+#pragma omp parallel num_threads(threads)
+#else
     (void)num_threads;
+#endif
     {
         double stack_buffer[3 * BEAT_STACK_SIZE];
         double *heap_buffer = NULL;
@@ -35,6 +44,10 @@ void beat_scheme_vec(int n_states, long n_points, const double *states, double t
         double *y = buffer + n_states;
         double *p = buffer + 2 * n_states;
 
+#ifdef BEAT_OPENMP
+        /* Dynamic, since adaptive schemes make some points much more expensive than others */
+#pragma omp for schedule(dynamic, 256)
+#endif
         for (long i = 0; i < n_points; i++) {
             for (int j = 0; j < n_states; j++) {
                 x[j] = states[j * n_points + i];
@@ -53,4 +66,15 @@ void beat_scheme_vec(int n_states, long n_points, const double *states, double t
         }
         free(heap_buffer);
     }
+}
+
+/* The number of threads that beat_scheme_vec uses for the given num_threads argument */
+int beat_max_threads(int num_threads)
+{
+#ifdef BEAT_OPENMP
+    return num_threads > 0 ? num_threads : omp_get_max_threads();
+#else
+    (void)num_threads;
+    return 1;
+#endif
 }

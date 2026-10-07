@@ -272,3 +272,4 @@ cflags
 Werror
 fopenmp
 ascontiguousarray
+DBEAT

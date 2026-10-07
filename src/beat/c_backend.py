@@ -37,6 +37,7 @@ T = TypeVar("T")
 DRIVER_PATH = Path(__file__).with_name("c_backend_driver.c")
 LIBRARY_NAME = "libbeat_scheme.so"
 DEFAULT_CFLAGS: tuple[str, ...] = ("-O3", "-march=native")
+OPENMP_FLAGS: tuple[str, ...] = ("-fopenmp", "-DBEAT_OPENMP")
 
 
 def default_cache_dir() -> Path:
@@ -330,6 +331,13 @@ class CScheme:
         )
         return out
 
+    def max_threads(self) -> int:
+        """The number of threads that one call uses (1 without OpenMP)"""
+        function = self._lib.beat_max_threads
+        function.restype = ctypes.c_int
+        function.argtypes = [ctypes.c_int]
+        return function(self.num_threads or 0)
+
 
 def compile_scheme(
     c_code: str,
@@ -340,6 +348,8 @@ def compile_scheme(
     cache_dir: str | Path | None = None,
     cc: str | None = None,
     cflags: Sequence[str] = DEFAULT_CFLAGS,
+    openmp: bool = False,
+    num_threads: int | None = None,
     comm: MPI.Intracomm = MPI.COMM_WORLD,
 ) -> CScheme:
     """Compile gotranx-generated C code into a ``fun(states, t, parameters, dt)``
@@ -360,6 +370,10 @@ def compile_scheme(
         The C compiler, by default :func:`default_compiler`
     cflags : Sequence[str], optional
         The compiler flags, by default ``("-O3", "-march=native")``
+    openmp : bool, optional
+        Compile with -fopenmp and run the point loop in parallel, by default False
+    num_threads : int | None, optional
+        The number of OpenMP threads, by default OMP_NUM_THREADS or the OpenMP default
     comm : MPI.Intracomm, optional
         The communicator; rank 0 compiles, by default MPI.COMM_WORLD
 
@@ -370,14 +384,22 @@ def compile_scheme(
     """
     cc = cc or default_compiler()
     cache = Path(cache_dir) if cache_dir is not None else default_cache_dir()
+    flags = tuple(cflags) + (OPENMP_FLAGS if openmp else ())
     library = build_library(
         full_source(c_code, scheme),
         cc=cc,
-        cflags=tuple(cflags),
+        cflags=flags,
         cache_dir=cache.resolve(),
         comm=comm,
     )
-    return CScheme(library, scheme, num_states=num_states, num_parameters=num_parameters)
+    return CScheme(
+        library,
+        scheme,
+        num_states=num_states,
+        num_parameters=num_parameters,
+        openmp=openmp,
+        num_threads=num_threads,
+    )
 
 
 def generate_c_code(
@@ -446,3 +468,18 @@ def from_ode(
         comm=comm,
         **compile_kwargs,
     )
+
+
+def openmp_available(cc: str | None = None) -> bool:
+    """Whether the C compiler can build an OpenMP shared library"""
+    cc = cc or default_compiler()
+    with tempfile.TemporaryDirectory() as tmp:
+        source = Path(tmp) / "omp.c"
+        source.write_text("#include <omp.h>\nint f(void) { return omp_get_max_threads(); }\n")
+        try:
+            result = _run_compiler(
+                [cc, "-fopenmp", "-shared", "-fPIC", "-o", str(Path(tmp) / "omp.so"), str(source)],
+            )
+        except FileNotFoundError:
+            return False
+    return result.returncode == 0

@@ -402,3 +402,50 @@ def test_monodomain_c_matches_numpy(tp06):
     difference = comm.allreduce(np.max(np.abs(v_c - v_numpy), initial=0.0), op=MPI.MAX)
     assert v_peak > 0.0  # the stimulus produced an action potential
     assert difference <= 1e-9
+
+
+requires_openmp = pytest.mark.skipif(
+    not beat.c_backend.openmp_available(),
+    reason="the C compiler does not support -fopenmp",
+)
+
+
+@requires_openmp
+def test_openmp_identical_to_serial(tp06):
+    ode, model, serial = tp06
+    threaded = beat.c_backend.from_ode(
+        ode,
+        scheme="generalized_rush_larsen",
+        cache_dir=serial.library_path.parent.parent,
+        openmp=True,
+        num_threads=2,
+    )
+    assert threaded.library_path != serial.library_path
+    assert threaded.openmp
+    assert threaded.max_threads() == 2
+    parameters = model["init_parameter_values"]()
+    states = np.zeros((ode.num_states, 5000))
+    states.T[:] = model["init_state_values"]()
+    a, b = states.copy(), states.copy()
+    t, dt = 0.0, 0.05
+    for _ in range(40):
+        a = serial(states=a, t=t, parameters=parameters, dt=dt)
+        b = threaded(states=b, t=t, parameters=parameters, dt=dt)
+        t += dt
+    np.testing.assert_array_equal(a, b)
+
+
+def test_serial_max_threads_is_one(toy):
+    assert toy.max_threads() == 1
+
+
+def test_openmp_with_unsupported_flag_raises(cache_dir):
+    # A compiler that rejects every flag stands in for one without OpenMP support
+    with pytest.raises(RuntimeError, match="OpenMP"):
+        beat.c_backend.compile_scheme(
+            TOY_C,
+            "toy",
+            cache_dir=cache_dir,
+            openmp=True,
+            cflags=("-not-a-real-flag",),
+        )

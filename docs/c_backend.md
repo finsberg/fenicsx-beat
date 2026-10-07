@@ -39,6 +39,8 @@ The function also has `state_index(name)`, `parameter_index(name)`, `init_state_
 | `cache_dir` | `$BEAT_C_CACHE`, else `~/.cache/beat/c_backend` | Where the libraries are stored |
 | `cc` | `$CC`, else `cc` | The C compiler |
 | `cflags` | `("-O3", "-march=native")` | The compiler flags |
+| `openmp` | `False` | Compile with `-fopenmp` and run the loop over the points with OpenMP threads |
+| `num_threads` | `OMP_NUM_THREADS`, else the OpenMP default | The number of threads (with `openmp=True`) |
 | `comm` | `MPI.COMM_WORLD` | Rank 0 compiles, all ranks load |
 
 The `states` and `parameters` must be C-contiguous float64 arrays. `parameters` is either one
@@ -55,6 +57,15 @@ Pass `out=` to write the result into an existing array (it may be `states` itsel
   so a library built on a node with a different CPU (e.g. a login node with AVX-512) is not reused
   on the compute nodes. Pass `cflags=("-O3",)` for a library that runs anywhere.
 - Several jobs can compile the same library into the same cache at the same time.
+
+## OpenMP
+
+With `openmp=True` the loop over the points runs on several threads. The points are handed out
+dynamically, in chunks of 256, since schemes that adapt their sub-steps make some points much more
+expensive than others. Threads and MPI ranks can be combined: with `R` ranks on a node of `C` cores,
+use `num_threads` (or `OMP_NUM_THREADS`) of at most `C / R`, and make sure that the scheduler gives
+each rank that many cores (for SLURM, `--cpus-per-task`). `beat.c_backend.openmp_available()` tells
+whether the compiler supports OpenMP. Apple's clang does not, without extra setup.
 
 ## Requirements
 

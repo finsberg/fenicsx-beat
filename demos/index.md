@@ -65,8 +65,8 @@ model and notation used throughout, then work through the
   that reuses your existing cell-model function unchanged; cross-checks it against `DolfinODESolver`
   on a real `gotranx`-generated cell model and reports the current performance trade-off honestly.
 - [A compiled C backend for cell models](c_backend.py) — compiles the C code that `gotranx`
-  generates into a drop-in replacement for the NumPy cell-model function, and compares NumPy, Numba
-  and C for the ODE step alone and in a small monodomain simulation.
+  generates into a drop-in replacement for the NumPy cell-model function, and compares NumPy, Numba,
+  C and C with OpenMP for the ODE step alone and in a small monodomain simulation.
 - [Monolithic implicit PDE+ODE coupling with dolfinx-external-operator](monolithic_external_operator.py)
   — a prototype fully implicit Newton solve of the PDE and cell model *together*, with a
   JAX-autodifferentiated Jacobian and no operator-splitting error at all; validated against an

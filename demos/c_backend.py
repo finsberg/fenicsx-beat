@@ -8,7 +8,7 @@
 # points, and wraps the result in a function with the same signature, so that it can be passed as
 # `fun` without changing anything else.
 #
-# In this demo we compare the three backends, NumPy, Numba and C, for the ten Tusscher–Panfilov
+# In this demo we compare NumPy, Numba, C and C with OpenMP threads, for the ten Tusscher–Panfilov
 # 2006 epicardial cell model (as in the [spiral wave demo](spiral_wave.py)) with the generalized
 # Rush–Larsen scheme: first the ODE step alone, then a small monodomain simulation. We also check
 # that they give the same solution.
@@ -18,6 +18,7 @@
 # [C backend guide](../docs/c_backend.md) for the options.
 
 # +
+import os
 import time as pytime
 from pathlib import Path
 from typing import Any
@@ -107,8 +108,28 @@ fun_c = beat.c_backend.from_ode(cell_ode, scheme="generalized_rush_larsen")
 build_times["C"] = pytime.perf_counter() - tic
 backends["C"] = fun_c
 print0(f"The C library is {fun_c.library_path}")
+
+# With `openmp=True` the loop over the points runs in parallel with OpenMP threads, in addition to
+# any MPI ranks. The number of threads is `num_threads`, or `OMP_NUM_THREADS` if it is not given.
+# Here we use up to four threads.
+
+# +
+if beat.c_backend.openmp_available():
+    num_threads = min(4, os.cpu_count() or 1)
+    tic = pytime.perf_counter()
+    backends["C + OpenMP"] = beat.c_backend.from_ode(
+        cell_ode,
+        scheme="generalized_rush_larsen",
+        openmp=True,
+        num_threads=num_threads,
+    )
+    build_times["C + OpenMP"] = pytime.perf_counter() - tic
+    print0(f"C + OpenMP uses {backends['C + OpenMP'].max_threads()} threads")
+else:
+    print0("The C compiler does not support OpenMP, so C + OpenMP is left out")
 for name, seconds in build_times.items():
     print0(f"Building the {name} backend took {seconds:.2f} s")
+# -
 
 # ## The ODE step alone
 #
@@ -235,12 +256,12 @@ results = {name: run_monodomain(f) for name, f in backends.items()}
 # +
 numpy_timings = results["NumPy"][1]
 print0(
-    f"{'backend':>8}{'total (s)':>12}{'ODE (s)':>10}{'PDE (s)':>10}"
+    f"{'backend':>12}{'total (s)':>12}{'ODE (s)':>10}{'PDE (s)':>10}"
     f"{'ODE speed-up':>14}{'total speed-up':>16}",
 )
 for name, (_, timings) in results.items():
     print0(
-        f"{name:>8}{timings['total_step']:12.2f}{timings['ode_step']:10.2f}"
+        f"{name:>12}{timings['total_step']:12.2f}{timings['ode_step']:10.2f}"
         f"{timings['pde_step']:10.2f}"
         f"{numpy_timings['ode_step'] / timings['ode_step']:14.1f}"
         f"{numpy_timings['total_step'] / timings['total_step']:16.1f}",
