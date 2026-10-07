@@ -290,3 +290,52 @@ def test_from_ode_unknown_scheme_raises_on_all_ranks(tp06, cache_dir):
     ode, _, _ = tp06
     with pytest.raises(RuntimeError):
         beat.c_backend.from_ode(ode, scheme="not_a_scheme", cache_dir=cache_dir)
+
+
+def run_monodomain(fun, model, num_states):
+    import dolfinx
+    import ufl
+
+    import beat
+
+    mesh = dolfinx.mesh.create_unit_square(comm, 10, 10, dolfinx.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    tdim = mesh.topology.dim
+    cells = dolfinx.mesh.locate_entities(
+        mesh,
+        tdim,
+        lambda x: np.logical_and(x[0] <= 0.2 + 1e-10, x[1] <= 0.2 + 1e-10),
+    )
+    tags = dolfinx.mesh.meshtags(mesh, tdim, cells, np.full(len(cells), 1, dtype=np.int32))
+    dx = ufl.dx(domain=mesh, subdomain_data=tags)
+    stim = ufl.conditional(ufl.le(time, 2.0), dolfinx.fem.Constant(mesh, 100.0), 0.0)
+    pde = beat.MonodomainModel(
+        time=time,
+        mesh=mesh,
+        M=0.1,
+        I_s=beat.Stimulus(expr=stim, dZ=dx, marker=1),
+    )
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, ("P", 1))),
+        v_pde=pde.state,
+        fun=fun,
+        init_states=model["init_state_values"](),
+        parameters=model["init_parameter_values"](stim_amplitude=0.0),
+        num_states=num_states,
+        v_index=model["state_index"]("V"),
+    )
+    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    t, dt = 0.0, 0.05
+    for _ in range(60):
+        solver.step((t, t + dt))
+        t += dt
+    return pde.state.x.array.copy()
+
+
+def test_monodomain_c_matches_numpy(tp06):
+    ode, model, fun = tp06
+    v_numpy = run_monodomain(model["generalized_rush_larsen"], model, ode.num_states)
+    v_c = run_monodomain(fun, model, ode.num_states)
+    assert v_numpy.max() > 0.0  # the stimulus produced an action potential
+    difference = comm.allreduce(np.max(np.abs(v_c - v_numpy), initial=0.0), op=MPI.MAX)
+    assert difference <= 1e-9
