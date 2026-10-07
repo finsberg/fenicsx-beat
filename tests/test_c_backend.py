@@ -292,6 +292,67 @@ def test_from_ode_unknown_scheme_raises_on_all_ranks(tp06, cache_dir):
         beat.c_backend.from_ode(ode, scheme="not_a_scheme", cache_dir=cache_dir)
 
 
+def test_target_signature_only_for_native_flags():
+    # Non-native flags should return empty string
+    result = beat.c_backend.target_signature("cc", ("-O3",))
+    assert result == ""
+
+    # Native flags should return a non-empty string containing architecture macros
+    result = beat.c_backend.target_signature("cc", ("-O3", "-march=native"))
+    assert result != ""
+    assert "__x86_64__" in result or "__aarch64__" in result
+
+
+def test_target_signature_changes_key(cache_dir, monkeypatch):
+    # Monkeypatch target_signature on all ranks
+    def fake_target_signature_a(cc, flags):
+        return (
+            beat.c_backend.target_signature(cc, flags)
+            if not any("native" in f for f in flags)
+            else "cpu-A"
+        )
+
+    def fake_target_signature_b(cc, flags):
+        return (
+            beat.c_backend.target_signature(cc, flags)
+            if not any("native" in f for f in flags)
+            else "cpu-B"
+        )
+
+    # Compile with fake signature A
+    monkeypatch.setattr(
+        beat.c_backend,
+        "target_signature",
+        fake_target_signature_a,
+    )
+    lib_a = beat.c_backend.compile_scheme(
+        TOY_C,
+        "toy",
+        num_states=2,
+        num_parameters=2,
+        cache_dir=cache_dir,
+        cflags=("-O2", "-march=native"),
+    )
+
+    # Compile with fake signature B
+    monkeypatch.setattr(
+        beat.c_backend,
+        "target_signature",
+        fake_target_signature_b,
+    )
+    lib_b = beat.c_backend.compile_scheme(
+        TOY_C,
+        "toy",
+        num_states=2,
+        num_parameters=2,
+        cache_dir=cache_dir,
+        cflags=("-O2", "-march=native"),
+    )
+
+    # The two libraries should be in different cache directories due to different keys
+    assert lib_a.library_path != lib_b.library_path
+
+
 def run_monodomain(fun, model, num_states):
     import dolfinx
     import ufl

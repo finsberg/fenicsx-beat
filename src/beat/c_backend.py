@@ -71,6 +71,19 @@ def compiler_version(cc: str) -> str:
     return result.stdout.splitlines()[0] if result.stdout else ""
 
 
+def target_signature(cc: str, flags: Sequence[str]) -> str:
+    """The compiler's predefined macros for ``flags`` if they target the native CPU, else ""
+
+    With ``-march=native`` (or ``-mcpu=native``) the library depends on the features of the CPU
+    it is compiled on, which ``platform.machine()`` does not tell apart (e.g. with and without
+    AVX-512), so the macros that the compiler defines for these flags go into the cache key.
+    """
+    if not any("native" in flag for flag in flags):
+        return ""
+    result = _run_compiler([cc, *flags, "-dM", "-E", "-x", "c", "/dev/null"])
+    return result.stdout
+
+
 def cache_key(source: str, cc: str, cc_version: str, flags: Sequence[str]) -> str:
     """Hash of everything that changes the compiled library"""
     h = hashlib.sha256()
@@ -155,7 +168,12 @@ def build_library(
     """Compile ``source`` on rank 0 (unless it is cached) and return the library on all ranks"""
 
     def build() -> Path:
-        key = cache_key(source, cc, compiler_version(cc), cflags)
+        key = cache_key(
+            source,
+            cc,
+            compiler_version(cc),
+            (*cflags, target_signature(cc, cflags)),
+        )
         return _compile(source, cc, cflags, cache_dir / key)
 
     library = _run_on_rank0(comm, build)

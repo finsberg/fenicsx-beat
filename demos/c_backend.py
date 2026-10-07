@@ -276,6 +276,7 @@ assert all(difference <= 1e-9 for difference in differences.values())
 # - **The cache.** The libraries are stored in `~/.cache/beat/c_backend`, or in `$BEAT_C_CACHE` if
 #   it is set. In parallel, rank 0 compiles and the other ranks load the library from there, so on a
 #   cluster the cache directory must be on a file system that all nodes share.
-# - **`-march=native`.** The library is compiled inside your job, on the compute node, and the
-#   architecture is part of the cache key, so a login node with a different CPU never shares a
-#   library with the compute nodes. Pass `cflags=("-O3",)` for a portable library.
+# - **`-march=native`.** The library is compiled inside your job, on the compute node. With a
+#   native flag the cache key includes the CPU features the compiler detects (its predefined macros),
+#   so a library built on a login node with a different CPU (e.g. with AVX-512) is not reused on the
+#   compute nodes. Pass `cflags=("-O3",)` for a portable library.

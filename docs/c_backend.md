@@ -50,9 +50,10 @@ Pass `out=` to write the result into an existing array (it may be `states` itsel
 - Rank 0 compiles the library and the other ranks load it from the cache directory, so the cache
   directory must be on a file system that all nodes share. If it is not, all ranks raise an error
   that says so. The home directory usually is shared; otherwise set `BEAT_C_CACHE`.
-- The library is compiled inside the job, so `-march=native` targets the compute nodes. The
-  architecture is part of the cache key, so libraries built on a login node with another CPU are
-  never used on the compute nodes. Pass `cflags=("-O3",)` for a library that runs anywhere.
+- The library is compiled inside the job, so `-march=native` targets the compute nodes. With a
+  native flag the cache key includes the CPU features the compiler detects (its predefined macros),
+  so a library built on a node with a different CPU (e.g. a login node with AVX-512) is not reused
+  on the compute nodes. Pass `cflags=("-O3",)` for a library that runs anywhere.
 - Several jobs can compile the same library into the same cache at the same time.
 
 ## Requirements
