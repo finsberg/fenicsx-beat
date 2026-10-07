@@ -219,6 +219,41 @@ class CScheme:
     def __repr__(self) -> str:
         return f"CScheme(scheme={self.scheme!r}, library_path={str(self.library_path)!r})"
 
+    def _index(self, function: str, name: str) -> int:
+        lookup = getattr(self._lib, function)
+        lookup.restype = ctypes.c_int
+        lookup.argtypes = [ctypes.c_char_p]
+        index = lookup(name.encode())
+        if index < 0:
+            raise KeyError(name)
+        return index
+
+    def state_index(self, name: str) -> int:
+        """The index of the state ``name``"""
+        return self._index("state_index", name)
+
+    def parameter_index(self, name: str) -> int:
+        """The index of the parameter ``name``"""
+        return self._index("parameter_index", name)
+
+    def _init_values(self, function: str, count: int | None, what: str) -> npt.NDArray[np.float64]:
+        if count is None:
+            raise ValueError(f"{what} is unknown; pass {what}=... to compile_scheme")
+        values = np.zeros(count)
+        init = getattr(self._lib, function)
+        init.restype = None
+        init.argtypes = [ctypes.c_void_p]
+        init(values.ctypes.data)
+        return values
+
+    def init_state_values(self) -> npt.NDArray[np.float64]:
+        """The default initial states of the model"""
+        return self._init_values("init_state_values", self.num_states, "num_states")
+
+    def init_parameter_values(self) -> npt.NDArray[np.float64]:
+        """The default parameters of the model"""
+        return self._init_values("init_parameter_values", self.num_parameters, "num_parameters")
+
     def __call__(
         self,
         states: npt.NDArray[np.float64],
@@ -314,3 +349,72 @@ def compile_scheme(
         comm=comm,
     )
     return CScheme(library, scheme, num_states=num_states, num_parameters=num_parameters)
+
+
+def generate_c_code(
+    ode: Any,
+    scheme: str = "generalized_rush_larsen",
+    codegen_kwargs: dict[str, Any] | None = None,
+) -> str:
+    """The C code for one cell, with index and initial value helpers and ``scheme``
+
+    Parameters
+    ----------
+    ode : gotranx.ode.ODE
+        The cell model
+    scheme : str, optional
+        The name of a gotranx scheme, by default "generalized_rush_larsen"
+    codegen_kwargs : dict[str, Any] | None, optional
+        Extra keyword arguments for :meth:`gotranx.codegen.CCodeGenerator.scheme`
+    """
+    from gotranx.codegen import CCodeGenerator
+    from gotranx.codegen.c import Format
+    from gotranx.schemes import get_scheme
+
+    codegen = CCodeGenerator(ode, format=Format.none)
+    return "\n".join(
+        [
+            codegen.imports(),
+            codegen.parameter_index(),
+            codegen.state_index(),
+            codegen.initial_parameter_values(),
+            codegen.initial_state_values(),
+            codegen.scheme(get_scheme(scheme), **(codegen_kwargs or {})),
+        ],
+    )
+
+
+def from_ode(
+    ode: Any,
+    scheme: str = "generalized_rush_larsen",
+    *,
+    codegen_kwargs: dict[str, Any] | None = None,
+    comm: MPI.Intracomm = MPI.COMM_WORLD,
+    **compile_kwargs: Any,
+) -> CScheme:
+    """Generate C for a gotranx ODE and compile it with :func:`compile_scheme`
+
+    The code is generated on rank 0 only. ``compile_kwargs`` are passed on to
+    :func:`compile_scheme` (``cache_dir``, ``cc``, ``cflags``, ...).
+
+    Parameters
+    ----------
+    ode : gotranx.ode.ODE
+        The cell model
+    scheme : str, optional
+        The name of a gotranx scheme, by default "generalized_rush_larsen"
+    codegen_kwargs : dict[str, Any] | None, optional
+        Extra keyword arguments for :meth:`gotranx.codegen.CCodeGenerator.scheme`
+    comm : MPI.Intracomm, optional
+        The communicator, by default MPI.COMM_WORLD
+    """
+    c_code = generate_c_code(ode, scheme, codegen_kwargs) if comm.rank == 0 else None
+    c_code = comm.bcast(c_code, root=0)
+    return compile_scheme(
+        c_code,
+        scheme,
+        num_states=ode.num_states,
+        num_parameters=ode.num_parameters,
+        comm=comm,
+        **compile_kwargs,
+    )

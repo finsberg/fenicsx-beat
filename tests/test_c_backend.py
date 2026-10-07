@@ -227,3 +227,60 @@ def test_concurrent_compiles_of_same_key(tmp_path):
 def test_check_visible_missing_library_raises_on_all_ranks(tmp_path):
     with pytest.raises(RuntimeError, match="BEAT_C_CACHE"):
         beat.c_backend._check_visible(tmp_path / "missing.so", comm)
+
+
+ODE_FILE = (
+    Path(__file__).parents[1]
+    / "odes"
+    / "tentusscher_panfilov_2006"
+    / "tentusscher_panfilov_2006_epi_cell.ode"
+)
+
+
+@pytest.fixture(scope="module")
+def tp06(tmp_path_factory):
+    gotranx = pytest.importorskip("gotranx")
+    ode = gotranx.load_ode(ODE_FILE)
+    code = gotranx.cli.gotran2py.get_code(
+        ode,
+        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+    )
+    namespace: dict = {}
+    exec(compile(code, "tentusscher_panfilov_2006_epi_cell", "exec"), namespace)
+    cache = Path(comm.bcast(str(tmp_path_factory.mktemp("c_cache")), root=0))
+    fun = beat.c_backend.from_ode(ode, scheme="generalized_rush_larsen", cache_dir=cache)
+    return ode, namespace, fun
+
+
+def test_from_ode_matches_numpy_grl(tp06):
+    ode, model, fun = tp06
+    assert fun.num_states == ode.num_states
+    assert fun.num_parameters == ode.num_parameters
+    parameters = model["init_parameter_values"]()  # stimulus on: covers the upstroke
+    states_np = np.zeros((ode.num_states, 20))
+    states_np.T[:] = model["init_state_values"]()
+    states_c = states_np.copy()
+    dt, t = 0.05, 0.0
+    for _ in range(100):
+        states_np = model["generalized_rush_larsen"](states_np, t, dt, parameters)
+        states_c = fun(states=states_c, t=t, parameters=parameters, dt=dt)
+        t += dt
+    np.testing.assert_allclose(states_c, states_np, rtol=1e-10, atol=1e-12)
+
+
+def test_c_helpers_match_numpy_model(tp06):
+    ode, model, fun = tp06
+    assert fun.state_index("V") == model["state_index"]("V")
+    assert fun.parameter_index("g_Kr") == model["parameter_index"]("g_Kr")
+    np.testing.assert_allclose(fun.init_state_values(), model["init_state_values"]())
+    np.testing.assert_allclose(fun.init_parameter_values(), model["init_parameter_values"]())
+    with pytest.raises(KeyError):
+        fun.state_index("not_a_state")
+    with pytest.raises(KeyError):
+        fun.parameter_index("not_a_parameter")
+
+
+def test_init_values_need_counts(toy):
+    unknown = beat.c_backend.CScheme(toy.library_path, "toy")
+    with pytest.raises(ValueError, match="num_states"):
+        unknown.init_state_values()
