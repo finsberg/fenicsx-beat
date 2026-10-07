@@ -23,7 +23,7 @@ from ..ecg import ECGRecovery
 from .config import Config, ConfigError
 from .geometry import build_conductivity, build_geometry
 from .overrides import load_config, physics_hash
-from .runner import RESTART_META, RESULTS, _on_rank0, read_result_times
+from .runner import RESTART_META, RESULTS, _on_rank0, read_restart_meta, read_result_times
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def _check_matches_run(conf: Config, comm) -> None:
     def check() -> None:
         meta = folder / RESTART_META
         if meta.is_file():
-            recorded = json.loads(meta.read_text())["physics_hash"]
+            recorded = read_restart_meta(folder)["physics_hash"]
         elif resolved.is_file():
             recorded = physics_hash(load_config(resolved, environ={}))
         else:

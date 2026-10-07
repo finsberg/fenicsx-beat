@@ -6,7 +6,7 @@ Output folder layout (``conf.output.folder``)::
     run.json               run metadata (versions, ranks, status: running/finished/failed)
     results.bp             io4dolfinx: ``v`` (+ ``output.fields``) every ``output.save_every``
     restart.bp             io4dolfinx: ``v`` and every ODE state (``state_<name>``)
-    restart.json           the latest checkpoint's time/step and the run's physics hash
+    restart.json           the latest checkpoint, under the key ``"ep"``: t, step, physics hash, ...
     output.log             log file (``output_all_cpus.log`` too when running on >1 rank)
     performance.json       timing summary (only with ``output.performance = true``)
 
@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 RESULTS = "results.bp"
 RESTART = "restart.bp"
 RESTART_META = "restart.json"
+#: Key of beat's entry in restart.json, as pulse's is ``"mechanics"``, so that one driver can
+#: keep every library's checkpoint metadata side by side.
+NAMESPACE = "ep"
 RUN_META = "run.json"
 PERFORMANCE = "performance.json"
 
@@ -130,6 +133,18 @@ def _remove_artifacts(folder: Path) -> None:
             p.unlink()
 
 
+def read_restart_meta(folder: Path) -> dict[str, Any]:
+    """The checkpoint metadata in ``folder/restart.json``.
+
+    Returns the ``"ep"`` entry. beat 0.7.1/0.7.2 wrote the same keys at the top level, so a
+    file without an ``"ep"`` key is returned as it is.
+    """
+    data = json.loads((folder / RESTART_META).read_text())
+    if NAMESPACE in data:
+        return data[NAMESPACE]
+    return data
+
+
 def read_result_times(path: Path, comm, name: str = "v") -> np.ndarray:
     """Sorted, unique timestamps of ``name`` in the io4dolfinx file ``path``."""
     return np.unique(io4dolfinx.read_timestamps(filename=path, comm=comm, function_name=name))
@@ -148,7 +163,7 @@ def _output_decision(conf: Config, restart: bool, overwrite: bool) -> tuple[str,
     if restart:
         if not (folder / RESTART_META).is_file():
             return "error", f"Cannot restart: {no_checkpoint}"
-        meta = json.loads((folder / RESTART_META).read_text())
+        meta = read_restart_meta(folder)
         try:
             current = physics_hash(conf)
         except ConfigError as e:
@@ -267,19 +282,23 @@ def _write_restart(sim: Simulation, t: float, step: int, write_data: bool = True
     recomputed from the same checkpoint with the same physics.
     """
     folder = sim.conf.output.folder
+    functions = sim.solver.restart_functions(sim.cell.state_names)
     if write_data:
         path = folder / RESTART
-        for name, f in sim.solver.restart_functions(sim.cell.state_names):
+        for name, f in functions:
             io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=name)
     # restart.json is written last (atomically): it only ever points at a complete checkpoint.
     _write_json(
         folder / RESTART_META,
         {
-            "t": t,
-            "step": step,
-            "physics_hash": physics_hash(sim.conf),
-            "state_names": sim.cell.state_names,
-            "solver": sim.solver.restart_metadata(),
+            NAMESPACE: {
+                "t": t,
+                "step": step,
+                "physics_hash": physics_hash(sim.conf),
+                "functions": [name for name, _ in functions],
+                "state_names": sim.cell.state_names,
+                "solver": sim.solver.restart_metadata(),
+            },
         },
         sim.geo.mesh.comm,
     )
@@ -296,7 +315,7 @@ def _load_restart(sim: Simulation) -> tuple[int, float, np.ndarray]:
     """
     folder = sim.conf.output.folder
     comm = sim.geo.mesh.comm
-    meta = json.loads((folder / RESTART_META).read_text())
+    meta = read_restart_meta(folder)
     if meta["state_names"] != sim.cell.state_names:
         raise ConfigError(
             f"Cannot restart: checkpoint states {meta['state_names']} differ from the cell "

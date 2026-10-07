@@ -183,3 +183,15 @@ def test_visualize_warns_previews_are_rank0_partition_only(finished, caplog):
     _visualize(finished, v=v, tact=tact, path=path, times=times, post=post, comm=_TwoRanks())
     if MPI.COMM_WORLD.rank == 0:
         assert "only rank 0's" in caplog.text
+
+
+@pytest.mark.postprocess
+def test_post_reads_flat_restart_json(finished):
+    """A restart.json written by beat 0.7.1/0.7.2 (flat) still passes the physics check."""
+    if MPI.COMM_WORLD.rank == 0:
+        path = finished.output.folder / "restart.json"
+        flat = dict(json.loads(path.read_text())["ep"])
+        flat.pop("functions")
+        path.write_text(json.dumps(flat))
+    MPI.COMM_WORLD.barrier()
+    run_post(finished, MPI.COMM_WORLD)
