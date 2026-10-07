@@ -24,11 +24,20 @@ solver = beat.odesolver.DolfinODESolver(..., fun=fun, ...)
 or from C code that you already have, for example from `gotranx ode2c`,
 
 ```python
-fun = beat.c_backend.compile_scheme(c_code, scheme="generalized_rush_larsen")
+fun = beat.c_backend.compile_scheme(
+    c_code,
+    scheme="generalized_rush_larsen",
+    num_states=..., num_parameters=...,
+)
 ```
+
+Always pass `num_states` and `num_parameters` here. The generated C code does not know the sizes of
+the arrays, so without them nothing is checked and too-small arrays make the C code read out of
+bounds (`compile_scheme` logs a warning). `from_ode` fills them in.
 
 The function also has `state_index(name)`, `parameter_index(name)`, `init_state_values()` and
 `init_parameter_values()`, which call the functions of the same name in the generated C.
+`init_state_values()` and `init_parameter_values()` need `num_states` and `num_parameters`.
 
 ## Options
 
@@ -36,6 +45,8 @@ The function also has `state_index(name)`, `parameter_index(name)`, `init_state_
 |---|---|---|
 | `scheme` | `"generalized_rush_larsen"` | The name of the scheme (and of the C function) |
 | `codegen_kwargs` (`from_ode` only) | `None` | Passed on to `gotranx.codegen.CCodeGenerator.scheme` |
+| `num_states` | `None` (filled in by `from_ode`) | Checked against the arrays; without it there is no bounds check |
+| `num_parameters` | `None` (filled in by `from_ode`) | Checked against the arrays; without it there is no bounds check |
 | `cache_dir` | `$BEAT_C_CACHE`, else `~/.cache/beat/c_backend` | Where the libraries are stored |
 | `cc` | `$CC`, else `cc` | The C compiler |
 | `cflags` | `("-O3", "-march=native")` | The compiler flags |
@@ -56,6 +67,10 @@ Pass `out=` to write the result into an existing array (it may be `states` itsel
   native flag the cache key includes the CPU features the compiler detects (its predefined macros),
   so a library built on a node with a different CPU (e.g. a login node with AVX-512) is not reused
   on the compute nodes. Pass `cflags=("-O3",)` for a library that runs anywhere.
+- With `-march=native`, all nodes of a multi-node job must have the same CPU type, since rank 0's
+  library is loaded on every node. Otherwise pass portable `cflags=("-O3",)`.
+- `DolfinODESolver(missing_variables=...)` is not supported by the C backend, since the scheme
+  takes no extra arguments.
 - Several jobs can compile the same library into the same cache at the same time.
 
 ## OpenMP

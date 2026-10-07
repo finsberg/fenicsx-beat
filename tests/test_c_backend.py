@@ -304,26 +304,11 @@ def test_target_signature_only_for_native_flags():
 
 
 def test_target_signature_changes_key(cache_dir, monkeypatch):
-    # Monkeypatch target_signature on all ranks
-    def fake_target_signature_a(cc, flags):
-        return (
-            beat.c_backend.target_signature(cc, flags)
-            if not any("native" in f for f in flags)
-            else "cpu-A"
-        )
-
-    def fake_target_signature_b(cc, flags):
-        return (
-            beat.c_backend.target_signature(cc, flags)
-            if not any("native" in f for f in flags)
-            else "cpu-B"
-        )
-
     # Compile with fake signature A
     monkeypatch.setattr(
         beat.c_backend,
         "target_signature",
-        fake_target_signature_a,
+        lambda cc, flags: "cpu-A",
     )
     lib_a = beat.c_backend.compile_scheme(
         TOY_C,
@@ -338,7 +323,7 @@ def test_target_signature_changes_key(cache_dir, monkeypatch):
     monkeypatch.setattr(
         beat.c_backend,
         "target_signature",
-        fake_target_signature_b,
+        lambda cc, flags: "cpu-B",
     )
     lib_b = beat.c_backend.compile_scheme(
         TOY_C,
@@ -449,3 +434,74 @@ def test_openmp_with_unsupported_flag_raises(cache_dir):
             openmp=True,
             cflags=("-not-a-real-flag",),
         )
+
+
+def test_num_threads_without_openmp_raises():
+    with pytest.raises(ValueError, match="openmp=True"):
+        beat.c_backend.compile_scheme(TOY_C, "toy", num_threads=2)
+
+
+def test_num_threads_below_one_raises():
+    with pytest.raises(ValueError, match="at least 1"):
+        beat.c_backend.compile_scheme(TOY_C, "toy", openmp=True, num_threads=0)
+
+
+def test_cflags_string_raises():
+    with pytest.raises(TypeError, match="cflags"):
+        beat.c_backend.compile_scheme(TOY_C, "toy", cflags="-O3")
+
+
+def test_read_only_out_raises(toy):
+    states = np.ones((2, 3))
+    out = np.empty_like(states)
+    out.flags.writeable = False
+    with pytest.raises(ValueError, match="writeable"):
+        toy(states, 0.0, np.array([1.0, 2.0]), 0.1, out=out)
+    # A read-only states is only read
+    states.flags.writeable = False
+    result = toy(states, 0.0, np.array([1.0, 2.0]), 0.1)
+    assert result.shape == (2, 3)
+
+
+def _big_c(n):
+    return f"""
+void big(const double *__restrict states, const double t, const double dt,
+         const double *__restrict parameters, double *values)
+{{
+    for (int i = 0; i < {n}; i++) {{
+        values[i] = states[i] + dt * parameters[i] * (i + 1) + t;
+    }}
+}}
+"""
+
+
+def _check_big(fun, n, n_points):
+    rng = np.random.default_rng(0)
+    states = np.ascontiguousarray(rng.random((n, n_points)))
+    factor = np.arange(1, n + 1)[:, None]
+    p1 = rng.random(n)
+    p2 = np.ascontiguousarray(rng.random((n, n_points)))
+    t, dt = 0.3, 0.01
+    r1 = fun(states, t, p1, dt)
+    np.testing.assert_allclose(r1, states + dt * p1[:, None] * factor + t)
+    r2 = fun(states, t, p2, dt)
+    np.testing.assert_allclose(r2, states + dt * p2 * factor + t)
+    return r1, r2
+
+
+def test_many_states_and_parameters_heap_path(cache_dir):
+    n = 300
+    kwargs = dict(num_states=n, num_parameters=n, cache_dir=cache_dir)
+    serial = beat.c_backend.compile_scheme(_big_c(n), "big", **kwargs)
+    s1, s2 = _check_big(serial, n, 7)
+    if beat.c_backend.openmp_available():
+        threaded = beat.c_backend.compile_scheme(
+            _big_c(n),
+            "big",
+            openmp=True,
+            num_threads=2,
+            **kwargs,
+        )
+        t1, t2 = _check_big(threaded, n, 7)
+        np.testing.assert_array_equal(s1, t1)
+        np.testing.assert_array_equal(s2, t2)

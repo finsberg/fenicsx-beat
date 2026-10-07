@@ -301,3 +301,6 @@ assert all(difference <= 1e-9 for difference in differences.values())
 #   native flag the cache key includes the CPU features the compiler detects (its predefined macros),
 #   so a library built on a login node with a different CPU (e.g. with AVX-512) is not reused on the
 #   compute nodes. Pass `cflags=("-O3",)` for a portable library.
+# - **OpenMP and MPI.** OpenMP threads combine with MPI ranks. Set `num_threads` (or
+#   `OMP_NUM_THREADS`) to at most cores-per-node / ranks-per-node. See the
+#   [guide](../docs/c_backend.md).

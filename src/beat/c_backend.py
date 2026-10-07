@@ -315,6 +315,8 @@ class CScheme:
             out = np.empty_like(states)
         else:
             out = _check_array("out", out)
+            if not out.flags.writeable:
+                raise ValueError("out must be writeable")
             if out.shape != states.shape:
                 raise ValueError(f"out has shape {out.shape}, but states has {states.shape}")
         self._vec(
@@ -361,9 +363,13 @@ def compile_scheme(
     scheme : str, optional
         The name of the per-cell function, by default "generalized_rush_larsen"
     num_states : int | None, optional
-        The number of states, used to check the arrays that the scheme is called with
+        The number of states, used to check the arrays that the scheme is called with.
+        The generated C code has no state or parameter counts, so without ``num_states`` and
+        ``num_parameters`` the arrays are not checked against the model, and arrays that are too
+        small make the C code read out of bounds. :func:`from_ode` fills them in.
     num_parameters : int | None, optional
         The number of parameters, used to check the arrays that the scheme is called with
+        (see ``num_states``)
     cache_dir : str | Path | None, optional
         Where to put the library, by default :func:`default_cache_dir`. Must be visible to all ranks
     cc : str | None, optional
@@ -382,6 +388,17 @@ def compile_scheme(
     CScheme
         The compiled scheme
     """
+    if isinstance(cflags, str):
+        raise TypeError(f"cflags must be a sequence of strings, not a str: {cflags!r}")
+    if num_threads is not None and num_threads < 1:
+        raise ValueError(f"num_threads must be at least 1, got {num_threads}")
+    if num_threads is not None and not openmp:
+        raise ValueError("num_threads is only used with OpenMP; pass openmp=True")
+    if (num_states is None or num_parameters is None) and comm.rank == 0:
+        logger.warning(
+            "compile_scheme was called without num_states and num_parameters, so the arrays are "
+            "not checked against the model and too-small arrays make the C code read out of bounds",
+        )
     cc = cc or default_compiler()
     cache = Path(cache_dir) if cache_dir is not None else default_cache_dir()
     flags = tuple(cflags) + (OPENMP_FLAGS if openmp else ())
@@ -480,6 +497,6 @@ def openmp_available(cc: str | None = None) -> bool:
             result = _run_compiler(
                 [cc, "-fopenmp", "-shared", "-fPIC", "-o", str(Path(tmp) / "omp.so"), str(source)],
             )
-        except FileNotFoundError:
+        except OSError:
             return False
     return result.returncode == 0

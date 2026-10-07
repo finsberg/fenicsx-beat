@@ -5,7 +5,6 @@ parts:
   - caption: Getting started
     chapters:
     - file: docs/math_background.md
-    - file: docs/c_backend.md
     - file: demos/fitzhughnagumo.py
     - file: docs/cli.md
     - file: docs/cli_cluster.md
@@ -34,6 +33,7 @@ parts:
     chapters:
     - file: demos/irksome_model_gotranx.py
     - file: demos/external_operator_gotranx.py
+    - file: docs/c_backend.md
     - file: demos/c_backend.py
     - file: demos/monolithic_external_operator.py
 
