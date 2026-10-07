@@ -121,3 +121,20 @@ def test_library_in_cache_dir(toy, cache_dir):
     assert toy.library_path.is_file()
     assert toy.library_path.parent.parent == cache_dir.resolve()
     assert toy.scheme == "toy"
+
+
+def test_rank0_os_error_raises_on_all_ranks(cache_dir):
+    # A regular file where a directory is needed makes mkdir fail on rank 0 (chmod does not
+    # work as root). Every rank must raise instead of the others hanging in the broadcast.
+    blocker = cache_dir / "blocker"
+    if comm.rank == 0:
+        blocker.write_text("")
+    comm.barrier()
+    with pytest.raises(RuntimeError, match="Error"):
+        beat.c_backend.compile_scheme(
+            TOY_C,
+            "toy",
+            num_states=2,
+            num_parameters=2,
+            cache_dir=blocker / "sub",
+        )

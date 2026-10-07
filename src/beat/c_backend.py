@@ -128,8 +128,8 @@ def build_library(
         try:
             key = cache_key(source, cc, compiler_version(cc), cflags)
             library = _compile(source, cc, cflags, cache_dir / key)
-        except RuntimeError as e:
-            error = str(e)
+        except Exception as e:  # noqa: BLE001 - re-raised on every rank below
+            error = f"{type(e).__name__}: {e}"
     library, error = comm.bcast((library, error), root=0)
     if error is not None:
         raise RuntimeError(error)
