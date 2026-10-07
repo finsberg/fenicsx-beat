@@ -21,9 +21,9 @@ import os
 import platform
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from mpi4py import MPI
 
@@ -31,6 +31,8 @@ import numpy as np
 import numpy.typing as npt
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 DRIVER_PATH = Path(__file__).with_name("c_backend_driver.c")
 LIBRARY_NAME = "libbeat_scheme.so"
@@ -127,6 +129,21 @@ def _check_visible(library: Path, comm: MPI.Intracomm) -> None:
         )
 
 
+def _run_on_rank0(comm: MPI.Intracomm, func: Callable[[], T]) -> T:
+    """Run ``func`` on rank 0 and broadcast its result; raise its error on every rank"""
+    result: T | None = None
+    error: str | None = None
+    if comm.rank == 0:
+        try:
+            result = func()
+        except Exception as e:  # noqa: BLE001 - re-raised on every rank below
+            error = f"{type(e).__name__}: {e}"
+    result, error = comm.bcast((result, error), root=0)
+    if error is not None:
+        raise RuntimeError(error)
+    return result  # type: ignore[return-value]
+
+
 def build_library(
     source: str,
     *,
@@ -136,18 +153,12 @@ def build_library(
     comm: MPI.Intracomm,
 ) -> Path:
     """Compile ``source`` on rank 0 (unless it is cached) and return the library on all ranks"""
-    library: Path | None = None
-    error: str | None = None
-    if comm.rank == 0:
-        try:
-            key = cache_key(source, cc, compiler_version(cc), cflags)
-            library = _compile(source, cc, cflags, cache_dir / key)
-        except Exception as e:  # noqa: BLE001 - re-raised on every rank below
-            error = f"{type(e).__name__}: {e}"
-    library, error = comm.bcast((library, error), root=0)
-    if error is not None:
-        raise RuntimeError(error)
-    assert library is not None
+
+    def build() -> Path:
+        key = cache_key(source, cc, compiler_version(cc), cflags)
+        return _compile(source, cc, cflags, cache_dir / key)
+
+    library = _run_on_rank0(comm, build)
     _check_visible(library, comm)
     return library
 
@@ -408,8 +419,7 @@ def from_ode(
     comm : MPI.Intracomm, optional
         The communicator, by default MPI.COMM_WORLD
     """
-    c_code = generate_c_code(ode, scheme, codegen_kwargs) if comm.rank == 0 else None
-    c_code = comm.bcast(c_code, root=0)
+    c_code = _run_on_rank0(comm, lambda: generate_c_code(ode, scheme, codegen_kwargs))
     return compile_scheme(
         c_code,
         scheme,

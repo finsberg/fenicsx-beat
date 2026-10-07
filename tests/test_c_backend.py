@@ -284,3 +284,9 @@ def test_init_values_need_counts(toy):
     unknown = beat.c_backend.CScheme(toy.library_path, "toy")
     with pytest.raises(ValueError, match="num_states"):
         unknown.init_state_values()
+
+
+def test_from_ode_unknown_scheme_raises_on_all_ranks(tp06, cache_dir):
+    ode, _, _ = tp06
+    with pytest.raises(RuntimeError):
+        beat.c_backend.from_ode(ode, scheme="not_a_scheme", cache_dir=cache_dir)
