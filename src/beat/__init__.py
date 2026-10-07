@@ -3,6 +3,7 @@ from importlib.metadata import metadata
 from . import (
     base_model,
     bidomain_model,
+    c_backend,
     conductivities,
     ecg,
     external_operator_odesolver,
@@ -39,6 +40,7 @@ __all__ = [
     "odesolver",
     "base_model",
     "bidomain_model",
+    "c_backend",
     "BidomainModel",
     "MonodomainModel",
     "monodomain_solver",

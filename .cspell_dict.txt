@@ -263,3 +263,9 @@ Fenton
 alternans
 Flavio
 Alain
+libbeat
+CFLAGS
+cflags
+Werror
+fopenmp
+ascontiguousarray
