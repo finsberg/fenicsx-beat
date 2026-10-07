@@ -108,9 +108,23 @@ def _compile(source: str, cc: str, flags: Sequence[str], directory: Path) -> Pat
         raise RuntimeError(
             f"Compiling the C scheme failed:\n{' '.join(cmd)}\n{result.stderr}{hint}",
         )
+    if library.is_file():
+        # Another job finished the same key first; keep its files
+        Path(c_tmp).unlink(missing_ok=True)
+        Path(lib_tmp).unlink(missing_ok=True)
+        return library
     os.replace(c_tmp, directory / "scheme.c")
     os.replace(lib_tmp, library)
     return library
+
+
+def _check_visible(library: Path, comm: MPI.Intracomm) -> None:
+    """Raise on all ranks if any rank cannot see the library that rank 0 built"""
+    if not comm.allreduce(library.is_file(), op=MPI.LAND):
+        raise RuntimeError(
+            f"Not all ranks can see {library}. The cache directory must be on a file system "
+            "that all ranks share; set BEAT_C_CACHE or pass cache_dir=...",
+        )
 
 
 def build_library(
@@ -134,6 +148,7 @@ def build_library(
     if error is not None:
         raise RuntimeError(error)
     assert library is not None
+    _check_visible(library, comm)
     return library
 
 

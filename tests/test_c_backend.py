@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 from mpi4py import MPI
@@ -138,3 +139,91 @@ def test_rank0_os_error_raises_on_all_ranks(cache_dir):
             num_parameters=2,
             cache_dir=blocker / "sub",
         )
+
+
+def count_compiles(monkeypatch):
+    calls = []
+    original = beat.c_backend._run_compiler
+
+    def counting(cmd):
+        if "-shared" in cmd:
+            calls.append(cmd)
+        return original(cmd)
+
+    monkeypatch.setattr(beat.c_backend, "_run_compiler", counting)
+    return calls
+
+
+def test_cache_hit_does_not_recompile(cache_dir, monkeypatch):
+    calls = count_compiles(monkeypatch)
+    first = beat.c_backend.compile_scheme(TOY_C, "toy", cache_dir=cache_dir)
+    second = beat.c_backend.compile_scheme(TOY_C, "toy", cache_dir=cache_dir)
+    assert first.library_path == second.library_path
+    if comm.rank == 0:
+        assert len(calls) == 1
+    else:
+        assert len(calls) == 0
+
+
+def test_flags_change_key(cache_dir):
+    a = beat.c_backend.compile_scheme(TOY_C, "toy", cache_dir=cache_dir, cflags=("-O2",))
+    b = beat.c_backend.compile_scheme(TOY_C, "toy", cache_dir=cache_dir, cflags=("-O3",))
+    assert a.library_path != b.library_path
+
+
+def test_env_cache_dir(cache_dir, monkeypatch):
+    monkeypatch.setenv("BEAT_C_CACHE", str(cache_dir / "env"))
+    fun = beat.c_backend.compile_scheme(TOY_C, "toy")
+    assert (cache_dir / "env").resolve() in fun.library_path.parents
+
+
+def test_missing_compiler_raises_on_all_ranks(cache_dir):
+    with pytest.raises(RuntimeError, match="does-not-exist-cc"):
+        beat.c_backend.compile_scheme(TOY_C, "toy", cache_dir=cache_dir, cc="does-not-exist-cc")
+
+
+def test_compile_error_raises_with_stderr(cache_dir):
+    with pytest.raises(RuntimeError, match="Compiling the C scheme failed"):
+        beat.c_backend.compile_scheme("void toy(this is not C", "toy", cache_dir=cache_dir)
+    # A failed compile leaves no library behind
+    if comm.rank == 0:
+        assert not list(cache_dir.rglob(beat.c_backend.LIBRARY_NAME))
+
+
+def test_unknown_scheme_name_raises(cache_dir):
+    with pytest.raises(RuntimeError, match="Compiling the C scheme failed"):
+        beat.c_backend.compile_scheme(TOY_C, "not_a_function", cache_dir=cache_dir)
+
+
+def test_concurrent_compiles_of_same_key(tmp_path):
+    source = beat.c_backend.full_source(TOY_C, "toy")
+    directory = tmp_path / "key"
+    results, errors = [], []
+
+    def work():
+        try:
+            results.append(beat.c_backend._compile(source, "cc", ("-O2",), directory))
+        except Exception as e:  # pragma: no cover - reported below
+            errors.append(e)
+
+    threads = [threading.Thread(target=work) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    assert len(set(results)) == 1
+    fun = beat.c_backend.CScheme(results[0], "toy")
+    states = random_states(3)
+    np.testing.assert_allclose(
+        fun(states=states, t=0.0, parameters=np.ones(2), dt=0.1),
+        toy_numpy(states, 0.0, np.ones(2), 0.1),
+        rtol=1e-14,
+    )
+    # Only the library and the source are left, no temporary files
+    assert sorted(p.name for p in directory.iterdir()) == [beat.c_backend.LIBRARY_NAME, "scheme.c"]
+
+
+def test_check_visible_missing_library_raises_on_all_ranks(tmp_path):
+    with pytest.raises(RuntimeError, match="BEAT_C_CACHE"):
+        beat.c_backend._check_visible(tmp_path / "missing.so", comm)
