@@ -18,7 +18,15 @@ import beat
 ode = gotranx.load_ode("tentusscher_panfilov_2006_epi_cell.ode")
 fun = beat.c_backend.from_ode(ode, scheme="generalized_rush_larsen")
 
-solver = beat.odesolver.DolfinODESolver(..., fun=fun, ...)
+ode_solver = beat.odesolver.DolfinODESolver(
+    v_ode=v_ode,  # e.g. a dolfinx.fem.Function in a P1 space
+    v_pde=pde.state,  # pde is a beat.MonodomainModel
+    fun=fun,
+    init_states=fun.init_state_values(),
+    parameters=fun.init_parameter_values(),
+    num_states=ode.num_states,
+    v_index=fun.state_index("V"),
+)
 ```
 
 or from C code that you already have, for example from `gotranx ode2c`,
