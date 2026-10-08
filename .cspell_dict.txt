@@ -47,6 +47,7 @@ confs
 Courtemanche
 cpus
 Cristobal
+ctypes
 Culloch
 deviatoric
 dirichletbc
@@ -115,6 +116,7 @@ Istim
 jacfwd
 Jakub
 jitted
+kwargs
 Joakim
 Kluwer
 Kutta
@@ -130,6 +132,7 @@ Lukas
 Mardal
 matplotlib
 Matteo
+mcpu
 mechanicsproblem
 ment
 meshtags
@@ -266,6 +269,13 @@ Fenton
 alternans
 Flavio
 Alain
+libbeat
+CFLAGS
+cflags
+Werror
+fopenmp
+ascontiguousarray
+DBEAT
 alya
 pytestmark
 savetxt

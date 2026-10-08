@@ -61,6 +61,11 @@ Operator-split PDE/ODE solve per timestep:
   `FEMExternalOperator`. Same scheme/order as today (still calls `fun(states, t, parameters, dt)` by
   keyword, unchanged) — only *how* it's evaluated/wired changes, not the numerics. No install gotcha:
   plain `pip install .[test]` is enough (unlike irksome).
+- **C backend** (`c_backend.py`, `c_backend_driver.c`): `compile_scheme`/`from_ode` compile
+  gotranx-generated per-cell C plus a point-loop driver (rank 0 compiles into a hash-keyed cache,
+  `$BEAT_C_CACHE` or `~/.cache/beat/c_backend`, all ranks load via ctypes) into a drop-in
+  `fun(states, t, parameters, dt)` for `DolfinODESolver`; optional OpenMP. Needs a C compiler at
+  runtime (dolfinx already requires one). Demo: `demos/c_backend.py`.
 - **Conductivities/units** (`conductivities.py`, `units.py`): `pint` quantities → `M` via
   `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop").
 - **Geometry** (`geometry.py`): `Geometry` NamedTuple + 2D/3D slab helpers; real ventricular geometries

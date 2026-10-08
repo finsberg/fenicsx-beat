@@ -33,6 +33,8 @@ parts:
     chapters:
     - file: demos/irksome_model_gotranx.py
     - file: demos/external_operator_gotranx.py
+    - file: docs/c_backend.md
+    - file: demos/c_backend.py
     - file: demos/monolithic_external_operator.py
 
   - caption: API documentation
