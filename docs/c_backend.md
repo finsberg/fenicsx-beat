@@ -35,7 +35,8 @@ or from C code that you already have, for example from `gotranx ode2c`,
 fun = beat.c_backend.compile_scheme(
     c_code,
     scheme="generalized_rush_larsen",
-    num_states=..., num_parameters=...,
+    num_states=...,
+    num_parameters=...,
 )
 ```
 

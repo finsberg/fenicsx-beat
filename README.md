@@ -81,9 +81,9 @@ def fitzhughnagumo_forward_euler(t, states, parameters, dt):
     values[0] = ds_dt * dt + s
 
     v_th = v_amp * a + v_rest
-    I = -s * (c_2 / v_amp) * (v - v_rest) + (
-        ((c_1 / v_amp**2) * (v - v_rest)) * (v - v_th)
-    ) * (-v + v_peak)
+    I = -s * (c_2 / v_amp) * (v - v_rest) + (((c_1 / v_amp**2) * (v - v_rest)) * (v - v_th)) * (
+        -v + v_peak
+    )
     dV_dt = I + i_app
     values[1] = v + dV_dt * dt
     return values
@@ -202,7 +202,6 @@ while t < T:
     i += 1
 
 vtx.close()
-
 ```
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/simple.gif)
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/joss-paper/paper_figure.png)

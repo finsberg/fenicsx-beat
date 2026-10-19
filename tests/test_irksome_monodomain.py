@@ -23,17 +23,21 @@ irksome = pytest.importorskip("irksome")
         ),
         (
             1.0,
-            lambda x, t: ufl.cos(2 * ufl.pi * x[0])
-            * ufl.cos(2 * ufl.pi * x[1])
-            * (ufl.cos(t) + 8 * pow(ufl.pi, 2) * ufl.sin(t)),
+            lambda x, t: (
+                ufl.cos(2 * ufl.pi * x[0])
+                * ufl.cos(2 * ufl.pi * x[1])
+                * (ufl.cos(t) + 8 * pow(ufl.pi, 2) * ufl.sin(t))
+            ),
             lambda x, t: ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.sin(t),
             2e-4,
         ),
         (
             2.0,
-            lambda x, t: ufl.cos(2 * ufl.pi * x[0])
-            * ufl.cos(2 * ufl.pi * x[1])
-            * (ufl.cos(t) + 16 * pow(ufl.pi, 2) * ufl.sin(t)),
+            lambda x, t: (
+                ufl.cos(2 * ufl.pi * x[0])
+                * ufl.cos(2 * ufl.pi * x[1])
+                * (ufl.cos(t) + 16 * pow(ufl.pi, 2) * ufl.sin(t))
+            ),
             lambda x, t: ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1]) * ufl.sin(t),
             2e-4,
         ),
