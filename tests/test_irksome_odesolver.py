@@ -375,6 +375,6 @@ def test_irksome_multi_odesolver_temporal_convergence():
             np.log(e1 / e2) / np.log(dts[i] / dts[i + 1])
             for i, (e1, e2) in enumerate(zip(marker_errors[:-1], marker_errors[1:]))
         ]
-        assert all(
-            rate > 1.9 for rate in rates
-        ), f"Expected 2nd order convergence in region {marker}, got {rates}"
+        assert all(rate > 1.9 for rate in rates), (
+            f"Expected 2nd order convergence in region {marker}, got {rates}"
+        )

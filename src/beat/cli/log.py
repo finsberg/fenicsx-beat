@@ -26,9 +26,9 @@ def add_logfile_handler(output_folder: Path, comm=MPI.COMM_WORLD):
     size = comm.size
 
     FORMAT_ALL = (
-        "%(asctime)s %(rank)s%(name)s - %(levelname)s - " "%(message)s (%(filename)s:%(lineno)d)"
+        "%(asctime)s %(rank)s%(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
     )
-    FORMAT = "%(asctime)s %(name)s - %(levelname)s - " "%(message)s (%(filename)s:%(lineno)d)"
+    FORMAT = "%(asctime)s %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
 
     class Formatter(logging.Formatter):
         def format(self, record):
@@ -63,9 +63,7 @@ def setup_logging(level: int = logging.INFO, log_all_cpus: bool = False, comm=MP
     rank = comm.rank
     size = comm.size
 
-    FORMAT = (
-        "%(asctime)s %(rank)s%(name)s - %(levelname)s - " "%(message)s (%(filename)s:%(lineno)d)"
-    )
+    FORMAT = "%(asctime)s %(rank)s%(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
 
     class Formatter(logging.Formatter):
         def format(self, record):
