@@ -29,7 +29,7 @@ from .config import (
     StimulusConfig,
     ms,
 )
-from .geometry import CLIGeometry, get_marker
+from .geometry import CLIGeometry, default_endo_markers, get_marker
 
 logger = logging.getLogger(__name__)
 
@@ -136,14 +136,15 @@ def _random(
     fdim = mesh.topology.dim - 1
     if geo.ffun is None:
         raise ConfigError("random_endocardial stimulus requires facet markers")
-    facets = np.concatenate([geo.ffun.find(get_marker(geo, m)[0]) for m in conf.markers])
+    markers = conf.markers or default_endo_markers(geo)
+    facets = np.concatenate([geo.ffun.find(get_marker(geo, m)[0]) for m in markers])
     num_owned = mesh.topology.index_map(fdim).size_local
     facets = facets[facets < num_owned]
     local = dolfinx.mesh.compute_midpoints(mesh, fdim, facets.astype(np.int32))
     all_mid = np.concatenate(mesh.comm.allgather(local))
     if len(all_mid) < conf.num_points:
         raise ConfigError(
-            f"random_endocardial: only {len(all_mid)} facets on {conf.markers}, "
+            f"random_endocardial: only {len(all_mid)} facets on {markers}, "
             f"fewer than num_points={conf.num_points}",
         )
     # Choose on rank 0 with a fixed seed and broadcast -> identical on any number of ranks.

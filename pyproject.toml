@@ -78,15 +78,15 @@ cli = [
     "pydantic>=2",
     "pydantic-pint",
     "toml",
-    "cardiac-geometriesx",
+    "cardiac-geometriesx>=0.17.0",
     "gotranx",
     "io4dolfinx",
 ]
 demos = [
-   "cardiac-geometriesx",
-   "fenicsx-ldrb",
+   "cardiac-geometriesx>=0.17.0",
+   "fenicsx-ldrb>=0.2.0",
    "gotranx",
-   "ukb-atlas",
+   "ukb-atlas>=2.0",
    "io4dolfinx",
    "jax[cpu]",
 ]

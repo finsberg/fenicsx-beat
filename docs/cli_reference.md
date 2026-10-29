@@ -205,7 +205,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | `method` | 'transmural' | `'transmural'` |  |
 | `endo_size` | float | `0.3` |  |
 | `epi_size` | float | `0.3` |  |
-| `endo_markers` | list[str] (optional) | – | Facet markers of the endocardium. Default: ["ENDO"] if present, else ["LV", "RV"] (BiV) |
+| `endo_markers` | list[str] (optional) | – | Facet markers of the endocardium. Default: ["ENDO"] if present, else ["LV_ENDO", "RV_ENDO"] (UKB) if present, else ["LV", "RV"] (BiV ellipsoid) |
 | `epi_marker` | str | `'EPI'` |  |
 
 ### CellMarkerLayers (`cell_markers`)
@@ -252,7 +252,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | `period` | Quantity (optional) | – | If set, repeat the pulse every period |
 | `num_pulses` | int (optional) | – | Number of pulses (requires period). Default: until the end time |
 | `type` | 'random_endocardial' | `'random_endocardial'` |  |
-| `markers` | list[str] | `['LV', 'RV']` |  |
+| `markers` | list[str] (optional) | – | Facet markers of the endocardium. Default: ["ENDO"] if present, else ["LV_ENDO", "RV_ENDO"] (UKB) if present, else ["LV", "RV"] (BiV ellipsoid) |
 | `num_points` | int | `200` |  |
 | `delay_range` | tuple[Quantity, Quantity] | `('0 ms', '4 ms')` |  |
 | `seed` | int | `0` |  |

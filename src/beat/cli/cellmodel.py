@@ -15,7 +15,7 @@ import numpy as np
 
 from ..utils import expand_layer, expand_layer_biv
 from .config import CellConfig, ConfigError, ms
-from .geometry import CLIGeometry, get_marker
+from .geometry import CLIGeometry, default_endo_markers, get_marker
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +219,7 @@ def build_region_markers(
     if layers.method == "transmural":
         if geo.ffun is None:
             raise ConfigError("cell.layers.method = 'transmural' requires facet markers")
-        endo = layers.endo_markers or (["ENDO"] if "ENDO" in geo.markers else ["LV", "RV"])
+        endo = layers.endo_markers or default_endo_markers(geo)
         epi = get_marker(geo, layers.epi_marker)[0]
         ids = [get_marker(geo, m)[0] for m in endo]
         if len(ids) == 1:
