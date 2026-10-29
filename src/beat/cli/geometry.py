@@ -41,6 +41,19 @@ def get_marker(geo: CLIGeometry, name: str) -> tuple[int, int]:
     return geo.markers[name]
 
 
+def default_endo_markers(geo: CLIGeometry) -> list[str]:
+    """Endocardial facet markers of a cardiac-geometriesx geometry.
+
+    ``ENDO`` (slab, LV ellipsoid), ``LV_ENDO``/``RV_ENDO`` (UKB, ukb-atlas >= 2.0), else
+    ``LV``/``RV`` (BiV ellipsoid).
+    """
+    if "ENDO" in geo.markers:
+        return ["ENDO"]
+    if "LV_ENDO" in geo.markers:
+        return [m for m in ("LV_ENDO", "RV_ENDO") if m in geo.markers]
+    return ["LV", "RV"]
+
+
 def _axis_facet_tags(
     mesh: dolfinx.mesh.Mesh,
     lengths: list[float],

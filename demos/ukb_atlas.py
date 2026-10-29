@@ -73,8 +73,8 @@ epi_marker = 2
 endo_epi = beat.utils.expand_layer_biv(
     V=V,
     ft=geo.ffun,
-    endo_lv_marker=geo.markers["LV"][0],
-    endo_rv_marker=geo.markers["RV"][0],
+    endo_lv_marker=geo.markers["LV_ENDO"][0],
+    endo_rv_marker=geo.markers["RV_ENDO"][0],
     epi_marker=geo.markers["EPI"][0],
     endo_size=0.3,
     epi_size=0.3,
@@ -249,8 +249,8 @@ np.random.seed(0)
 # We will stimulate 900 points on the endocardial layer, and we do this by first finding the facets on the endocardial layer and then selecting 900 random points on these facets.
 
 num_points = 900
-lv_endo_facets = geo.ffun.find(geo.markers["LV"][0])
-rv_endo_facets = geo.ffun.find(geo.markers["RV"][0])
+lv_endo_facets = geo.ffun.find(geo.markers["LV_ENDO"][0])
+rv_endo_facets = geo.ffun.find(geo.markers["RV_ENDO"][0])
 endo_facets = np.concatenate([lv_endo_facets, rv_endo_facets])
 
 # Distribute the requested number of stimulus points over MPI ranks.

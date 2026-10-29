@@ -9,7 +9,7 @@ requires = [
 
 [project]
 name = "fenicsx-beat"
-version = "0.7.2"
+version = "0.9.0"
 description = "Library to run cardiac EP simulations"
 authors = [{name = "Henrik Finsberg", email = "henriknf@simula.no"}]
 license = "MIT"
@@ -78,15 +78,15 @@ cli = [
     "pydantic>=2",
     "pydantic-pint",
     "toml",
-    "cardiac-geometriesx",
+    "cardiac-geometriesx>=0.17.0",
     "gotranx",
     "io4dolfinx",
 ]
 demos = [
-   "cardiac-geometriesx",
-   "fenicsx-ldrb",
+   "cardiac-geometriesx>=0.17.0",
+   "fenicsx-ldrb>=0.2.0",
    "gotranx",
-   "ukb-atlas",
+   "ukb-atlas>=2.0",
    "io4dolfinx",
    "jax[cpu]",
 ]
@@ -243,7 +243,7 @@ tag = true
 sign_tags = false
 tag_name = "v{new_version}"
 tag_message = "Bump version: {current_version} → {new_version}"
-current_version = "0.7.2"
+current_version = "0.9.0"
 
 
 [[tool.bumpversion.files]]
