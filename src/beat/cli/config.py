@@ -235,6 +235,12 @@ class SteadyStateConfig(_Base):
     track: list[str] = Field(default_factory=list, description="States to record")
 
 
+ENDO_MARKERS_DEFAULT = (
+    'Facet markers of the endocardium. Default: ["ENDO"] if present, else ["LV_ENDO", '
+    '"RV_ENDO"] (UKB) if present, else ["LV", "RV"] (BiV ellipsoid)'
+)
+
+
 class NoLayers(_Base):
     method: Literal["none"] = "none"
 
@@ -245,8 +251,7 @@ class TransmuralLayers(_Base):
     epi_size: float = Field(default=0.3, ge=0, le=1)
     endo_markers: list[str] | None = Field(
         default=None,
-        description='Facet markers of the endocardium. Default: ["ENDO"] if present, '
-        'else ["LV", "RV"] (BiV)',
+        description=ENDO_MARKERS_DEFAULT,
     )
     epi_marker: str = "EPI"
 
@@ -399,7 +404,11 @@ class RandomEndocardialStimulus(_StimulusBase):
     _amplitude_dims: ClassVar[tuple[int, ...]] = (3,)  # always volumetric
 
     type: Literal["random_endocardial"] = "random_endocardial"
-    markers: list[str] = Field(default_factory=lambda: ["LV", "RV"], min_length=1)
+    markers: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description=ENDO_MARKERS_DEFAULT,
+    )
     num_points: int = Field(default=200, ge=1)
     delay_range: tuple[Time, Time] = Field(
         default_factory=lambda: (_q("0 ms"), _q("4 ms")),

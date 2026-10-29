@@ -12,6 +12,7 @@ from beat.cli.geometry import (
     build_fibers,
     build_geometry,
     cache_folder,
+    default_endo_markers,
     get_marker,
 )
 
@@ -56,6 +57,24 @@ def test_get_marker_unknown_lists_available(tmp_path):
     )
     with pytest.raises(ConfigError, match="X0"):
         get_marker(geo, "ENDO")
+
+
+@pytest.mark.parametrize(
+    "names, expected",
+    [
+        (["ENDO", "EPI", "BASE"], ["ENDO"]),  # slab, LV ellipsoid
+        (["LV", "RV", "EPI", "BASE"], ["LV", "RV"]),  # BiV ellipsoid
+        (["LV_ENDO", "RV_ENDO", "EPI", "MV", "AV", "TV", "PV"], ["LV_ENDO", "RV_ENDO"]),  # UKB BiV
+        (["LV_ENDO", "RV_SEPTUM", "EPI", "MV", "AV"], ["LV_ENDO"]),  # UKB LV only
+    ],
+)
+def test_default_endo_markers(tmp_path, names, expected):
+    geo = build_geometry(
+        geom(tmp_path, type="interval", length=1.0, dx=0.5).geometry,
+        MPI.COMM_WORLD,
+    )
+    geo.markers = {name: (i + 1, 2) for i, name in enumerate(names)}
+    assert default_endo_markers(geo) == expected
 
 
 def test_from_geometry_fibers_requires_f0(tmp_path):

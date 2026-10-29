@@ -34,7 +34,7 @@ v_name = "v"
 parameters = { i_Stim_Amplitude = 0.0 }   # PDE stimulus only, as in the demo
 
 [cell.layers]
-method = "transmural"       # endo_markers default to ["LV", "RV"] (no single "ENDO" marker)
+method = "transmural"       # endo_markers default to ["LV_ENDO", "RV_ENDO"] (UKB markers)
 endo_size = 0.3
 epi_size = 0.3
 
@@ -48,7 +48,7 @@ parameters = { celltype = 1 }
 
 [[stimulus]]
 type = "random_endocardial"   # mimics Purkinje-fibre-like near-simultaneous activation
-markers = ["LV", "RV"]
+markers = ["LV_ENDO", "RV_ENDO"]
 num_points = 900
 delay_range = ["0 ms", "4 ms"]
 tol = 1.0
