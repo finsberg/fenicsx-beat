@@ -149,3 +149,36 @@ def test_monodomain_temporal_convergence():
 
     rates = [np.log(e1 / e2) / np.log(2) for e1, e2 in zip(errors[:-1], errors[1:])]
     assert all(rate >= 2.0 for rate in rates)
+
+
+@pytest.mark.parametrize("theta", (0.5, 1.0))
+@pytest.mark.parametrize("stimulus", (True, False))
+def test_monodomain_rhs_matrix_matches_assembled_rhs(theta, stimulus):
+    """B v_ + L_0 is the assembled right-hand side, also after the time step changes"""
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, 12, 12, dolfinx.cpp.mesh.CellType.triangle)
+    x = ufl.SpatialCoordinate(mesh)
+    # Anisotropic and varying in space, as a conductivity tensor built from fibres is
+    M = ufl.as_matrix(((2.0 + x[0], 0.3 * x[1]), (0.3 * x[1], 0.5)))
+
+    def run(rhs_matrix):
+        time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+        I_s = ufl.sin(3 * x[0]) * ufl.cos(time) if stimulus else None
+        model = beat.MonodomainModel(
+            time=time,
+            mesh=mesh,
+            M=M,
+            I_s=I_s,
+            C_m=1.5,
+            params=dict(theta=theta, rhs_matrix=rhs_matrix),
+        )
+        model.v_.interpolate(lambda x: np.cos(np.pi * x[0]) * np.sin(np.pi * x[1]))
+        model.solve((0.0, 0.05), dt=0.01)
+        model.assign_previous()
+        model.solve((0.05, 0.1), dt=0.025)
+        return model.v.x.array.copy()
+
+    v_matrix = run(rhs_matrix=True)
+    v_assembled = run(rhs_matrix=False)
+    assert np.linalg.norm(v_assembled) > 0.1
+    assert np.allclose(v_matrix, v_assembled, rtol=1e-12, atol=1e-12)
