@@ -9,6 +9,7 @@ import basix
 import dolfinx
 import dolfinx.fem.petsc
 import ufl
+from ufl.algorithms.analysis import extract_coefficients, extract_constants
 from ufl.core.expr import Expr
 
 from .base_model import BaseModel
@@ -31,7 +32,10 @@ class MonodomainModel(BaseModel):
     together with the system matrix, i.e. only when the time step changes, and every step
     assembles only :math:`L_0` and adds the product :math:`B v_{n}`. This assumes, like the
     system matrix already does, that the conductivity and the capacitance do not change in
-    time. Set ``rhs_matrix`` to False to assemble the whole right-hand side every step.
+    time. Set ``rhs_matrix`` to False to assemble the whole right-hand side every step;
+    this is also done, with a warning, when the right-hand side is not affine in
+    :math:`v_{n}` or :math:`B` depends on data the system matrix does not (e.g. a stimulus
+    linear in :math:`v_{n}` that varies in time).
 
     """
 
@@ -126,12 +130,24 @@ class MonodomainModel(BaseModel):
         if not self.parameters["rhs_matrix"]:
             return
 
-        _, L = self.variational_forms(self._timestep)
+        a, L = self.variational_forms(self._timestep)
         B = ufl.algorithms.expand_derivatives(
             ufl.derivative(L, self.v_, ufl.TrialFunction(self.V)),
         )
         if not ufl.algorithms.expand_derivatives(ufl.derivative(B, self.v_)).empty():
             logger.warning("The right-hand side is not affine in v_; assembling it every step")
+            return
+        # B is only re-assembled with the system matrix, so it may depend on nothing the
+        # system matrix does not. A stimulus linear in v_ ends up in B, and may depend on
+        # the time or on a field that changes between steps.
+        if not (
+            set(extract_coefficients(B)) <= set(extract_coefficients(a))
+            and set(extract_constants(B)) <= set(extract_constants(a))
+        ):
+            logger.warning(
+                "The right-hand side matrix depends on data the system matrix does not; "
+                "assembling the right-hand side every step",
+            )
             return
         L0 = ufl.replace(L, {self.v_: ufl.zero()})
 
@@ -152,7 +168,7 @@ class MonodomainModel(BaseModel):
             # right-hand side, and the constrained columns act on v_ as in the assembled form
             B_form, B = self._rhs_B
             B.zeroEntries()
-            dolfinx.fem.petsc.assemble_matrix(B, B_form)
+            dolfinx.fem.petsc.assemble_matrix(B, B_form)  # type: ignore[arg-type]
             B.assemble()
 
     def _assemble_rhs(self) -> None:
