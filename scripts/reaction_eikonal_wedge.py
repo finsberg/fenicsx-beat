@@ -30,7 +30,12 @@ T_R50 = 305.0  # ms, 50% repolarisation instant of the paper's Fig. 5
 GRID_N = 101
 NO_ACTIVATION = 1e9  # sentinel for dofs that never activated
 PROBES = {"P_E": (25.0, 12.5, 2.5), "endo": (21.25, 12.5, 2.5), "M": (11.875, 12.5, 2.5)}
-PETSC = {"ksp_type": "cg", "pc_type": "hypre", "pc_hypre_type": "boomeramg"}
+PETSC = {
+    "ksp_type": "cg",
+    "pc_type": "hypre",
+    "pc_hypre_type": "boomeramg",
+    "ksp_rtol": 1e-8,
+}
 CELL_TYPES = {"EPI": "epi", "M": "M", "ENDO": "endo"}
 
 
@@ -124,6 +129,27 @@ def build(model, dx, cv, comm):
     return beat.MonodomainSplittingSolver(pde=pde, ode=ode), pde.v, t_a, wedge
 
 
+class PointEvaluator:
+    """Evaluate a Function at fixed points; the point location is done once"""
+
+    def __init__(self, mesh, points):
+        self.comm = mesh.comm
+        self.num_points = len(points)
+        tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
+        cand = dolfinx.geometry.compute_collisions_points(tree, points)
+        adj = dolfinx.geometry.compute_colliding_cells(mesh, cand, points)
+        self.indices = np.flatnonzero(adj.offsets[1:] - adj.offsets[:-1])
+        self.cells = adj.array[adj.offsets[self.indices]]
+        self.points = points[self.indices]
+
+    def __call__(self, u):
+        u.x.scatter_forward()
+        out = np.full(self.num_points, -np.inf)
+        out[self.indices] = u.eval(self.points, self.cells).ravel()
+        self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
+        return out
+
+
 def main():
     p = argparse.ArgumentParser(
         description=__doc__,
@@ -157,11 +183,13 @@ def main():
     out = args.outdir
     if comm.rank == 0:
         out.mkdir(parents=True, exist_ok=True)
+    comm.Barrier()
     name = f"{args.model}_dx{args.dx:g}"
     vtx = None
     if args.vtx:
         vtx = dolfinx.io.VTXWriter(comm, out / f"{name}.bp", [v], engine="BP4")
-    trace_t, traces = [0.0], [scifem.evaluate_function(v, probes).ravel()]
+    probe_eval = PointEvaluator(wedge.geometry.mesh, probes)
+    trace_t, traces = [0.0], [probe_eval(v)]
     v_r50_grid = np.full(gx.size, np.nan)
     v_r50_line = np.full(line_x.size, np.nan)
     t, step, dt = 0.0, 0, args.dt
@@ -173,7 +201,7 @@ def main():
         tracker.update(t)
         if t <= 60.0 or step % sample == 0:
             trace_t.append(t)
-            traces.append(scifem.evaluate_function(v, probes).ravel())
+            traces.append(probe_eval(v))
         if np.isnan(v_r50_line).all() and t >= T_R50 - 1e-9:
             v_r50_grid = scifem.evaluate_function(v, grid).ravel()
             v_r50_line = scifem.evaluate_function(v, line).ravel()

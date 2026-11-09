@@ -40,11 +40,12 @@ def fig2(results, ref_dx, coarse_dx, out):
     fig = plt.figure(figsize=(13, 7))
     grid = fig.add_gridspec(2, 4, width_ratios=[1, 1, 1, 1.1])
     ref = load(results, "rd", ref_dx)
+    im = None
     for row, dx in enumerate((ref_dx, coarse_dx)):
         for col, model in enumerate(("rd", "re+", "re-")):
             ax = fig.add_subplot(grid[row, col])
             d = load(results, model, dx)
-            if d is None:
+            if d is None or not np.isfinite(d["t_a"]).any():
                 ax.set_axis_off()
                 continue
             im = ax.contourf(
@@ -70,7 +71,8 @@ def fig2(results, ref_dx, coarse_dx, out):
                 ax.set_title(LABEL[model])
             if col == 0:
                 ax.set_ylabel(f"{dx * 1000:g} µm")
-    fig.colorbar(im, ax=fig.axes, location="bottom", shrink=0.4, label="$t_a$ (ms)")
+    if im is not None:
+        fig.colorbar(im, ax=fig.axes, location="bottom", shrink=0.4, label="$t_a$ (ms)")
     sub = grid[:, 3].subgridspec(3, 1, hspace=0.8)
     for i, model in enumerate(("rd", "re+", "re-")):
         d = load(results, model, coarse_dx)
@@ -139,7 +141,7 @@ def fig5(results, ref_dx, coarse_dx, out):
     da = a.twinx()
     for model, dx in (("rd", ref_dx), ("re+", coarse_dx), ("re-", coarse_dx)):
         d = load(results, model, dx)
-        if d is None:
+        if d is None or np.isnan(d["v_r50_line"]).all():
             continue
         x, v = d["line_x"], d["v_r50_line"]
         a.plot(x, v, label=f"{LABEL[model]} {dx * 1000:g} µm")
