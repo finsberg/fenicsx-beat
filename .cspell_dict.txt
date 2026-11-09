@@ -289,3 +289,7 @@ DBEAT
 alya
 pytestmark
 savetxt
+subsimplices
+Minv
+lexsort
+Vinv

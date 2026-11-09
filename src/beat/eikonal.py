@@ -15,14 +15,21 @@ from __future__ import annotations
 
 import ctypes
 import logging
-from collections.abc import Sequence
+import warnings
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from mpi4py import MPI
+from petsc4py import PETSc
 
+import basix
+import dolfinx
 import numpy as np
 import numpy.typing as npt
+import pint
+import ufl
 
 from . import c_backend
 
@@ -162,3 +169,260 @@ def vertex_connectivity(
     nb_ptr = np.zeros(num_vertices + 1, dtype=np.int32)
     np.cumsum(np.bincount(key // num_vertices, minlength=num_vertices), out=nb_ptr[1:])
     return v2c_ptr, v2c, nb_ptr, (key % num_vertices).astype(np.int32)
+
+
+# Sub-simplices of each supported cell, in basix reference vertex numbering (P1 dof order)
+_SUBSIMPLICES: dict[dolfinx.mesh.CellType, npt.NDArray[np.int64]] = {
+    dolfinx.mesh.CellType.triangle: np.array([[0, 1, 2]]),
+    dolfinx.mesh.CellType.tetrahedron: np.array([[0, 1, 2, 3]]),
+}
+# (row, column) of the 6 stored components of the symmetric 3x3 metric
+_METRIC_COMPONENTS = ((0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2))
+
+
+@dataclass(frozen=True)
+class Source:
+    """Vertices where :math:`t_a = t_0`
+
+    ``marker`` is either a function ``x -> bool array`` of the coordinates (``x`` has shape
+    ``(3, num_points)``, as in :func:`dolfinx.fem.locate_dofs_geometrical`), or a pair
+    ``(meshtags, value)``: all vertices of the entities tagged with ``value``.
+    """
+
+    marker: (
+        Callable[[npt.NDArray[np.float64]], npt.NDArray[np.bool_]]
+        | tuple[dolfinx.mesh.MeshTags, int]
+    )
+    t0: float = 0.0
+
+
+def _subsimplices(mesh: Any) -> npt.NDArray[np.int64]:
+    if len(mesh.topology.entity_types[-1]) > 1:
+        raise NotImplementedError("The eikonal solver does not support mixed-topology meshes")
+    cell_type = mesh.topology.cell_type
+    if cell_type not in _SUBSIMPLICES:
+        raise ValueError(f"The eikonal solver does not support {cell_type.name} cells")
+    return _SUBSIMPLICES[cell_type]
+
+
+def _speed(value: Any, mesh_unit: str) -> Any:
+    if isinstance(value, pint.Quantity):
+        value = float(value.to(f"{mesh_unit}/ms").magnitude)
+    if isinstance(value, (int, float)) and value <= 0:
+        raise ValueError(f"Velocities must be positive, got {value}")
+    return value
+
+
+def _num_local_cells(mesh: dolfinx.mesh.Mesh) -> int:
+    imap = mesh.topology.index_map(mesh.topology.dim)
+    return imap.size_local + imap.num_ghosts
+
+
+def cell_metric(
+    mesh: dolfinx.mesh.Mesh,
+    velocities: Sequence[Any],
+    fibers: Sequence[Any],
+    mesh_unit: str = "mm",
+) -> npt.NDArray[np.float64]:
+    """:math:`V^{-1} = \\sum_i v_i^{-2} e_i e_i^T` at the midpoint of every local cell
+
+    ``velocities`` are floats (mesh units per ms), pint quantities, Constants or Functions;
+    ``fibers`` are the directions (Constants, Functions or UFL vectors), normalised here. Give
+    one velocity and one direction per geometric dimension. Returns ``(num_cells, 6)``
+    components ``(xx, yy, zz, xy, xz, yz)``, with ``zz = 1`` on 2D meshes.
+    """
+    gdim = mesh.geometry.dim
+    if len(velocities) != gdim or len(fibers) != gdim:
+        raise ValueError(
+            f"Give one velocity and one direction per geometric dimension ({gdim}), got "
+            f"{len(velocities)} velocities and {len(fibers)} directions",
+        )
+    Minv = None
+    for v, f in zip(velocities, fibers):
+        if f is None:
+            raise ValueError("All directions must be given (got None)")
+        e = f / ufl.sqrt(ufl.dot(f, f))
+        term = ufl.outer(e, e) / _speed(v, mesh_unit) ** 2
+        Minv = term if Minv is None else Minv + term
+    assert Minv is not None
+    X = basix.geometry(mesh.basix_cell()).mean(axis=0, keepdims=True)
+    num_cells = _num_local_cells(mesh)
+    values = dolfinx.fem.Expression(Minv, X).eval(mesh, np.arange(num_cells, dtype=np.int32))
+    values = np.asarray(values).reshape(num_cells, gdim, gdim)
+    metric = np.zeros((num_cells, 6))
+    metric[:, 2] = 1.0
+    for k, (a, b) in enumerate(_METRIC_COMPONENTS):
+        if a < gdim and b < gdim:
+            metric[:, k] = values[:, a, b]
+    if not (np.isfinite(metric).all() and (metric[:, :3] > 0).all()):
+        raise ValueError("Velocities must be positive and finite everywhere")
+    return metric
+
+
+class EikonalSolver:
+    """Solve the eikonal equation for activation times on ``mesh``
+
+    The mesh, the metric :math:`V^{-1}` and the connectivity are set up once, so
+    :meth:`solve` can be called for many source sets.
+
+    Parameters
+    ----------
+    mesh : dolfinx.mesh.Mesh
+        The mesh (triangles, tetrahedra, quadrilaterals or hexahedra; any geometry degree).
+        Only its vertices are used: the result is a P1 Function.
+    velocities : Sequence
+        Conduction velocities along ``fibers`` (mesh units per ms): floats, pint quantities,
+        Constants or (DG0/P1/...) Functions, evaluated at cell midpoints
+    fibers : Sequence
+        The directions (e.g. ``(f0, s0, n0)``), normalised at the cell midpoints
+    mesh_unit : str, optional
+        Unit of the mesh coordinates, used to convert pint velocities, by default "mm"
+    openmp, num_threads, cc, cflags, cache_dir
+        Kernel compilation, see :func:`compile_kernel`
+    """
+
+    def __init__(
+        self,
+        mesh: dolfinx.mesh.Mesh,
+        velocities: Sequence[Any],
+        fibers: Sequence[Any],
+        *,
+        mesh_unit: str = "mm",
+        openmp: bool = False,
+        num_threads: int | None = None,
+        cc: str | None = None,
+        cflags: Sequence[str] = c_backend.DEFAULT_CFLAGS,
+        cache_dir: str | Path | None = None,
+    ) -> None:
+        split = _subsimplices(mesh)
+        self.mesh = mesh
+        self.V = dolfinx.fem.functionspace(mesh, ("P", 1))
+        num_cells = _num_local_cells(mesh)
+        dofs = self.V.dofmap.list[:num_cells]
+        self._cells = np.ascontiguousarray(
+            dofs[:, split].reshape(-1, split.shape[1]),
+            dtype=np.int32,
+        )
+        parent = np.repeat(np.arange(num_cells), split.shape[0])
+        self._metric = np.ascontiguousarray(
+            cell_metric(mesh, velocities, fibers, mesh_unit)[parent],
+        )
+        # P1 dof coordinates are the vertex coordinates, also for higher-order geometry
+        self._x = np.ascontiguousarray(self.V.tabulate_dof_coordinates(), dtype=np.float64)
+        self._connectivity = vertex_connectivity(len(self._x), self._cells)
+        self._kernel = compile_kernel(
+            openmp=openmp,
+            num_threads=num_threads,
+            cc=cc,
+            cflags=cflags,
+            cache_dir=cache_dir,
+            comm=mesh.comm,
+        )
+        self._work = dolfinx.fem.Function(self.V)
+        self.stats: dict[str, int] = {}
+
+    def _source_dofs(self, source: Source) -> npt.NDArray[np.int32]:
+        if callable(source.marker):
+            return dolfinx.fem.locate_dofs_geometrical(self.V, source.marker)
+        tags, value = source.marker
+        self.mesh.topology.create_connectivity(tags.dim, self.mesh.topology.dim)
+        return dolfinx.fem.locate_dofs_topological(self.V, tags.dim, tags.find(value))
+
+    def _min_exchange(self, t: npt.NDArray[np.float64]) -> None:
+        """Every rank's copy of a vertex becomes the minimum over all ranks (PETSc has no
+        MIN_VALUES, so take the maximum of -t)"""
+        w = self._work
+        w.x.array[:] = -t
+        w.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.MAX_VALUES, mode=PETSc.ScatterMode.REVERSE)
+        w.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+        t[:] = -w.x.array
+
+    def solve(
+        self,
+        sources: Sequence[Source],
+        *,
+        tol: float = 1e-6,
+        max_iter: int | None = None,
+        allow_unreached: bool = False,
+    ) -> dolfinx.fem.Function:
+        """The activation time :math:`t_a` (P1 Function named ``"activation_time"``)
+
+        Parameters
+        ----------
+        sources : Sequence[Source]
+            Where the activation starts; where sources overlap the smallest ``t0`` wins
+        tol : float, optional
+            FIM convergence tolerance (ms), by default 1e-6
+        max_iter : int | None, optional
+            Maximum FIM passes per kernel call, by default 4 times the number of local vertices
+            plus 1000
+        allow_unreached : bool, optional
+            Warn instead of raising if some vertices are not reached; they get ``inf``
+        """
+        comm = self.mesh.comm
+        n = len(self._x)
+        n_owned = self.V.dofmap.index_map.size_local
+        max_iter = max_iter if max_iter is not None else 4 * n + 1000
+        t = np.full(n, FAR)
+        for source in sources:
+            dofs = self._source_dofs(source)
+            t[dofs] = np.minimum(t[dofs], source.t0)
+        self._min_exchange(t)
+        fixed = (t < FAR).astype(np.uint8)
+        if comm.allreduce(int(fixed[:n_owned].sum()), op=MPI.SUM) == 0:
+            raise ValueError("No source vertices found")
+        seeds = np.flatnonzero(fixed).astype(np.int32)
+        stats = np.zeros(2, dtype=np.int64)
+        rounds = 0
+        while True:
+            rounds += 1
+            status = self._kernel.run(
+                self._x,
+                self._cells,
+                self._metric,
+                self._connectivity,
+                fixed,
+                t,
+                seeds,
+                tol,
+                max_iter,
+                stats,
+            )
+            if comm.allreduce(status, op=MPI.MAX) != 0:
+                raise RuntimeError(f"The eikonal solver did not converge in {max_iter} passes")
+            before = t.copy()
+            self._min_exchange(t)
+            seeds = np.flatnonzero(t < before - tol).astype(np.int32)
+            if comm.allreduce(len(seeds), op=MPI.SUM) == 0:
+                break
+        self.stats = {
+            "rounds": rounds,
+            "passes": int(comm.allreduce(int(stats[0]), op=MPI.MAX)),
+            "updates": int(comm.allreduce(int(stats[1]), op=MPI.SUM)),
+        }
+        unreached = comm.allreduce(int((t[:n_owned] >= FAR).sum()), op=MPI.SUM)
+        if unreached:
+            message = f"{unreached} vertices were not reached by any source"
+            if not allow_unreached:
+                raise ValueError(message)
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+            t[t >= FAR] = np.inf
+        t_a = dolfinx.fem.Function(self.V, name="activation_time")
+        t_a.x.array[:] = t
+        return t_a
+
+
+def solve_eikonal(
+    mesh: dolfinx.mesh.Mesh,
+    velocities: Sequence[Any],
+    fibers: Sequence[Any],
+    sources: Sequence[Source],
+    *,
+    tol: float = 1e-6,
+    max_iter: int | None = None,
+    allow_unreached: bool = False,
+    **solver_kwargs: Any,
+) -> dolfinx.fem.Function:
+    """Build an :class:`EikonalSolver` (``solver_kwargs`` go to it) and solve once"""
+    solver = EikonalSolver(mesh, velocities, fibers, **solver_kwargs)
+    return solver.solve(sources, tol=tol, max_iter=max_iter, allow_unreached=allow_unreached)
