@@ -45,6 +45,9 @@ model and notation used throughout, then work through the
 - [The reaction-eikonal model: activation in a ventricular wedge](reaction_eikonal_wedge_activation.py)
   — R-D, R-E$^+$ and R-E$^-$ on the wedge of {cite}`neic2017efficient` (their Figs. 2 and 4):
   activation maps, deviations and upstrokes.
+- [The reaction-eikonal model: repolarisation in a ventricular wedge](reaction_eikonal_wedge_repolarization.py)
+  — transmural repolarisation gradients of R-D, R-E$^+$ and R-E$^-$ (Fig. 5 of
+  {cite}`neic2017efficient`).
 
 ## Verification
 
