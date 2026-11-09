@@ -1,6 +1,7 @@
 from importlib.metadata import metadata
 
 from . import (
+    activation,
     base_model,
     bidomain_model,
     c_backend,
@@ -37,6 +38,7 @@ __email__ = meta["Author-email"]
 __program_name__ = meta["Name"]
 
 __all__ = [
+    "activation",
     "monodomain_model",
     "odesolver",
     "base_model",

@@ -4,6 +4,7 @@ Alfio
 allclose
 allreduce
 arange
+arctanh
 Arens
 argmin
 argsort
@@ -56,6 +57,7 @@ dofs
 dolfin
 dolfinx
 dtype
+dvdt
 dvlp
 eikonal
 Einthoven
@@ -158,6 +160,7 @@ Nagumo
 Nattel
 nbeats
 ndarray
+Neic
 Neighbouring
 neighbours
 neohookean
