@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import numbers
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -208,7 +209,7 @@ def _subsimplices(mesh: Any) -> npt.NDArray[np.int64]:
 def _speed(value: Any, mesh_unit: str) -> Any:
     if isinstance(value, pint.Quantity):
         value = float(value.to(f"{mesh_unit}/ms").magnitude)
-    if isinstance(value, (int, float)) and value <= 0:
+    if isinstance(value, numbers.Real) and value <= 0:
         raise ValueError(f"Velocities must be positive, got {value}")
     return value
 
@@ -238,23 +239,40 @@ def cell_metric(
             f"{len(velocities)} velocities and {len(fibers)} directions",
         )
     Minv = None
+    speeds = []
     for v, f in zip(velocities, fibers):
         if f is None:
             raise ValueError("All directions must be given (got None)")
         e = f / ufl.sqrt(ufl.dot(f, f))
-        term = ufl.outer(e, e) / _speed(v, mesh_unit) ** 2
+        speed = _speed(v, mesh_unit)
+        speeds.append(speed)
+        term = ufl.outer(e, e) / speed**2
         Minv = term if Minv is None else Minv + term
     assert Minv is not None
     X = basix.geometry(mesh.basix_cell()).mean(axis=0, keepdims=True)
     num_cells = _num_local_cells(mesh)
     values = dolfinx.fem.Expression(Minv, X).eval(mesh, np.arange(num_cells, dtype=np.int32))
     values = np.asarray(values).reshape(num_cells, gdim, gdim)
+    # The metric only sees v**2, so check the sign of the velocities themselves
+    cells = np.arange(num_cells, dtype=np.int32)
+    v_values = dolfinx.fem.Expression(
+        ufl.as_vector(
+            [
+                dolfinx.fem.Constant(mesh, float(v)) if isinstance(v, numbers.Real) else v
+                for v in speeds
+            ],
+        ),
+        X,
+    ).eval(mesh, cells)
     metric = np.zeros((num_cells, 6))
     metric[:, 2] = 1.0
     for k, (a, b) in enumerate(_METRIC_COMPONENTS):
         if a < gdim and b < gdim:
             metric[:, k] = values[:, a, b]
-    if not (np.isfinite(metric).all() and (metric[:, :3] > 0).all()):
+    positive = (np.asarray(v_values) > 0).all() and (metric[:, :3] > 0).all()
+    ok = bool(np.isfinite(metric).all() and positive)
+    # Decide collectively, otherwise one rank raises while the others block in a collective
+    if not mesh.comm.allreduce(ok, op=MPI.LAND):
         raise ValueError("Velocities must be positive and finite everywhere")
     return metric
 

@@ -252,3 +252,11 @@ def test_openmp_matches_default():
     for n in (1, 2):
         omp = solve_eikonal(mesh, speeds(mesh), fibers(mesh, 30.0), src, openmp=True, num_threads=n)
         np.testing.assert_allclose(omp.x.array, ref.x.array, atol=1e-12)
+
+
+def test_nonpositive_velocity_on_one_rank_raises_everywhere():
+    mesh = box(MPI.COMM_WORLD, 1.0)
+    DG0 = dolfinx.fem.functionspace(mesh, ("DG", 0))
+    vl = interpolate(DG0, lambda x: np.where(x[0] < 1.0, -1.0, VL))
+    with pytest.raises(ValueError, match="positive"):
+        EikonalSolver(mesh, (vl, VT, VT), fibers(mesh))
