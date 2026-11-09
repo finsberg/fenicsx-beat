@@ -73,19 +73,18 @@ def test_step_is_explicit_euler_of_the_foot(V):
 
 
 def test_strang_corrective_step_also_applies_the_foot(V):
+    t_a = 0.2037
     time = dolfinx.fem.Constant(V.mesh, 0.0)
     pde = beat.MonodomainModel(time=time, mesh=V.mesh, M=0.0)
-    ode = FootCurrentODESolver(make_ode(V, v_pde=pde.state), constant(V, 0.2))
+    ode = FootCurrentODESolver(make_ode(V, v_pde=pde.state), constant(V, t_a))
     solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=0.5)
     v = np.full(V.dofmap.index_map.size_local + V.dofmap.index_map.num_ghosts, -85.0)
     t, dt = 0.0, 0.02
     rate = ExponentialFoot().rate
     for _ in range(40):
         solver.step((t, t + dt))
-        # Same floating point arithmetic as the solver (t + dt == t_a is a boundary case)
-        t_mid = t + 0.5 * dt
-        v = v + 0.5 * dt * rate(t_mid - 0.2, v)
-        v = v + 0.5 * dt * rate(t_mid + 0.5 * dt - 0.2, v)
+        v = v + 0.5 * dt * rate(t + 0.5 * dt - t_a, v)
+        v = v + 0.5 * dt * rate(t + dt - t_a, v)
         t += dt
     np.testing.assert_allclose(pde.v.x.array, v, rtol=0, atol=1e-8)
 
@@ -146,6 +145,17 @@ def test_unreached_t_a_into_quadrature_space(V):
     v = ode.v_ode.x.array
     assert np.isfinite(v).all()
     assert ((v == -85.0) | (v > -85.0)).all() and (v > -85.0).any() and (v == -85.0).any()
+
+
+def test_unreached_vertex_into_quadrature_space_raises(V):
+    t_a = constant(V, 0.0)
+    x = V.tabulate_dof_coordinates()
+    # exactly one unreached vertex (owned by one rank only)
+    t_a.x.array[np.isclose(x[:, 0], 0.5) & np.isclose(x[:, 1], 0.5)] = np.inf
+    element = basix.ufl.quadrature_element(V.mesh.basix_cell(), value_shape=(), degree=2)
+    Q = dolfinx.fem.functionspace(V.mesh, element)
+    with pytest.raises(ValueError, match="not reached"):
+        FootCurrentODESolver(make_ode(Q), t_a)
 
 
 class RecordingMonitor(beat.BaseMonitor):

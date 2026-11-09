@@ -122,10 +122,13 @@ class FootCurrentODESolver:
         target = dolfinx.fem.Function(V)
         target.interpolate(dolfinx.fem.Expression(source, interpolation_points(V)))
         values = target.x.array.copy()
-        unreached = ~np.isfinite(values) | (values > 0.5 * _LARGE)
         comm = V.mesh.comm
-        if comm.allreduce(int(unreached.sum())) and not allow_unreached:
+        size_local = t_a.function_space.dofmap.index_map.size_local
+        n_bad = comm.allreduce(int((~np.isfinite(t_a.x.array[:size_local])).sum()))
+        if n_bad and not allow_unreached:
             raise ValueError("The activation time is not reached (not finite) everywhere")
+        # Any non-negligible weight on an unreached node counts as unreached
+        unreached = ~np.isfinite(values) | (values > 1e-10 * _LARGE)
         values[unreached] = np.inf
         self._t_a = values
         n = values.size
@@ -158,6 +161,8 @@ class FootCurrentODESolver:
 
     def __getattr__(self, name: str) -> Any:
         # Only called for attributes not found on the wrapper itself
+        if name == "ode" or name.startswith("__"):
+            raise AttributeError(name)
         return getattr(self.ode, name)
 
     def to_dolfin(self) -> None:
