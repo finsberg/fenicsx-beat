@@ -12,6 +12,7 @@ Aslak
 astype
 atol
 Augustin
+Aurel
 Bartolucci
 basix
 bazett
@@ -61,6 +62,7 @@ dvdt
 dvlp
 eikonal
 Einthoven
+electrograms
 Elife
 Elsevier
 endo
@@ -91,6 +93,7 @@ genexpr
 geodir
 geometriesx
 geox
+Gernot
 getattr
 getpid
 Gilles
@@ -188,6 +191,7 @@ petsc
 Piola
 pmatrix
 Potse
+Prassl
 preconditioner
 preonly
 prepace
@@ -258,6 +262,7 @@ varepsilon
 Venant
 Verlag
 Viatcheslav
+Vigmond
 Virag
 viridis
 viscoelastic
@@ -300,3 +305,4 @@ nonpositive
 nloc
 Comput
 arctan
+Zhisong

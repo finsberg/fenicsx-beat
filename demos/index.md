@@ -39,6 +39,9 @@ model and notation used throughout, then work through the
 - [Spiral wave breakup in a 2D sheet of human ventricular tissue](spiral_wave_breakup.py) — the same
   setup with the steep-restitution parameter set from {cite}`tentusscher2006alternans`, where the
   spiral breaks up into many smaller spirals, as in the transition to ventricular fibrillation.
+- [Activation times from the eikonal equation](eikonal.py) — `beat.eikonal`'s Fast Iterative
+  Method solver: an anisotropic point source against the exact solution, colliding fronts, and the
+  wedge of {cite}`neic2017efficient`.
 
 ## Verification
 

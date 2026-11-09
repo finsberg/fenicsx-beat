@@ -23,6 +23,7 @@ parts:
     - file: demos/ukb_atlas.py
     - file: demos/spiral_wave.py
     - file: demos/spiral_wave_breakup.py
+    - file: demos/eikonal.py
   - caption: Verification
     chapters:
     - file: demos/verification.py

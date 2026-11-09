@@ -32,3 +32,15 @@ FEniCSx-Beat
 
 .. automodule:: beat.utils
     :members:
+
+.. automodule:: beat.eikonal
+    :members:
+
+.. automodule:: beat.reaction_eikonal
+    :members:
+
+.. automodule:: beat.activation
+    :members:
+
+.. automodule:: beat.geometry
+    :members:
