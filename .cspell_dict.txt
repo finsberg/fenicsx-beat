@@ -57,6 +57,7 @@ dolfin
 dolfinx
 dtype
 dvlp
+eikonal
 Einthoven
 Elife
 Elsevier
@@ -77,6 +78,7 @@ figsize
 finsberg
 Fitz
 fitzhughnagumo
+flatnonzero
 Francesco
 Frederik
 fridericia
@@ -115,7 +117,9 @@ isscalar
 Istim
 jacfwd
 Jakub
+Jeong
 jitted
+keepdims
 kwargs
 Joakim
 Kluwer
@@ -139,6 +143,7 @@ meshtags
 MICCAI
 midwall
 Minchole
+minimises
 Mises
 Monodomain
 mpirun
@@ -154,6 +159,7 @@ Nattel
 nbeats
 ndarray
 Neighbouring
+neighbours
 neohookean
 Neumann
 Niederer
@@ -171,6 +177,7 @@ Oreste
 Orovio
 outdir
 Panfilov
+parallelise
 Paraview
 Passini
 pendo
@@ -238,8 +245,10 @@ transmembrane
 transmurally
 transmural
 travelling
+triu
 Tusscher
 Tveito
+unconverged
 unpreconditioned
 ureg
 varepsilon

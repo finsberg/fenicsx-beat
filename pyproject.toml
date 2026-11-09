@@ -45,7 +45,7 @@ Tracker = "https://github.com/finsberg/fenicsx-beat/issues"
 # `beat.cli._available_templates()`) so `beat init --template <name>` works from a wheel/sdist
 # install, not just this editable checkout.
 "beat.cli" = ["templates/*/*"]
-"beat" = ["c_backend_driver.c"]
+"beat" = ["c_backend_driver.c", "eikonal_kernel.c"]
 
 [project.optional-dependencies]
 test = [
