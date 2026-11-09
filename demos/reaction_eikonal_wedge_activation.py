@@ -11,8 +11,10 @@
 #
 # with $A = 0.91$ mV, $\tau_F = 0.25$ ms and $V_{th} = -30$ mV, triggers the upstroke of the cell
 # model at $t_a$. In R-E$^+$ the monodomain diffusion term is kept (without stimulus); in
-# R-E$^-$ it is dropped, so every cell is solved on its own. Unlike R-D, the R-E models keep the
-# prescribed conduction velocity on coarse meshes.
+# R-E$^-$ it is dropped, so every cell is solved on its own. The R-E models
+# impose the prescribed conduction velocity through the eikonal solve, so, unlike R-D, they do not
+# slow down on coarse meshes. A coarse R-D run therefore differs from the R-E runs mainly because
+# of its own discretisation error.
 #
 # The foot current is active for $0 \le t - t_a \le 5$ ms as in openCARP; the paper's Eq. 27
 # states a window before $t_a$, which contradicts its own appendix.
@@ -152,7 +154,7 @@ def run(name, solver, v):
         trace_t.append(t)
         trace.append(probe(v).item())
     # NaN (never activated) would corrupt the MPI max reduction in evaluate_function: use a sentinel
-    t_a_track = tracker.t_a
+    t_a_track = tracker.t_a  # modified in place, no ghost update needed: this is its last use
     t_a_track.x.array[np.isnan(t_a_track.x.array)] = NO_ACTIVATION
     activation = scifem.evaluate_function(t_a_track, grid).reshape(gx.shape)
     activation[~(activation < 1e3)] = np.nan  # also mixed (interpolated) cells
@@ -207,7 +209,11 @@ run("R-E-", solver, solver.v)
 #
 # The maps show the mid-plane $z = 2.5$ mm. The histograms show the relative deviation
 # $|t_{a,R-D} - t_{a,R-E}| / t_{a,R-D}$ (paper Eq. 33) of the R-E models from R-D at the same
-# resolution (away from the sources, where it is undefined).
+# resolution (away from the sources, where it is undefined). At 400 µm, R-D is the slower
+# model: its activation is delayed by the coarse mesh, while R-E keeps the 100 µm conduction
+# velocities. These histograms therefore measure mostly the discretisation error of R-D, not
+# that of R-E; the meaningful accuracy comparison is against R-D at 100 µm, shown in the
+# precomputed figure below (as in the paper's Fig. 2).
 
 # +
 if comm.rank == 0:
@@ -224,10 +230,11 @@ if comm.rank == 0:
         drel = np.abs(ref - results[name]["t_a"])[mask] / ref[mask]
         drel = drel[np.isfinite(drel)]
         ax.hist(
-            np.clip(drel, 0, 0.1), bins=np.linspace(0, 0.1, 11), weights=np.full(drel.size, 1 / drel.size),
+            drel, bins=np.linspace(0, 0.5, 21), weights=np.full(drel.size, 1 / drel.size),
             color="0.5", edgecolor="k",
         )
-        ax.set_title(f"{name} vs R-D")
+        ax.set_title(f"{name} vs R-D (median {np.median(drel):.3f})")
+        print(f"{name}: median relative deviation from R-D {np.median(drel):.3f}, max {drel.max():.3f}")
         ax.set_xlabel("relative deviation")
     ax = axes[1, 0]
     for name in results:
