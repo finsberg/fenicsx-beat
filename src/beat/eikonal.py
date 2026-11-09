@@ -172,10 +172,18 @@ def vertex_connectivity(
     return v2c_ptr, v2c, nb_ptr, (key % num_vertices).astype(np.int32)
 
 
-# Sub-simplices of each supported cell, in basix reference vertex numbering (P1 dof order)
+# Sub-simplices of each supported cell, in basix reference vertex numbering (P1 dof order):
+# quadrilateral v0(0,0) v1(1,0) v2(0,1) v3(1,1) -> two triangles along v0-v3; hexahedron
+# v0(000) v1(100) v2(010) v3(110) v4(001) v5(101) v6(011) v7(111) -> six tetrahedra along v0-v7
+# (Kuhn split). Splits need not be conforming between cells: each local update is a minimum
+# over candidate simplices, so the scheme stays monotone and consistent.
 _SUBSIMPLICES: dict[dolfinx.mesh.CellType, npt.NDArray[np.int64]] = {
     dolfinx.mesh.CellType.triangle: np.array([[0, 1, 2]]),
     dolfinx.mesh.CellType.tetrahedron: np.array([[0, 1, 2, 3]]),
+    dolfinx.mesh.CellType.quadrilateral: np.array([[0, 1, 3], [0, 2, 3]]),
+    dolfinx.mesh.CellType.hexahedron: np.array(
+        [[0, 1, 3, 7], [0, 1, 5, 7], [0, 2, 3, 7], [0, 2, 6, 7], [0, 4, 5, 7], [0, 4, 6, 7]],
+    ),
 }
 # (row, column) of the 6 stored components of the symmetric 3x3 metric
 _METRIC_COMPONENTS = ((0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2))

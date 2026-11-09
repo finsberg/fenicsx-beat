@@ -294,3 +294,4 @@ Minv
 lexsort
 Vinv
 nonpositive
+nloc
