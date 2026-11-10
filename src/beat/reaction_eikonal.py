@@ -19,10 +19,11 @@ contradicts its own appendix and the openCARP implementation.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
+
+from mpi4py import MPI
 
 import dolfinx
 import numpy as np
@@ -31,8 +32,6 @@ import numpy.typing as npt
 from .monodomain_solver import EPS, ODESolver
 from .telemetry import BaseMonitor, NullMonitor
 from .utils import interpolation_points
-
-logger = logging.getLogger(__name__)
 
 # Unreached activation times are replaced by this before interpolation (inf * 0 = nan)
 _LARGE = 1e30
@@ -138,17 +137,21 @@ class FootCurrentODESolver:
             if markers is None:
                 raise TypeError("A foot per region needs the markers Function")
             m = markers.x.array
-            if m.size != n:
+            if comm.allreduce(int(m.size != n), op=MPI.MAX):
                 raise ValueError("markers must live on the same space as the ODE solver's v_ode")
             present = np.unique(np.concatenate(comm.allgather(np.unique(m))))
             missing = [int(k) for k in present if int(k) not in foot]
             if missing:
                 raise ValueError(f"No foot given for marker {', '.join(map(str, missing))}")
-            params = [np.empty(n) for _ in range(4)]
+            params = [np.full(n, np.nan) for _ in range(4)]
             for key, f in foot.items():
                 where = m == key
                 for array, name in zip(params, ("A", "tau_F", "V_th", "duration")):
                     array[where] = getattr(f, name)
+            if comm.allreduce(int(np.isnan(params[0]).any()), op=MPI.MAX):
+                raise ValueError(
+                    "Some marker values do not match an integer key of the foot mapping exactly",
+                )
         self._A, self._tau_F, self._V_th, self._duration = params
 
     @property
@@ -211,6 +214,8 @@ class ODEOnlySolver:
     monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self) -> None:
+        if self.monitor is None:  # type: ignore[unreachable]
+            self.monitor = NullMonitor()
         self.ode.to_dolfin()
 
     @property

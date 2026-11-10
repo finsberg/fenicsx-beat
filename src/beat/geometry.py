@@ -240,7 +240,9 @@ class WedgeGeometry(NamedTuple):
 
 def wedge_layer_markers(V: dolfinx.fem.FunctionSpace, length: float = 25.0) -> dolfinx.fem.Function:
     """Layer markers (:data:`WEDGE_LAYERS`) on ``V``: epi for the 25% of the wall nearest
-    :math:`x = 0`, then 45% M, then 30% endo"""
+    :math:`x = 0`, then 45% M, then 30% endo
+
+    ``length`` must match the transmural length of the wedge (pass ``wedge.length``)."""
     markers = dolfinx.fem.Function(V, name="layers")
 
     def layer(x):
@@ -274,6 +276,11 @@ def get_3D_wedge_geometry(
     :math:`e_x`. The stimuli are full-thickness corner columns: S1 at :math:`(0, W)` and S3 at
     :math:`(L, 0)` at :math:`t = 0`, S2 at :math:`(0, 0)` at :math:`t = 5` ms (read off the
     paper's Figs. 1 and 2). :math:`P_E` is the centre of the endocardial face.
+
+    The mesh size is rounded so that it divides the box, so ``dx`` is only approximate and the
+    stimulus columns are whole cells of width approximately ``stimulus_size``.
+    ``geometry.markers`` names the stimulus tags (``S1``, ``S2``, ``S3``), whose cell tags are
+    in ``cell_tags``.
     """
     mesh = get_3D_slab_mesh(comm, dx, length, width, thickness, cell_type)
     family, degree = fiber_space

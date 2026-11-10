@@ -146,3 +146,5 @@ dmypy.json
 .pyre/
 
 _build/
+
+results-reaction-eikonal/

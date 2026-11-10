@@ -26,6 +26,18 @@ class ActivationTracker:
         The threshold (mV), by default -30.0
     t0 : float, optional
         The time of the current values of ``v``, by default 0.0
+
+    Notes
+    -----
+    * NaN marks dofs that have never activated. ``scifem.evaluate_function`` combines ranks
+      with a MAX over a ``-inf`` fill and mishandles NaN under MPI, so replace NaN by a
+      sentinel value before point evaluation.
+    * With ``max_dvdt`` the time is that of the steepest upstroke over the whole run. For
+      multi-beat runs use one tracker per beat, or use ``threshold``.
+    * Dofs already at or above ``threshold`` at ``t0`` never get a ``threshold`` crossing
+      (they stay NaN), but they count as reached for ``max_dvdt``.
+    * The ghost values of ``v`` must be current when :meth:`update` is called (true for the
+      solvers in beat).
     """
 
     def __init__(
@@ -75,4 +87,5 @@ class ActivationTracker:
             values[~self._reached] = np.nan
         t_a = dolfinx.fem.Function(self.v.function_space, name="activation_time")
         t_a.x.array[:] = values
+        t_a.x.scatter_forward()
         return t_a

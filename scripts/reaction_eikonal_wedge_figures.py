@@ -32,7 +32,8 @@ def histogram(ax, values, bins, title, xlabel):
         edgecolor="k",
     )
     ax.set_title(title)
-    ax.set_xlabel(xlabel)
+    # Values above the range are clipped into the last bin
+    ax.set_xlabel(f"{xlabel}\n(last bin: $\\geq {bins[-2]:g}$, overflow)")
     ax.set_ylabel("relative frequency")
 
 
@@ -136,7 +137,7 @@ def fig5(results, ref_dx, coarse_dx, out):
         print("No v at t_r50 (run to at least 305 ms); skipping Fig. 5")
         return
     fig = plt.figure(figsize=(13, 7))
-    grid = fig.add_gridspec(2, 3)
+    grid = fig.add_gridspec(2, 3, wspace=0.55, hspace=0.5)
     a, da = fig.add_subplot(grid[0, :2]), None
     da = a.twinx()
     for model, dx in (("rd", ref_dx), ("re+", coarse_dx), ("re-", coarse_dx)):
@@ -146,10 +147,10 @@ def fig5(results, ref_dx, coarse_dx, out):
         x, v = d["line_x"], d["v_r50_line"]
         a.plot(x, v, label=f"{LABEL[model]} {dx * 1000:g} µm")
         dv = np.gradient(v, x)
-        da.plot(x, dv / np.nanmax(np.abs(dv)), ":", alpha=0.7)
+        da.plot(x, dv, ":", alpha=0.7)
     a.set_xlabel("x (transmural, mm)")
     a.set_ylabel("$v(x, t_{r50})$ (mV)")
-    da.set_ylabel("normalised $\\partial_x v$ (dotted)")
+    da.set_ylabel("$\\partial_x v$ (mV/mm, dotted)")
     a.legend()
     for i, model in enumerate(("re+", "re-")):
         d = load(results, model, coarse_dx)
@@ -165,8 +166,12 @@ def fig5(results, ref_dx, coarse_dx, out):
             "absolute deviation (mV)",
         )
     c = fig.add_subplot(grid[:, 2])
-    for model, style in (("re+", "-"), ("re-", "--")):
-        d = load(results, model, coarse_dx)
+    for model, dx, style in (
+        ("rd", ref_dx, ":"),
+        ("re+", coarse_dx, "-"),
+        ("re-", coarse_dx, "--"),
+    ):
+        d = load(results, model, dx)
         if d is None:
             continue
         names = list(d["probe_names"])

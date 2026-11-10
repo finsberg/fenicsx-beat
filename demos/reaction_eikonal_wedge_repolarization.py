@@ -9,7 +9,9 @@
 #
 # Simulating 500 ms is too long for the documentation build, so we only run R-E$^-$ — the
 # cheapest model — on the 400 µm wedge for `end_time` ms and plot the transmural profile; set
-# `end_time = 305.0` to see the steps at $t_{r50}$. The precomputed results (100 µm R-D against
+# `end_time = 305.0` to see the steps at $t_{r50}$. At the default `end_time = 50` ms the cells
+# are still on the plateau, so the profile is nearly flat with only a small step at the M/endo
+# boundary; the large layer steps appear at $t_{r50}$. The precomputed results (100 µm R-D against
 # 400 µm R-E) are shown at the end.
 
 # +

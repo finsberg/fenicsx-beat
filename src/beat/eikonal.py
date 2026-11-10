@@ -14,7 +14,6 @@ it), optionally with OpenMP.
 from __future__ import annotations
 
 import ctypes
-import logging
 import numbers
 import warnings
 from collections.abc import Callable, Sequence
@@ -33,8 +32,6 @@ import pint
 import ufl
 
 from . import c_backend
-
-logger = logging.getLogger(__name__)
 
 KERNEL_PATH = Path(__file__).with_name("eikonal_kernel.c")
 KERNEL_LIBRARY = "libbeat_eikonal.so"
@@ -385,6 +382,8 @@ class EikonalSolver:
         allow_unreached : bool, optional
             Warn instead of raising if some vertices are not reached; they get ``inf``
         """
+        if not (np.isfinite(tol) and tol > 0):
+            raise ValueError(f"tol must be positive and finite, got {tol}")
         comm = self.mesh.comm
         n = len(self._x)
         n_owned = self.V.dofmap.index_map.size_local

@@ -260,3 +260,10 @@ def test_nonpositive_velocity_on_one_rank_raises_everywhere():
     vl = interpolate(DG0, lambda x: np.where(x[0] < 1.0, -1.0, VL))
     with pytest.raises(ValueError, match="positive"):
         EikonalSolver(mesh, (vl, VT, VT), fibers(mesh))
+
+
+@pytest.mark.parametrize("tol", [0.0, -1e-6, float("nan"), float("inf")])
+def test_invalid_tol_raises(tol):
+    mesh = box(MPI.COMM_WORLD, 2.0)
+    with pytest.raises(ValueError, match="tol"):
+        solve_eikonal(mesh, speeds(mesh), fibers(mesh), [Source(lambda x: x[0] < 1e-9)], tol=tol)

@@ -49,7 +49,6 @@ def distance(x):
     return np.sqrt(np.einsum("in,ij,jn->n", d, Vinv, d))
 
 
-errors = []
 for h in (0.5, 0.25, 0.125):
     mesh = dolfinx.mesh.create_rectangle(
         comm, [[0.0, 0.0], [20.0, 10.0]], [round(20 / h), round(10 / h)],
@@ -60,13 +59,12 @@ for h in (0.5, 0.25, 0.125):
     exact.interpolate(lambda x: np.maximum(0.0, distance(x) - rho))
     n = t_a.function_space.dofmap.index_map.size_local
     err = comm.allreduce(np.abs(t_a.x.array[:n] - exact.x.array[:n]).max(), op=MPI.MAX)
-    errors.append(err)
     if comm.rank == 0:
         print(f"h = {h:5.3f} mm: max error {err:.3f} ms")
 # -
 
 # The error decreases roughly linearly with the mesh size, as expected for this first-order
-# method; it is largest around the source, where the wavefront is most curved.
+# method.
 
 # +
 grid_x, grid_y = np.meshgrid(np.linspace(0, 20, 201), np.linspace(0, 10, 101))

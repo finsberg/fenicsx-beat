@@ -57,3 +57,11 @@ def test_invalid_input():
     tracker = ActivationTracker(v, t0=1.0)
     with pytest.raises(ValueError, match="increase"):
         tracker.update(1.0)
+
+
+@pytest.mark.parametrize("method", ["max_dvdt", "threshold"])
+def test_ghosts_equal_owners(method):
+    _, t_a, _ = simulate(method)
+    before = t_a.x.array.copy()
+    t_a.x.scatter_forward()
+    np.testing.assert_array_equal(before, t_a.x.array)

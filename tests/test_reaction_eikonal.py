@@ -183,3 +183,15 @@ def test_ode_only_solver(V):
     assert len(monitor.steps) == 20
     assert "ode_step" in monitor.names
     assert (solver.v.x.array >= -30.0).all()
+
+
+def test_non_integer_marker_raises(V):
+    markers = constant(V, 1.5)
+    with pytest.raises(ValueError, match="integer key"):
+        FootCurrentODESolver(make_ode(V), constant(V, 0.0), {1: ExponentialFoot()}, markers=markers)
+
+
+def test_ode_only_solver_accepts_no_monitor(V):
+    ode = FootCurrentODESolver(make_ode(V), constant(V, 0.0))
+    solver = ODEOnlySolver(ode, monitor=None)
+    solver.solve((0.0, 0.1), 0.05)
