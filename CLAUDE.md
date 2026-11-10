@@ -66,6 +66,13 @@ Operator-split PDE/ODE solve per timestep:
   `$BEAT_C_CACHE` or `~/.cache/beat/c_backend`, all ranks load via ctypes) into a drop-in
   `fun(states, t, parameters, dt)` for `DolfinODESolver`; optional OpenMP. Needs a C compiler at
   runtime (dolfinx already requires one). Demo: `demos/c_backend.py`.
+- **Eikonal / reaction-eikonal** (`eikonal.py`, `eikonal_kernel.c`, `reaction_eikonal.py`,
+  `activation.py`): `solve_eikonal`/`EikonalSolver` (Fast Iterative Method, C kernel built via
+  `c_backend.build_library`, optional OpenMP, distributed by ghost min-exchange; any cell type,
+  vertices only → P1). `FootCurrentODESolver` wraps any ODE solver with the Neic 2017 foot current
+  (openCARP window, not the paper's Eq. 27); R-E+ = `MonodomainSplittingSolver(pde, wrapped)`,
+  R-E− = `ODEOnlySolver(wrapped)`. `ActivationTracker` records max-dv/dt or threshold times.
+  Wedge benchmark: `geometry.get_3D_wedge_geometry`, `scripts/reaction_eikonal_*.py`.
 - **Conductivities/units** (`conductivities.py`, `units.py`): `pint` quantities → `M` via
   `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop").
 - **Geometry** (`geometry.py`): `Geometry` NamedTuple + 2D/3D slab helpers; real ventricular geometries
