@@ -143,7 +143,7 @@ def _compile(
     return library
 
 
-def _check_visible(library: Path, comm: MPI.Intracomm) -> None:
+def _check_visible(library: Path, comm: MPI.Comm) -> None:
     """Raise on all ranks if any rank cannot see the library that rank 0 built"""
     if not comm.allreduce(library.is_file(), op=MPI.LAND):
         raise RuntimeError(
@@ -152,7 +152,7 @@ def _check_visible(library: Path, comm: MPI.Intracomm) -> None:
         )
 
 
-def _run_on_rank0(comm: MPI.Intracomm, func: Callable[[], T]) -> T:
+def _run_on_rank0(comm: MPI.Comm, func: Callable[[], T]) -> T:
     """Run ``func`` on rank 0 and broadcast its result; raise its error on every rank"""
     result: T | None = None
     error: str | None = None
@@ -173,7 +173,7 @@ def build_library(
     cc: str,
     cflags: tuple[str, ...],
     cache_dir: Path,
-    comm: MPI.Intracomm,
+    comm: MPI.Comm,
     library_name: str = LIBRARY_NAME,
     source_name: str = "scheme.c",
     description: str = "C scheme",

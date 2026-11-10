@@ -105,7 +105,7 @@ def compile_kernel(
     cc: str | None = None,
     cflags: Sequence[str] = c_backend.DEFAULT_CFLAGS,
     cache_dir: str | Path | None = None,
-    comm: MPI.Intracomm = MPI.COMM_WORLD,
+    comm: MPI.Comm = MPI.COMM_WORLD,
 ) -> EikonalKernel:
     """Compile (or load from the cache) the FIM kernel on rank 0 and load it on every rank
 
