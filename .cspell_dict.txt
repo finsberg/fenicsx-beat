@@ -60,6 +60,7 @@ dolfinx
 dtype
 dvdt
 dvlp
+eigendirection
 eikonal
 Einthoven
 electrograms
@@ -246,6 +247,7 @@ subfolders
 subparser
 subplus
 Sundnes
+tbme
 tdim
 tentusscher
 Terje

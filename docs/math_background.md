@@ -52,6 +52,8 @@ API:
 | $t_a$ | Local activation time | Output of `beat.eikonal.solve_eikonal`, `t_a` argument to `beat.reaction_eikonal.FootCurrentODESolver` |
 | $c_f$, $c_s$, $c_n$ | Conduction velocities along the fiber, sheet and sheet-normal directions | `velocities` argument to `beat.eikonal.EikonalSolver` |
 | $\mathcal{V}$ | Velocity tensor of the eikonal equation | Built from `velocities` and `fibers` |
+| $\phi_e$ | Extracellular potential in tissue and bath (equals $u_e$ in the tissue) | Output of `beat.pseudo_bidomain.VolumeConductor.solve` |
+| $\sigma_b$ | Bath conductivity | `sigma_b` argument to `beat.pseudo_bidomain.VolumeConductor`, `g_b` to `define_augmented_conductivity_tensor` |
 
 $\theta = 1$ gives (first-order) Godunov splitting and a backward Euler PDE
 step, while $\theta = 0.5$ gives (second-order) Strang splitting and a
@@ -403,6 +405,61 @@ either as the time of the steepest upstroke (maximum $\partial v/\partial t$, th
 and the one used by {cite}`neic2017efficient`) or as the first upward crossing of a threshold
 potential. Points that never activate keep the value NaN.
 
+### 8.4 Bath loading and the pseudo-bidomain model
+
+Tissue in contact with a conductive medium (the blood pool, the torso, or the bath of an
+experimental preparation) conducts faster close to the surface: extracellular current can return
+through the bath, which conducts much better than the interstitial space, so in a bidomain model
+the wavefront runs ahead along the surface. This is called *bath loading*. A monodomain model has
+no bath, but Bishop and Plank {cite}`bishop2011representing` showed that it reproduces the effect
+if the conductivity is *augmented* in a thin layer of tissue along the interface. In each
+eigendirection $\zeta$ of the conductivity tensors the monodomain conductivity becomes
+
+$$
+m_\zeta = \frac{g_{i\zeta}\, g_{e\zeta}}{g_{i\zeta} + g_{e\zeta}} \quad \text{in the bulk},
+\qquad
+m_\zeta = \frac{g_{i\zeta}\, \sigma_b}{g_{i\zeta} + \sigma_b} \quad \text{in the layer},
+$$
+
+that is, the harmonic mean of Section 4 with the bath conductivity $\sigma_b$ in place of the
+extracellular one near the surface (Eqs. 14 and 15 of {cite}`neic2017efficient`).
+`beat.pseudo_bidomain.interface_layer` marks the layer (three element rings by default, as in
+{cite}`bishop2011representing`) and `beat.pseudo_bidomain.define_augmented_conductivity_tensor`
+builds $M$ from it. The result goes straight into `beat.MonodomainModel`, so R-D and R-E$^+$ run
+unchanged (R-E$^-$ has no diffusion and is unaffected).
+
+The **pseudo-bidomain** model then recovers the extracellular potential. Given $v$ from the
+augmented monodomain model, $\phi_e$ on the tissue $\Omega_T$ and the bath $\Omega_B$ solves the
+elliptic part of the bidomain model of Section 3, extended to the bath:
+
+$$
+\nabla \cdot \big((M_i + M_e) \nabla \phi_e\big) = -\nabla \cdot (M_i \nabla v) \ \text{in } \Omega_T,
+\qquad
+\nabla \cdot (\sigma_b \nabla \phi_e) = 0 \ \text{in } \Omega_B,
+$$
+
+with $\phi_e$ and the normal current continuous across the interface, no current through the
+outer boundary, and $\phi_e$ normalized to zero mean. In the tissue $\phi_e$ plays the role of
+$u_e$. Because $v$ is known this is a single linear solve, needed only at the times $\phi_e$ is
+wanted, and its cost is independent of the cell model. `beat.pseudo_bidomain.VolumeConductor`
+assembles it once on a mesh of tissue and bath and returns $\phi_e$ for any $v$; the tissue mesh
+of the simulation can be separate, with $v$ interpolated onto the tissue cells.
+
+Recording $\phi_e$ at a few electrodes in every time step does not even need that solve. For an
+electrode at $P$, the **lead field** $Z_P$ solves the same elliptic problem with a unit point
+source at $P$ (and a uniform sink, so the pure-Neumann problem has a solution); taking $Z_P$ as
+the test function in the problem for $\phi_e$, and $\phi_e$ as the test function in the problem
+for $Z_P$, gives
+
+$$
+\phi_e(P) = -\int_{\Omega_T} M_i \nabla v \cdot \nabla Z_P \, dx,
+$$
+
+which also holds exactly for the discretized problems. `beat.pseudo_bidomain.LeadFieldElectrodes`
+solves one lead field per electrode up front, after which an electrogram sample costs one
+integral over the tissue. The [wedge electrogram demo](../demos/reaction_eikonal_wedge_electrograms.py)
+uses both to reproduce Fig. 7 of {cite}`neic2017efficient`.
+
 ## 9. Where to go from here
 
 - The [demos index](../demos/index.md) lists every demo in this repository, grouped by topic.
@@ -430,7 +487,9 @@ potential. Points that never activate keep the value NaN.
 - The [eikonal demo](../demos/eikonal.py) introduces the activation-time solver of Section 8.1, and
   the [wedge activation](../demos/reaction_eikonal_wedge_activation.py) and
   [wedge repolarization](../demos/reaction_eikonal_wedge_repolarization.py) demos compare R-D,
-  R-E$^+$ and R-E$^-$ as described in Section 8.2.
+  R-E$^+$ and R-E$^-$ as described in Section 8.2, and the
+  [wedge electrogram demo](../demos/reaction_eikonal_wedge_electrograms.py) computes extracellular
+  potentials and electrograms with the pseudo-bidomain model of Section 8.4.
 - For the full derivation of the bidomain and monodomain models, the
   physiology of the cell membrane, the Hodgkin–Huxley and Nernst–Planck
   formalisms, and a rigorous treatment of operator splitting and its order
