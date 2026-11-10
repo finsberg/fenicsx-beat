@@ -262,3 +262,25 @@ def test_errors_are_collective():
     v2d = dolfinx.fem.Function(dolfinx.fem.functionspace(square, ("P", 1)))
     with pytest.raises(ValueError, match="dimension"):
         conductor.solve(v2d)
+
+
+def test_lead_field_accepts_point_just_outside_boundary():
+    mesh, tags = box_with_bath(MPI.COMM_WORLD, n=6, pad=2)
+    conductor = VolumeConductor(mesh, tags, 1, 2, 1.0, 1.0)
+    top = 1.0 + 2.0 / 6.0
+    Z = conductor.lead_field([0.5, 0.5, top + 1e-12])
+    assert np.all(np.isfinite(Z.x.array))
+
+
+def test_uncovered_interpolation_raises_collectively():
+    comm = MPI.COMM_WORLD
+    mesh, tags = box_with_bath(comm, n=6, pad=2)
+    conductor = VolumeConductor(mesh, tags, 1, 2, 1.0, 1.0)
+    small = dolfinx.mesh.create_box(comm, [[0.0] * 3, [0.8] * 3], [4] * 3)
+    v_small = dolfinx.fem.Function(dolfinx.fem.functionspace(small, ("P", 1)))
+    with pytest.raises(ValueError, match="not covered"):
+        conductor.solve(v_small)
+    big = dolfinx.mesh.create_box(comm, [[0.0] * 3, [1.5] * 3], [6] * 3)
+    v_big = dolfinx.fem.Function(dolfinx.fem.functionspace(big, ("P", 1)))
+    with pytest.raises(ValueError, match="not inside"):
+        LeadFieldElectrodes(conductor, v_big, 1.0, {"a": [0.5, 0.5, 0.5]})

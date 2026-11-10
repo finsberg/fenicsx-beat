@@ -127,6 +127,8 @@ DEFAULT_PETSC_OPTIONS: dict[str, Any] = {
     "pc_hypre_boomeramg_P_max": 4,
 }
 _prefixes = itertools.count()
+#: Tolerance for deciding that an electrode is inside the mesh (ownership and point source alike)
+_POINT_TOLERANCE = 1e-10
 
 
 def _markers(markers: int | Sequence[int]) -> tuple[int, ...]:
@@ -138,6 +140,21 @@ def _markers(markers: int | Sequence[int]) -> tuple[int, ...]:
 def _all_cells(mesh: dolfinx.mesh.Mesh) -> npt.NDArray[np.int32]:
     imap = mesh.topology.index_map(mesh.topology.dim)
     return np.arange(imap.size_local + imap.num_ghosts, dtype=np.int32)
+
+
+def _checked_interpolation_data(
+    V_to: dolfinx.fem.FunctionSpace,
+    V_from: dolfinx.fem.FunctionSpace,
+    cells: npt.NDArray[np.int32],
+    message: str,
+) -> Any:
+    """Interpolation data that raises, on every rank, if a target point has no source cell"""
+    data = dolfinx.fem.create_interpolation_data(V_to, V_from, cells, padding=1e-8)
+    n_missing = int((np.asarray(data._cpp_object.src_owner) < 0).sum())
+    total = V_to.mesh.comm.allreduce(n_missing, op=MPI.SUM)
+    if total > 0:
+        raise ValueError(f"{total} interpolation points: {message}")
+    return data
 
 
 class VolumeConductor:
@@ -230,11 +247,11 @@ class VolumeConductor:
         for V, data in self._interpolation:
             if V is V_from:
                 return data
-        data = dolfinx.fem.create_interpolation_data(
+        data = _checked_interpolation_data(
             self.V,
             V_from,
             self._tissue_cells,
-            padding=1e-8,
+            "the tissue cells are not covered by the mesh of v",
         )
         self._interpolation.append((V_from, data))
         return data
@@ -295,12 +312,12 @@ class VolumeConductor:
         points = np.zeros((1 if comm.rank == 0 else 0, 3))
         if comm.rank == 0:
             points[0, :gdim] = p
-        ownership = dolfinx.geometry.determine_point_ownership(self.mesh, points, 1e-10)
+        ownership = dolfinx.geometry.determine_point_ownership(self.mesh, points, _POINT_TOLERANCE)
         inside = comm.bcast(comm.rank != 0 or bool(ownership.src_owner[0] >= 0), root=0)
         if not inside:
             raise ValueError(f"The electrode {list(p)} is outside the volume-conductor mesh")
         b = dolfinx.fem.Function(self.V)
-        scifem.PointSource(self.V, points, magnitude=1.0).apply_to_vector(b)
+        scifem.PointSource(self.V, points, magnitude=1.0, tol=_POINT_TOLERANCE).apply_to_vector(b)
         b.x.array[:] -= dolfinx.fem.assemble_vector(self._test_integral).array / self.volume
         return self._solve(b, "lead_field")
 
@@ -336,7 +353,12 @@ class LeadFieldElectrodes:
         for name, point in electrodes.items():
             Z_conductor = conductor.lead_field(point)
             if data is None:
-                data = dolfinx.fem.create_interpolation_data(V, conductor.V, cells, padding=1e-8)
+                data = _checked_interpolation_data(
+                    V,
+                    conductor.V,
+                    cells,
+                    "the mesh of v is not inside the volume-conductor mesh",
+                )
             Z = dolfinx.fem.Function(V, name=f"lead_field_{name}")
             Z.interpolate_nonmatching(Z_conductor, cells, data)
             Z.x.scatter_forward()
