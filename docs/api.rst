@@ -39,6 +39,9 @@ FEniCSx-Beat
 .. automodule:: beat.reaction_eikonal
     :members:
 
+.. automodule:: beat.pseudo_bidomain
+    :members:
+
 .. automodule:: beat.activation
     :members:
 
