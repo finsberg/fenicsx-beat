@@ -331,3 +331,68 @@ def get_3D_wedge_geometry(
         electrode=np.array([length, width / 2, thickness / 2]),
         length=length,
     )
+
+
+#: Cell tags of :func:`get_3D_wedge_bath_geometry`
+WEDGE_BATH_MARKERS: dict[str, int] = {"TISSUE": 1, "BATH": 2}
+
+
+class WedgeBathGeometry(NamedTuple):
+    """The wedge of :func:`get_3D_wedge_geometry` immersed in a box of bath
+
+    ``cell_tags`` marks tissue and bath (:data:`WEDGE_BATH_MARKERS`), ``f0`` is the wedge's fiber
+    field extended over the box (only its tissue values matter), and ``margins`` the actual bath
+    thickness on each side along :math:`x, y, z` (mm).
+    """
+
+    mesh: dolfinx.mesh.Mesh
+    cell_tags: dolfinx.mesh.MeshTags
+    f0: dolfinx.fem.Function
+    margins: npt.NDArray[np.float64]
+
+
+def get_3D_wedge_bath_geometry(
+    comm: MPI.Intracomm,
+    dx: float = 0.4,
+    *,
+    margin: float = 2.0,
+    length: float = 25.0,
+    width: float = 25.0,
+    thickness: float = 5.0,
+    cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellType.tetrahedron,
+) -> WedgeBathGeometry:
+    """The wedge of Neic et al. (2017) in a bath that extends ``margin`` mm beyond every face
+
+    The box uses the same grid as ``get_3D_wedge_geometry(comm, dx)`` (whose spacing per axis is
+    the side length divided by ``rint(side / dx)``), extended by a whole number of cells, so the
+    tissue part of this mesh has exactly the wedge's vertices and cells. ``margin`` is therefore
+    rounded up to whole cells on each axis; ``margins`` holds the result.
+    """
+    if margin <= 0:
+        raise ValueError(f"margin must be positive, got {margin}")
+    sizes = np.array([length, width, thickness])
+    n = np.rint(sizes / dx).astype(int)
+    h = sizes / n
+    k = np.ceil(margin / h - 1e-9).astype(int)
+    mesh = dolfinx.mesh.create_box(
+        comm=comm,
+        points=[-k * h, sizes + k * h],
+        n=[int(m) for m in n + 2 * k],
+        cell_type=cell_type,
+    )
+    tdim = mesh.topology.dim
+    imap = mesh.topology.index_map(tdim)
+    cells = np.arange(imap.size_local + imap.num_ghosts, dtype=np.int32)
+    midpoints = dolfinx.mesh.compute_midpoints(mesh, tdim, cells)
+    tissue = np.all((midpoints >= 0.0) & (midpoints <= sizes), axis=1)
+    values = np.where(tissue, WEDGE_BATH_MARKERS["TISSUE"], WEDGE_BATH_MARKERS["BATH"]).astype(
+        np.int32,
+    )
+    cell_tags = dolfinx.mesh.meshtags(mesh, tdim, cells, values)
+
+    def angle(x):
+        return np.deg2rad(-60.0 + 120.0 * np.clip(x[0], 0.0, length) / length)
+
+    f0 = dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, ("DG", 0, (3,))), name="f0")
+    f0.interpolate(lambda x: np.vstack([np.zeros(x.shape[1]), np.cos(angle(x)), np.sin(angle(x))]))
+    return WedgeBathGeometry(mesh=mesh, cell_tags=cell_tags, f0=f0, margins=k * h)
