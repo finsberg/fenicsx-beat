@@ -22,6 +22,7 @@ import beat
 from beat.activation import ActivationTracker
 from beat.eikonal import Source, solve_eikonal
 from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.utils import PointEvaluator
 
 ROOT = Path(__file__).resolve().parents[1]
 ODE_DIR = ROOT / "odes" / "tentusscher_panfilov_2006"
@@ -127,27 +128,6 @@ def build(model, dx, cv, comm):
         )
         ode = FootCurrentODESolver(cell_solver(V, pde.state, markers), t_a, ExponentialFoot())
     return beat.MonodomainSplittingSolver(pde=pde, ode=ode), pde.v, t_a, wedge
-
-
-class PointEvaluator:
-    """Evaluate a Function at fixed points; the point location is done once"""
-
-    def __init__(self, mesh, points):
-        self.comm = mesh.comm
-        self.num_points = len(points)
-        tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
-        cand = dolfinx.geometry.compute_collisions_points(tree, points)
-        adj = dolfinx.geometry.compute_colliding_cells(mesh, cand, points)
-        self.indices = np.flatnonzero(adj.offsets[1:] - adj.offsets[:-1])
-        self.cells = adj.array[adj.offsets[self.indices]]
-        self.points = points[self.indices]
-
-    def __call__(self, u):
-        u.x.scatter_forward()
-        out = np.full(self.num_points, -np.inf)
-        out[self.indices] = u.eval(self.points, self.cells).ravel()
-        self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
-        return out
 
 
 def main():

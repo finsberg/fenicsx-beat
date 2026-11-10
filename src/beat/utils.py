@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from mpi4py import MPI
+
 import basix
 import dolfinx
 import dolfinx.fem.petsc
@@ -404,3 +406,32 @@ def expand_layer_biv(
         xdmf.write_function(uh_rv)
 
     return uh_rv
+
+
+class PointEvaluator:
+    """Evaluate a Function at fixed points; the point location is done once
+
+    ``points`` has shape ``(N, 3)`` (pad 2D points with a zero) and must be the same on every rank.
+    Calling the evaluator returns the values at all points on every rank, ``-inf`` where a point is
+    outside the mesh. Unlike ``scifem.evaluate_function`` the collision search is not repeated on
+    every call. Do not evaluate functions containing NaN (the ranks are combined with a MAX).
+    """
+
+    def __init__(self, mesh: dolfinx.mesh.Mesh, points: np.ndarray) -> None:
+        points = np.ascontiguousarray(points, dtype=np.float64)
+        self.comm = mesh.comm
+        self.num_points = len(points)
+        tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
+        candidates = dolfinx.geometry.compute_collisions_points(tree, points)
+        cells = dolfinx.geometry.compute_colliding_cells(mesh, candidates, points)
+        self.indices = np.flatnonzero(cells.offsets[1:] - cells.offsets[:-1])
+        self.cells = cells.array[cells.offsets[self.indices]]
+        self.points = points[self.indices]
+
+    def __call__(self, u: dolfinx.fem.Function) -> np.ndarray:
+        u.x.scatter_forward()
+        out = np.full(self.num_points, -np.inf)
+        if len(self.indices) > 0:
+            out[self.indices] = u.eval(self.points, self.cells).ravel()
+        self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
+        return out

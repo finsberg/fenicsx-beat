@@ -107,6 +107,8 @@ t_a = solve_eikonal(mesh, (CV_L, CV_T, CV_T), (geo.f0, geo.s0, geo.n0), sources)
 #
 # Each run records the activation time (instant of maximum $dv/dt$, as in the paper) with an
 # `ActivationTracker`, and $v$ at the electrode $P_E$ on the endocardium.
+# `beat.utils.PointEvaluator` locates the probe point once, so reading $v$ at every step is
+# cheap.
 
 # +
 gx, gy = np.meshgrid(np.linspace(0, 25, 101), np.linspace(0, 25, 101))
@@ -115,31 +117,7 @@ results: dict[str, dict] = {}
 NO_ACTIVATION = 1e9  # sentinel for dofs that never activated
 
 
-class PointEvaluator:
-    """Evaluate a Function at fixed points; the point location is done once
-
-    (`scifem.evaluate_function` relocates the points on every call, which costs more than a solver step.)
-    """
-
-    def __init__(self, mesh, points):
-        self.comm = mesh.comm
-        self.num_points = len(points)
-        tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
-        cand = dolfinx.geometry.compute_collisions_points(tree, points)
-        adj = dolfinx.geometry.compute_colliding_cells(mesh, cand, points)
-        self.indices = np.flatnonzero(adj.offsets[1:] - adj.offsets[:-1])
-        self.cells = adj.array[adj.offsets[self.indices]]
-        self.points = points[self.indices]
-
-    def __call__(self, u):
-        u.x.scatter_forward()
-        out = np.full(self.num_points, -np.inf)
-        out[self.indices] = u.eval(self.points, self.cells).ravel()
-        self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
-        return out
-
-
-probe = PointEvaluator(mesh, wedge.electrode[None, :])
+probe = beat.utils.PointEvaluator(mesh, wedge.electrode[None, :])
 
 
 def run(name, solver, v):
