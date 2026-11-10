@@ -26,6 +26,7 @@ parts:
     - file: demos/eikonal.py
     - file: demos/reaction_eikonal_wedge_activation.py
     - file: demos/reaction_eikonal_wedge_repolarization.py
+    - file: demos/reaction_eikonal_wedge_electrograms.py
   - caption: Verification
     chapters:
     - file: demos/verification.py

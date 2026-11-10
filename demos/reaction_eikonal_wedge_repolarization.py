@@ -5,7 +5,8 @@
 # reproduces the transmural profile of $v$ of the R-D model, while R-E$^-$, which ignores
 # diffusion, keeps the sharp steps between the epicardial, M and endocardial layers, and so
 # overestimates the gradients. See the [activation demo](reaction_eikonal_wedge_activation.py)
-# for the models and set-up.
+# for the models and set-up; as there, all models are bath-loaded (the R-D and R-E$^+$ models by
+# a conductivity augmented along the surface).
 #
 # Simulating 500 ms is too long for the documentation build, so we only run R-E$^-$ — the
 # cheapest model — on the 400 µm wedge for `end_time` ms and plot the transmural profile; set

@@ -48,6 +48,9 @@ model and notation used throughout, then work through the
 - [The reaction-eikonal model: repolarisation in a ventricular wedge](reaction_eikonal_wedge_repolarization.py)
   — transmural repolarisation gradients of R-D, R-E$^+$ and R-E$^-$ (Fig. 5 of
   {cite}`neic2017efficient`).
+- [The reaction-eikonal model: electrograms in a ventricular wedge](reaction_eikonal_wedge_electrograms.py)
+  — pseudo-bidomain extracellular potentials and electrograms of R-D, R-E$^+$ and R-E$^-$ in a
+  bath (Fig. 7 of {cite}`neic2017efficient`).
 
 ## Verification
 

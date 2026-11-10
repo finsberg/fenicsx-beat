@@ -19,10 +19,12 @@
 # The foot current is active for $0 \le t - t_a \le 5$ ms as in openCARP; the paper's Eq. 27
 # states a window before $t_a$, which contradicts its own appendix.
 #
-# **Differences from the paper.** Our R-D reference is the monodomain model without a bath (the
-# paper uses bidomain/pseudo-bidomain in a 1 S/m bath), and the eikonal uses the conduction
-# velocities measured for this R-D model at 100 µm (`scripts/reaction_eikonal_cv.py`) instead of
-# the paper's nominal 0.6/0.3 m/s. The stimulus positions are read off the paper's figures.
+# **Differences from the paper.** Like the paper's pseudo-bidomain models, all three models use a
+# monodomain conductivity augmented along the surface for a 1 S/m bath (Section 8.4 of the
+# mathematical background); the paper's gold-standard full bidomain run is not repeated. The
+# eikonal uses the conduction velocities measured for this R-D model at 100 µm
+# (`scripts/reaction_eikonal_cv.py`) instead of the paper's nominal 0.6/0.3 m/s. The stimulus
+# positions are read off the paper's figures.
 #
 # To keep the documentation build short, this demo runs the three models on the 400 µm wedge
 # for 70 ms; the results at 100/200/400 µm, computed with `scripts/reaction_eikonal_wedge.py`,
@@ -64,7 +66,7 @@ geo = wedge.geometry
 mesh = geo.mesh
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 layers = beat.geometry.wedge_layer_markers(V)
-g = beat.conductivities.default_conductivities("Neic2017_wedge")
+g = beat.conductivities.default_conductivities("Neic2017_wedge_bath")
 C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2").to("uF/mm**2").magnitude
 petsc_options = {"ksp_type": "cg", "pc_type": "hypre", "pc_hypre_type": "boomeramg", "ksp_rtol": 1e-8}
 
@@ -148,11 +150,15 @@ def run(name, solver, v):
         print(f"  t_a min/max {ta.min():.1f}/{ta.max():.1f}, activated {ta.size}/{activation.size}")
 # -
 
-# R-D: the monodomain model with the three stimuli.
+# R-D: the monodomain model with the three stimuli. The conductivity is augmented in the three
+# element rings along the surface to mimic the bath (see the
+# [electrogram demo](reaction_eikonal_wedge_electrograms.py)).
 
 # +
 time = dolfinx.fem.Constant(mesh, 0.0)
-M = beat.conductivities.define_conductivity_tensor(f0=geo.f0, **g)
+surface = beat.pseudo_bidomain.interface_layer(mesh, num_layers=3)
+assert geo.f0 is not None
+M = beat.pseudo_bidomain.define_augmented_conductivity_tensor(f0=geo.f0, layer=surface, **g)
 I_s = [
     beat.stimulation.define_stimulus(
         mesh=mesh, chi=g["chi"], time=time, subdomain_data=wedge.cell_tags, marker=tag,
