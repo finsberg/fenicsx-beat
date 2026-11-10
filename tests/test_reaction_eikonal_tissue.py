@@ -7,8 +7,10 @@ import numpy as np
 
 import beat
 from beat.activation import ActivationTracker
+from beat.conductivities import conductivity_tensor
 from beat.eikonal import Source, solve_eikonal
 from beat.odesolver import DolfinODESolver
+from beat.pseudo_bidomain import LeadFieldElectrodes, VolumeConductor
 from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
 
 V_REST, V_C, V_PEAK, K = -85.0, -60.0, 30.0, 1e-4  # dv/dt = -K (v-V_REST)(v-V_C)(v-V_PEAK)
@@ -80,3 +82,53 @@ def test_re_plus_follows_t_a():
     assert comm.allreduce(int(np.isnan(owned(act)).sum())) == 0
     assert comm.allreduce(delay.min(), op=MPI.MIN) >= -1.0
     assert comm.allreduce(delay.max(), op=MPI.MAX) <= 1.5
+
+
+def slab_electrogram(comm, end=20.0, dt=0.02):
+    """phi_e above the middle of a 2D slab in a bath while an R-E- front crosses it"""
+    tissue = dolfinx.mesh.create_rectangle(comm, [[0.0, 0.0], [L, 2.0]], [40, 8])
+    bath = dolfinx.mesh.create_rectangle(comm, [[-1.0, -1.0], [L + 1.0, 3.0]], [48, 16])
+    imap = bath.topology.index_map(2)
+    cells = np.arange(imap.size_local + imap.num_ghosts, dtype=np.int32)
+    mid = dolfinx.mesh.compute_midpoints(bath, 2, cells)
+    inside = (mid[:, 0] > 0) & (mid[:, 0] < L) & (mid[:, 1] > 0) & (mid[:, 1] < 2.0)
+    tags = dolfinx.mesh.meshtags(bath, 2, cells, np.where(inside, 1, 2).astype(np.int32))
+
+    f0 = dolfinx.fem.Constant(tissue, np.array([1.0, 0.0]))
+    s0 = dolfinx.fem.Constant(tissue, np.array([0.0, 1.0]))
+    t_a = solve_eikonal(tissue, (VL, VT), (f0, s0), [Source(lambda x: np.isclose(x[0], 0.0))])
+    V = t_a.function_space
+    solver = ODEOnlySolver(
+        FootCurrentODESolver(cell_model(V, dolfinx.fem.Function(V)), t_a, ExponentialFoot()),
+    )
+
+    fb = dolfinx.fem.Constant(bath, np.array([1.0, 0.0]))
+    conductor = VolumeConductor(
+        bath,
+        tags,
+        1,
+        2,
+        conductivity_tensor(0.16, 0.04, fb),
+        conductivity_tensor(0.62, 0.24, fb),
+        1.0,
+    )
+    record = LeadFieldElectrodes(
+        conductor,
+        solver.v,
+        conductivity_tensor(0.16, 0.04, f0),
+        {"top": [L / 2, 2.5]},
+    )
+    trace, t = [], 0.0
+    while t < end - 1e-9:
+        solver.step((t, t + dt))
+        t += dt
+        trace.append(record()["top"])
+    return np.array(trace)
+
+
+def test_electrogram_in_a_bath_is_partition_independent():
+    parallel = slab_electrogram(MPI.COMM_WORLD)
+    serial = slab_electrogram(MPI.COMM_SELF)
+    assert np.all(np.isfinite(parallel))
+    assert np.abs(parallel).max() > 1e-6
+    assert np.allclose(parallel, serial, rtol=1e-7, atol=1e-10)
