@@ -127,8 +127,14 @@ def slab_electrogram(comm, end=20.0, dt=0.02):
 
 
 def test_electrogram_in_a_bath_is_partition_independent():
-    parallel = slab_electrogram(MPI.COMM_WORLD)
-    serial = slab_electrogram(MPI.COMM_SELF)
+    dt = 0.02
+    parallel = slab_electrogram(MPI.COMM_WORLD, dt=dt)
+    serial = slab_electrogram(MPI.COMM_SELF, dt=dt)
+    # sample i is recorded at t = (i + 1) * dt; the front crosses the electrode's x = 5 and
+    # the slab's end x = 10 at about 8.3 and 16.7 ms, so [8, 16] ms covers the passage
+    t = dt * np.arange(1, len(parallel) + 1)
+    window = (t >= 8.0) & (t <= 16.0)
     assert np.all(np.isfinite(parallel))
-    assert np.abs(parallel).max() > 1e-6
+    assert np.all(np.isfinite(serial))
+    assert np.abs(parallel[window]).max() > 1e-3
     assert np.allclose(parallel, serial, rtol=1e-7, atol=1e-10)
