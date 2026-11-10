@@ -5,17 +5,29 @@ as numpy arrays on the wedge's structured vertex grid: vertex (i, j, k) is at (i
 with the spacing of beat.geometry.get_3D_wedge_geometry.
 """
 
+import inspect
+
 import numpy as np
 
 import beat
 from beat.conductivities import conductivity_tensor, default_conductivities
 
-SIZES = np.array([25.0, 25.0, 5.0])
-ELECTRODE = (25.0, 12.5, 2.5)  # P_E, centre of the endocardial face
+_WEDGE = inspect.signature(beat.geometry.get_3D_wedge_geometry).parameters
+SIZES = np.array([_WEDGE["length"].default, _WEDGE["width"].default, _WEDGE["thickness"].default])
+ELECTRODE = (
+    float(SIZES[0]),
+    float(SIZES[1] / 2),
+    float(SIZES[2] / 2),
+)  # P_E, centre of the endocardial face
 SNAPSHOTS = (40.0, 320.0)  # ms, Fig. 7A and 7B
 GRID_N = 101
-NUM_LAYERS = 3  # augmentation layer, element rings (Bishop & Plank 2011)
-MARGIN = 1.0  # mm of bath; 2 mm does not fit in memory at 100 um
+LAYER_THICKNESS = 0.3  # mm, the 3 element rings of Bishop & Plank (2011) at 100 um
+MARGIN = 1.0  # mm of bath; 2 mm does not fit in memory at 100 um on this ~32 GB machine
+
+
+def num_layers(dx):
+    """Element rings of the augmentation layer: a constant thickness of LAYER_THICKNESS"""
+    return max(1, int(np.floor(LAYER_THICKNESS / dx + 0.5 + 1e-9)))
 
 
 def grid_spacing(dx):

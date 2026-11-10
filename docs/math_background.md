@@ -42,7 +42,7 @@ API:
 | $u_i$, $u_e$ | Intracellular / extracellular potential | — |
 | $v = u_i - u_e$ | Transmembrane potential | `pde.state` / `solver.pde.state` |
 | $s$ | Vector of gating / concentration state variables | ODE `states` array |
-| $M_i$, $M_e$ | Intracellular / extracellular conductivity tensors | — |
+| $M_i$, $M_e$ | Intracellular / extracellular conductivity tensors | `M_i` / `M_e` arguments to `beat.BidomainModel`; `sigma_i` / `sigma_e` arguments to `beat.pseudo_bidomain.VolumeConductor` (`sigma_i` also to `LeadFieldElectrodes`) |
 | $M$ | Effective (monodomain) conductivity tensor | `M` argument to `beat.MonodomainModel` |
 | $\chi$ | Membrane surface-to-volume ratio | `chi` argument to `beat.stimulation.define_stimulus` / `beat.conductivities.define_conductivity_tensor` |
 | $C_m$ | Membrane capacitance (per unit area) | `C_m` argument to `beat.MonodomainModel` |
@@ -421,7 +421,7 @@ m_\zeta = \frac{g_{i\zeta}\, g_{e\zeta}}{g_{i\zeta} + g_{e\zeta}} \quad \text{in
 m_\zeta = \frac{g_{i\zeta}\, \sigma_b}{g_{i\zeta} + \sigma_b} \quad \text{in the layer},
 $$
 
-that is, the harmonic mean of Section 4 with the bath conductivity $\sigma_b$ in place of the
+where $M_i = \sum_\zeta g_{i\zeta}\,\zeta\zeta^\top$ and $M_e = \sum_\zeta g_{e\zeta}\,\zeta\zeta^\top$ before the division by $\chi$, and $M = \frac{1}{\chi}\sum_\zeta m_\zeta\,\zeta\zeta^\top$; that is, the harmonic mean of Section 4 with the bath conductivity $\sigma_b$ in place of the
 extracellular one near the surface (Eqs. 14 and 15 of {cite}`neic2017efficient`).
 `beat.pseudo_bidomain.interface_layer` marks the layer (three element rings by default, as in
 {cite}`bishop2011representing`) and `beat.pseudo_bidomain.define_augmented_conductivity_tensor`

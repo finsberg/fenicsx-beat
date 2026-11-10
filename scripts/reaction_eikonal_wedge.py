@@ -23,10 +23,11 @@ import gotranx
 import numpy as np
 import scifem
 from reaction_eikonal_wedge_grid import (
-    NUM_LAYERS,
+    ELECTRODE,
     SNAPSHOTS,
     gather_to_grid,
     midplane_grid,
+    num_layers,
     scatter_from_grid,
     sigma_tensors,
 )
@@ -46,9 +47,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ODE_DIR = ROOT / "odes" / "tentusscher_panfilov_2006"
 CV_FILE = Path(__file__).resolve().parent / "reaction_eikonal_cv.json"
 T_R50 = 305.0  # ms, 50% repolarisation instant of the paper's Fig. 5
-GRID_N = 101
 NO_ACTIVATION = 1e9  # sentinel for dofs that never activated
-PROBES = {"P_E": (25.0, 12.5, 2.5), "endo": (21.25, 12.5, 2.5), "M": (11.875, 12.5, 2.5)}
+PROBES = {"P_E": ELECTRODE, "endo": (21.25, 12.5, 2.5), "M": (11.875, 12.5, 2.5)}
 PETSC = {
     "ksp_type": "cg",
     "pc_type": "hypre",
@@ -110,7 +110,7 @@ def build(model, dx, cv, comm):
         )
         solver = ODEOnlySolver(ode)
         return solver, solver.v, t_a, wedge
-    layer = interface_layer(mesh, num_layers=NUM_LAYERS)
+    layer = interface_layer(mesh, num_layers=num_layers(dx))
     M = define_augmented_conductivity_tensor(f0=geo.f0, layer=layer, **g)
     if model == "rd":
         I_s = [
@@ -250,7 +250,7 @@ def main():
             v_r50_grid=v_r50_grid.reshape(gx.shape),
             electrogram_t=np.array(egm_t),
             electrogram=np.array(egm),
-            num_layers=NUM_LAYERS,
+            num_layers=num_layers(args.dx),
             trace_t=np.array(trace_t),
             traces=np.array(traces),
             probe_names=np.array(list(PROBES)),

@@ -150,13 +150,15 @@ def run(name, solver, v):
         print(f"  t_a min/max {ta.min():.1f}/{ta.max():.1f}, activated {ta.size}/{activation.size}")
 # -
 
-# R-D: the monodomain model with the three stimuli. The conductivity is augmented in the three
-# element rings along the surface to mimic the bath (see the
-# [electrogram demo](reaction_eikonal_wedge_electrograms.py)).
+# R-D: the monodomain model with the three stimuli. The conductivity is augmented in a layer along
+# the surface to mimic the bath (see the [electrogram demo](reaction_eikonal_wedge_electrograms.py)).
+# The layer is about 0.3 mm thick (three element rings at 100 µm, as in Bishop and Plank), so the
+# coarser meshes use fewer rings.
 
 # +
 time = dolfinx.fem.Constant(mesh, 0.0)
-surface = beat.pseudo_bidomain.interface_layer(mesh, num_layers=3)
+dx_layers = np.floor(0.3 / dx + 0.5 + 1e-9)
+surface = beat.pseudo_bidomain.interface_layer(mesh, num_layers=max(1, int(dx_layers)))
 assert geo.f0 is not None
 M = beat.pseudo_bidomain.define_augmented_conductivity_tensor(f0=geo.f0, layer=surface, **g)
 I_s = [

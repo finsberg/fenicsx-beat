@@ -45,7 +45,8 @@ dt = 0.02  # ms
 # tissue part of the bath mesh has exactly the wedge's vertices and cells and $v$ moves between the
 # two meshes without interpolation error. The paper does not give the size of the bath; we use 1 mm
 # on every side (the bath-loading effect saturates at about that thickness
-# {cite}`bishop2011representing`, and a thicker bath does not fit in memory at 100 µm).
+# {cite}`bishop2011representing`, and a thicker bath does not fit in memory at 100 µm on the
+# ~32 GB machine used here, about 21 GB free).
 
 # +
 wedge = beat.geometry.get_3D_wedge_geometry(comm, dx=dx)
@@ -99,7 +100,7 @@ cells = beat.odesolver.DolfinMultiODESolver(
     num_states={k: len(v) for k, v in init.items()},
     v_index={k: m["state_index"]("V") for k, m in cell_models.items()},
 )
-cv = (0.5944, 0.3236, 0.3236)  # mm/ms, measured for R-D at 100 µm (scripts/reaction_eikonal_cv.json)
+cv = (0.594, 0.324, 0.324)  # mm/ms, from scripts/reaction_eikonal_cv.json
 sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
 t_a = solve_eikonal(mesh, cv, (geo.f0, geo.s0, geo.n0), sources)
 solver = ODEOnlySolver(FootCurrentODESolver(cells, t_a, ExponentialFoot()))

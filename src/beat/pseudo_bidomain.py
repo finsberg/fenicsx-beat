@@ -150,7 +150,7 @@ def _checked_interpolation_data(
 ) -> Any:
     """Interpolation data that raises, on every rank, if a target point has no source cell"""
     data = dolfinx.fem.create_interpolation_data(V_to, V_from, cells, padding=1e-8)
-    n_missing = int((np.asarray(data._cpp_object.src_owner) < 0).sum())
+    n_missing = int((np.asarray(data.src_owner) < 0).sum())
     total = V_to.mesh.comm.allreduce(n_missing, op=MPI.SUM)
     if total > 0:
         raise ValueError(f"{total} interpolation points: {message}")
@@ -266,6 +266,7 @@ class VolumeConductor:
         if V_from.mesh is self.mesh:
             self._v.interpolate(v)
         else:
+            v.x.scatter_forward()
             self._v.x.array[:] = 0.0
             self._v.interpolate_nonmatching(v, self._tissue_cells, self._interpolation_data(V_from))
         self._v.x.scatter_forward()
