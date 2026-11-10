@@ -49,6 +49,9 @@ API:
 | $I_{ion}(v, s)$ | Total ionic current density through the membrane | Right-hand side of the cell model (`fun`) |
 | $I_{stim}$ | Externally applied stimulus current | `beat.Stimulus` / `I_s` |
 | $\theta$ | Splitting / time-stepping parameter, $\theta \in [0, 1]$ | `theta` argument to `beat.MonodomainSplittingSolver` and `parameters["theta"]` |
+| $t_a$ | Local activation time | Output of `beat.eikonal.solve_eikonal`, `t_a` argument to `beat.reaction_eikonal.FootCurrentODESolver` |
+| $c_f$, $c_s$, $c_n$ | Conduction velocities along the fiber, sheet and sheet-normal directions | `velocities` argument to `beat.eikonal.EikonalSolver` |
+| $\mathcal{V}$ | Velocity tensor of the eikonal equation | Built from `velocities` and `fibers` |
 
 $\theta = 1$ gives (first-order) Godunov splitting and a backward Euler PDE
 step, while $\theta = 0.5$ gives (second-order) Strang splitting and a
@@ -304,7 +307,103 @@ pattern (checked against an independent, non-FEM reference) together with a quan
 against `MonodomainSplittingSolver`, showing a several-times reduction in error at practical time
 steps — worth knowing the pattern exists even though it is not (yet) a drop-in solver class.
 
-## 8. Where to go from here
+## 8. The reaction-eikonal model
+
+Everything above resolves the depolarization wavefront in space. In human ventricular tissue the
+upstroke front is well under a millimeter wide, so a reaction-diffusion (R-D) model needs meshes of
+roughly $100$–$250\ \mu$m and time steps of a few hundredths of a millisecond before conduction
+velocity stops depending on the discretization; on coarser meshes the wave travels too slowly or
+fails to propagate at all. The *reaction-eikonal* (R-E) model of Neic et al.
+{cite}`neic2017efficient` avoids this by computing *when* each point activates from a cheap
+geometric problem, the eikonal equation, and only then letting the cell model produce the action
+potential. The front no longer has to be resolved, so the same model runs on meshes several times
+coarser while keeping the activation sequence of a fine R-D simulation.
+
+### 8.1 Activation times from the eikonal equation
+
+Let $t_a(x)$ be the time at which the wavefront reaches the point $x$. If the front moves with
+conduction velocity $c_f$ along the fibers, $c_s$ along the sheets and $c_n$ normal to them, $t_a$
+satisfies the anisotropic **eikonal equation**
+
+$$
+\sqrt{\nabla t_a \cdot \mathcal{V}\, \nabla t_a} = 1,
+\qquad
+\mathcal{V} = c_f^2\, f f^\top + c_s^2\, s s^\top + c_n^2\, n n^\top,
+$$
+
+with $t_a = t_0$ at each stimulus site that fires at time $t_0$. Its solution is the earliest
+arrival time over all paths from the stimulus sites, where a path's travel time is measured in the
+metric $\mathcal{V}^{-1}$; where fronts from different sites meet they simply collide. The
+velocities are inputs here, not outputs: in a monodomain model they scale roughly like
+$\sqrt{M_\zeta / (\chi C_m)}$ in each direction $\zeta$, and in practice one measures them once from
+a fine R-D simulation of the same tissue (the
+[wedge activation demo](../demos/reaction_eikonal_wedge_activation.py) does exactly this).
+
+`beat.eikonal.EikonalSolver` (or the one-shot `beat.eikonal.solve_eikonal`) computes $t_a$ at the
+mesh vertices with the **Fast Iterative Method** (FIM) of Jeong and Whitaker
+{cite}`jeong2008fast` in the form of Fu, Kirby and Whitaker {cite}`fu2013fast`. FIM keeps a list of
+active vertices and repeatedly replaces each one's value by the smallest arrival time it can get
+through any of its cells, given the current values at the cell's other vertices; a vertex leaves
+the list once its value stops changing, and wakes its neighbours. Quadrilateral and hexahedral cells
+are split into triangles and tetrahedra for this, and higher-order geometries use their vertices
+only, so $t_a$ is always a piecewise linear ($P_1$) function. The kernel is compiled C (optionally
+with OpenMP) and runs in parallel over MPI by exchanging the smallest value at shared vertices
+between ranks; the [eikonal demo](../demos/eikonal.py) checks it against exact solutions.
+
+### 8.2 Coupling activation back to the cell model: R-E$^+$ and R-E$^-$
+
+The activation map is turned back into action potentials by a **foot current** that kicks each
+point's cell model across its excitation threshold at $t = t_a$. In the notation of this page it is
+a source of transmembrane potential,
+
+$$
+\left.\frac{\partial v}{\partial t}\right|_{foot}
+    = \frac{A}{\tau_F}\, e^{(t - t_a)/\tau_F}
+    \quad \text{for } 0 \le t - t_a \le T_{foot} \text{ and } v < V_{th},
+$$
+
+and zero otherwise, with $A = 0.91$ mV, $\tau_F = 0.25$ ms, $T_{foot} = 5$ ms and
+$V_{th} = -30$ mV by default (`beat.reaction_eikonal.ExponentialFoot`). The exponential mimics the
+rise of $v$ ahead of a real front; the threshold switches it off once the cell's own sodium current
+has taken over. The time window follows the openCARP implementation, which starts the foot at
+$t_a$; Eq. 27 of {cite}`neic2017efficient` states the window $[t_a - T_{foot}, t_a]$ instead,
+which contradicts the paper's own appendix.
+
+The foot current enters the model in one of two ways:
+
+- **R-E$^+$** keeps diffusion. Each step solves the monodomain model of Section 4, without
+  $I_{stim}$, with the foot current added to the reaction part:
+
+  $$
+  C_m \frac{\partial v}{\partial t}
+      = \nabla \cdot (M \nabla v) - I_{ion}(v, s) + C_m \left.\frac{\partial v}{\partial t}\right|_{foot}.
+  $$
+
+  The foot guarantees activation no later than $t_a$, but diffusion can activate a point earlier.
+  In `beat` this is `beat.MonodomainSplittingSolver(pde, ode)` with an unstimulated
+  `MonodomainModel` and the ODE solver wrapped in `beat.reaction_eikonal.FootCurrentODESolver`, so
+  the operator splitting of Section 6 is unchanged.
+- **R-E$^-$** drops diffusion entirely, $C_m\, \partial v/\partial t = -I_{ion}(v, s) +
+  C_m\, \partial v/\partial t|_{foot}$, so every point evolves independently and no linear system is
+  solved at all. This is `beat.reaction_eikonal.ODEOnlySolver(FootCurrentODESolver(...))`.
+
+Both reproduce a fine R-D activation sequence on coarse meshes. They differ during repolarization:
+diffusion smooths the boundaries between regions with different action potential durations, and
+without it R-E$^-$ produces repolarization gradients that are far too steep, which shows up in the
+T-wave of an ECG. R-E$^+$ keeps that smoothing at a modest extra cost. The
+[wedge activation](../demos/reaction_eikonal_wedge_activation.py) and
+[wedge repolarization](../demos/reaction_eikonal_wedge_repolarization.py) demos reproduce both
+effects from the benchmark of {cite}`neic2017efficient`.
+
+### 8.3 Measuring activation in a simulation
+
+To compare an R-D or R-E simulation with $t_a$, the activation time has to be extracted from $v$.
+`beat.activation.ActivationTracker` records it at every degree of freedom while the simulation runs,
+either as the time of the steepest upstroke (maximum $\partial v/\partial t$, the usual definition
+and the one used by {cite}`neic2017efficient`) or as the first upward crossing of a threshold
+potential. Points that never activate keep the value NaN.
+
+## 9. Where to go from here
 
 - The [demos index](../demos/index.md) lists every demo in this repository, grouped by topic.
 - The [FitzHugh–Nagumo demo](../demos/fitzhughnagumo.py) is the best starting
@@ -328,6 +427,10 @@ steps — worth knowing the pattern exists even though it is not (yet) a drop-in
   described in Section 7.2, and the
   [monolithic coupling demo](../demos/monolithic_external_operator.py) shows the fully implicit,
   no-splitting-error prototype described in Section 7.3.
+- The [eikonal demo](../demos/eikonal.py) introduces the activation-time solver of Section 8.1, and
+  the [wedge activation](../demos/reaction_eikonal_wedge_activation.py) and
+  [wedge repolarization](../demos/reaction_eikonal_wedge_repolarization.py) demos compare R-D,
+  R-E$^+$ and R-E$^-$ as described in Section 8.2.
 - For the full derivation of the bidomain and monodomain models, the
   physiology of the cell membrane, the Hodgkin–Huxley and Nernst–Planck
   formalisms, and a rigorous treatment of operator splitting and its order
