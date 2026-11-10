@@ -1,9 +1,14 @@
-"""The wedge benchmark of Neic et al. 2017 (Figs. 2, 4, 5) for one model and resolution.
+"""The wedge benchmark of Neic et al. 2017 (Figs. 2, 4, 5, 7) in its bath, for one model and
+resolution.
 
     mpirun -n 16 python scripts/reaction_eikonal_wedge.py --model rd --dx 0.1 --end-time 500
 
 Models: "rd" (monodomain reaction-diffusion), "re+" (reaction-eikonal with diffusion), "re-"
 (reaction-eikonal without diffusion). Writes <outdir>/<model>_dx<dx>.npz on rank 0.
+
+All models use the bath-loaded (augmented) conductivity. If <outdir>/leadfield_dx<dx>.npy exists
+(from reaction_eikonal_wedge_leadfield.py) the electrogram phi_e(P_E, t) is recorded, and v is
+saved at t = 40 and 320 ms for reaction_eikonal_wedge_phie.py.
 """
 
 import argparse
@@ -17,10 +22,23 @@ import dolfinx
 import gotranx
 import numpy as np
 import scifem
+from reaction_eikonal_wedge_grid import (
+    NUM_LAYERS,
+    SNAPSHOTS,
+    gather_to_grid,
+    midplane_grid,
+    scatter_from_grid,
+    sigma_tensors,
+)
 
 import beat
 from beat.activation import ActivationTracker
 from beat.eikonal import Source, solve_eikonal
+from beat.pseudo_bidomain import (
+    LeadFieldElectrodes,
+    define_augmented_conductivity_tensor,
+    interface_layer,
+)
 from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
 from beat.utils import PointEvaluator
 
@@ -76,7 +94,7 @@ def build(model, dx, cv, comm):
     mesh = geo.mesh
     V = dolfinx.fem.functionspace(mesh, ("P", 1))
     markers = beat.geometry.wedge_layer_markers(V)
-    g = beat.conductivities.default_conductivities("Neic2017_wedge")
+    g = beat.conductivities.default_conductivities("Neic2017_wedge_bath")
     C_m = beat.units.ureg.Quantity(1.0, "uF/cm**2").to("uF/mm**2").magnitude
     time = dolfinx.fem.Constant(mesh, 0.0)
     t_a = None
@@ -92,7 +110,8 @@ def build(model, dx, cv, comm):
         )
         solver = ODEOnlySolver(ode)
         return solver, solver.v, t_a, wedge
-    M = beat.conductivities.define_conductivity_tensor(f0=geo.f0, **g)
+    layer = interface_layer(mesh, num_layers=NUM_LAYERS)
+    M = define_augmented_conductivity_tensor(f0=geo.f0, layer=layer, **g)
     if model == "rd":
         I_s = [
             beat.stimulation.define_stimulus(
@@ -140,7 +159,7 @@ def main():
     p.add_argument("--dt", type=float, default=0.02)
     p.add_argument("--end-time", type=float, default=500.0)
     p.add_argument("--cv", choices=["measured", "nominal"], default="measured")
-    p.add_argument("--outdir", type=Path, default=Path("results-reaction-eikonal"))
+    p.add_argument("--outdir", type=Path, default=Path("results-reaction-eikonal-bath"))
     p.add_argument("--vtx", action="store_true", help="also write v every 5 ms to a .bp file")
     args = p.parse_args()
 
@@ -153,8 +172,7 @@ def main():
     start = walltime.perf_counter()
     solver, v, t_a, wedge = build(args.model, args.dx, cv, comm)
 
-    gx, gy = np.meshgrid(np.linspace(0, 25, GRID_N), np.linspace(0, 25, GRID_N))
-    grid = np.column_stack([gx.ravel(), gy.ravel(), np.full(gx.size, 2.5)])
+    gx, gy, grid = midplane_grid()
     line_x = np.linspace(0, 25, 501)
     line = np.column_stack([line_x, np.full_like(line_x, 12.5), np.full_like(line_x, 2.5)])
     probes = np.array(list(PROBES.values()))
@@ -169,6 +187,16 @@ def main():
     if args.vtx:
         vtx = dolfinx.io.VTXWriter(comm, out / f"{name}.bp", [v], engine="BP4")
     probe_eval = PointEvaluator(wedge.geometry.mesh, probes)
+    leadfield = out / f"leadfield_dx{args.dx:g}.npy"
+    electrogram = None
+    if leadfield.is_file():
+        Z = dolfinx.fem.Function(v.function_space, name="lead_field_P_E")
+        scatter_from_grid(Z, np.load(leadfield), args.dx)
+        sigma_i, _ = sigma_tensors(wedge.geometry.f0)
+        electrogram = LeadFieldElectrodes.from_lead_fields(v, sigma_i, {"P_E": Z})
+    egm_every = max(1, round(0.1 / args.dt))
+    egm_t, egm = ([0.0], [electrogram()["P_E"]]) if electrogram is not None else ([], [])
+    pending = [s for s in SNAPSHOTS if s <= args.end_time + 1e-9]
     trace_t, traces = [0.0], [probe_eval(v)]
     v_r50_grid = np.full(gx.size, np.nan)
     v_r50_line = np.full(line_x.size, np.nan)
@@ -179,6 +207,14 @@ def main():
         t += dt
         step += 1
         tracker.update(t)
+        if electrogram is not None and step % egm_every == 0:
+            egm_t.append(t)
+            egm.append(electrogram()["P_E"])
+        if pending and t >= pending[0] - 1e-9:
+            snapshot = gather_to_grid(v, args.dx)
+            if comm.rank == 0:
+                np.save(out / f"{name}_v_t{pending[0]:g}.npy", snapshot)
+            pending.pop(0)
         if t <= 60.0 or step % sample == 0:
             trace_t.append(t)
             traces.append(probe_eval(v))
@@ -212,6 +248,9 @@ def main():
             line_x=line_x,
             v_r50_line=v_r50_line,
             v_r50_grid=v_r50_grid.reshape(gx.shape),
+            electrogram_t=np.array(egm_t),
+            electrogram=np.array(egm),
+            num_layers=NUM_LAYERS,
             trace_t=np.array(trace_t),
             traces=np.array(traces),
             probe_names=np.array(list(PROBES)),

@@ -148,3 +148,4 @@ dmypy.json
 _build/
 
 results-reaction-eikonal/
+results-reaction-eikonal-bath/
