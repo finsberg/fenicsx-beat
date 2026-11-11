@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 from mpi4py import MPI
@@ -435,3 +436,33 @@ class PointEvaluator:
             out[self.indices] = u.eval(self.points, self.cells).ravel()
         self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
         return out
+
+
+def time_steps(
+    interval: tuple[float, float],
+    dt: float | None,
+) -> Iterator[tuple[float, float]]:
+    """The steps ``(t0, t1)`` of length ``dt`` that cover ``interval = (T0, T)``
+
+    Times accumulate (``t1 = t0 + dt``) and stepping stops before a step would end past ``T``
+    (with a tolerance of 1e-12), so a ``dt`` that does not divide the interval leaves the
+    remainder out. ``dt=None`` is one step over the whole interval.
+
+    Raises
+    ------
+    ValueError
+        If ``dt`` is not positive or is longer than the interval.
+    """
+    eps = 1e-12
+    T0, T = interval
+    if dt is None:
+        yield (T0, T)
+        return
+    if dt <= 0:
+        raise ValueError(f"dt must be positive, got {dt}")
+    if dt > T - T0 + eps:
+        raise ValueError(f"dt={dt} is longer than the interval {interval}")
+    t0, t1 = T0, T0 + dt
+    while t1 < T + eps:
+        yield (t0, t1)
+        t0, t1 = t1, t1 + dt

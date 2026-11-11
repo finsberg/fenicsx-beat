@@ -25,6 +25,7 @@ from ufl.core.expr import Expr
 
 from .stimulation import Stimulus
 from .telemetry import BaseMonitor, NullMonitor
+from .utils import time_steps
 
 logger = logging.getLogger(__name__)
 _dolfinx_version = Version(dolfinx.__version__)
@@ -360,31 +361,16 @@ class BaseModel:
         Results
             The results of the solution
 
+        Raises
+        ------
+        ValueError
+            If ``dt`` is not positive or is longer than the interval.
+
         """
 
-        # Initial set-up
-        # Solve on entire interval if no interval is given.
-        T0, T = interval
-        if dt is None:
-            dt = T - T0
-        t0 = T0
-        t1 = T0 + dt
-
-        # Step through time steps until at end time
-        while True:
+        for i, (t0, t1) in enumerate(time_steps(interval, dt)):
+            if i > 0:
+                self.assign_previous()
             logger.info("Solving on t = (%g, %g)" % (t0, t1))
             self.step((t0, t1))
-
-            # Yield solutions
-            # yield (t0, t1), self.solution_fields()
-
-            # Break if this is the last step
-            if (t1 + dt) > (T + 1e-12):
-                break
-
-            self.assign_previous()
-
-            t0 = t1
-            t1 = t0 + dt
-
         return Results(state=self.state, status=Status.OK)
