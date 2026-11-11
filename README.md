@@ -194,7 +194,7 @@ t = 0.0
 dt = 0.01
 i = 0
 while t < T:
-    v = solver.pde.state.x.array
+    v = solver.v.x.array
     solver.step((t, t + dt))
     t += dt
     if i % 500 == 0:

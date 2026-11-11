@@ -40,7 +40,7 @@ API:
 | Symbol | Meaning | Corresponds to |
 | --- | --- | --- |
 | $u_i$, $u_e$ | Intracellular / extracellular potential | — |
-| $v = u_i - u_e$ | Transmembrane potential | `pde.state` / `solver.pde.state` |
+| $v = u_i - u_e$ | Transmembrane potential | `pde.state` / `solver.v` |
 | $s$ | Vector of gating / concentration state variables | ODE `states` array |
 | $M_i$, $M_e$ | Intracellular / extracellular conductivity tensors | `M_i` / `M_e` arguments to `beat.BidomainModel`; `sigma_i` / `sigma_e` arguments to `beat.pseudo_bidomain.VolumeConductor` (`sigma_i` also to `LeadFieldElectrodes`) |
 | $M$ | Effective (monodomain) conductivity tensor | `M` argument to `beat.MonodomainModel` |

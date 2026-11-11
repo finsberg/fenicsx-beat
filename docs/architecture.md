@@ -22,7 +22,7 @@ times from $v$, and electrode recorders compute extracellular potentials from $v
   ODE solver (DolfinODESolver, ...) ──► FootCurrentODESolver(ode, t_a)   (still an ODE solver)
          │ v_ode ◄── pde_to_ode / ode_to_pde ──► v_pde  ══ same Function ══  pde.v
          │                                                                   │
-         └──────────────── SplittingSolver(pde or None, ode) ──────┘
+         └──────────────── SplittingSolver(pde or None, ode) ────────────────┘
                                          │ solver.v
             ┌────────────────────────────┼─────────────────────────────┐
             ▼                            ▼                             ▼
