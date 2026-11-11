@@ -51,6 +51,8 @@ cpus
 Cristobal
 ctypes
 Culloch
+dataclass
+dataclasses
 deviatoric
 dirichletbc
 dofmap

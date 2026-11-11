@@ -190,7 +190,7 @@ def qt_interval(
     """
     Processes the ECG signal to compute the corrected QT interval (QTc).
 
-    Parameters:
+    Parameters
     ----------
     t : np.ndarray
         Time vector corresponding to the ECG signal in seconds.
@@ -203,7 +203,7 @@ def qt_interval(
     window_end_offset : int, optional
         End of the search window for T-wave end relative to R-peak (milliseconds). Defaults to 400.
 
-    Returns:
+    Returns
     -------
     QTIntervalResult
         A named tuple containing the start index, end index, and the QT interval in seconds.

@@ -115,6 +115,9 @@ Version(...)` branch before assuming one API shape.
 - `docs/math_background.md` is the canonical notation reference ($v$, $M$, $\chi$, $C_m$, $I_{ion}$,
   $I_{stim}$, $\theta$, matching `beat` API arg names) — keep new demos/docs consistent with it rather
   than inventing new symbols.
+- `docs/architecture.md` ("Code structure") lists every public class by role;
+  `tests/test_architecture_docs.py` fails if a public class is missing there or a module is missing from
+  `docs/api.rst`, so update both when adding one.
 - `demos/index.md` is a flat, grouped index of every demo. When adding a demo, add it to both this and
   `_toc.yml`.
 - `odes/` holds third-party CellML/`.ode` cell-model sources (not part of the `beat` package).

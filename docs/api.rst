@@ -47,3 +47,24 @@ FEniCSx-Beat
 
 .. automodule:: beat.geometry
     :members:
+
+.. automodule:: beat.bidomain_model
+    :members:
+
+.. automodule:: beat.ecg
+    :members:
+
+.. automodule:: beat.stimulation
+    :members:
+
+.. automodule:: beat.conductivities
+    :members:
+
+.. automodule:: beat.telemetry
+    :members:
+
+.. automodule:: beat.single_cell
+    :members:
+
+.. automodule:: beat.units
+    :members:
