@@ -77,7 +77,7 @@ def test_strang_corrective_step_also_applies_the_foot(V):
     time = dolfinx.fem.Constant(V.mesh, 0.0)
     pde = beat.MonodomainModel(time=time, mesh=V.mesh, M=0.0)
     ode = FootCurrentODESolver(make_ode(V, v_pde=pde.state), constant(V, t_a))
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=0.5)
+    solver = beat.SplittingSolver(pde=pde, ode=ode, theta=0.5)
     v = np.full(V.dofmap.index_map.size_local + V.dofmap.index_map.num_ghosts, -85.0)
     t, dt = 0.0, 0.02
     rate = ExponentialFoot().rate

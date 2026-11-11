@@ -272,7 +272,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
 # $\theta = 1$, i.e. (first-order) Godunov splitting.
 
 t = 0.0
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 vtxfname = results_folder / "slab.bp"
 checkpointfname = results_folder / "slab_checkpoint.bp"

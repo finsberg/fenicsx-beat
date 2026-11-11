@@ -1,4 +1,5 @@
 import logging
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -46,7 +47,7 @@ class PDEModel(Protocol):
 
 
 @dataclass
-class MonodomainSplittingSolver:
+class SplittingSolver:
     pde: PDEModel
     ode: ODESolver
     theta: float = 1.0
@@ -183,3 +184,15 @@ class MonodomainSplittingSolver:
 
         # Alert the monitor that the step is finished so it can handle logging/aggregation
         self.monitor.advance_step(t0, t1)
+
+
+class MonodomainSplittingSolver(SplittingSolver):
+    """Deprecated name of :class:`SplittingSolver` (same arguments and behaviour)."""
+
+    def __post_init__(self) -> None:
+        warnings.warn(
+            "MonodomainSplittingSolver is deprecated; use SplittingSolver",
+            DeprecationWarning,
+            stacklevel=3,  # past __post_init__ and the dataclass __init__, to the caller
+        )
+        super().__post_init__()

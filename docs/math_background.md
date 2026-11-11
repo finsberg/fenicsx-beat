@@ -48,7 +48,7 @@ API:
 | $C_m$ | Membrane capacitance (per unit area) | `C_m` argument to `beat.MonodomainModel` |
 | $I_{ion}(v, s)$ | Total ionic current density through the membrane | Right-hand side of the cell model (`fun`) |
 | $I_{stim}$ | Externally applied stimulus current | `beat.Stimulus` / `I_s` |
-| $\theta$ | Splitting / time-stepping parameter, $\theta \in [0, 1]$ | `theta` argument to `beat.MonodomainSplittingSolver` and `parameters["theta"]` |
+| $\theta$ | Splitting / time-stepping parameter, $\theta \in [0, 1]$ | `theta` argument to `beat.SplittingSolver` and `parameters["theta"]` |
 | $t_a$ | Local activation time | Output of `beat.eikonal.solve_eikonal`, `t_a` argument to `beat.reaction_eikonal.FootCurrentODESolver` |
 | $c_f$, $c_s$, $c_n$ | Conduction velocities along the fiber, sheet and sheet-normal directions | `velocities` argument to `beat.eikonal.EikonalSolver` |
 | $\mathcal{V}$ | Velocity tensor of the eikonal equation | Built from `velocities` and `fibers` |
@@ -227,7 +227,7 @@ Choosing $\theta = 1$ collapses step 3 and gives **Godunov splitting**
 (first-order accurate in time, and consistent with a first-order backward
 Euler PDE step); choosing $\theta = 1/2$ gives **Strang splitting** combined
 with a **Crank–Nicolson** PDE step, which is second-order accurate overall.
-This is exactly what `beat.MonodomainSplittingSolver`
+This is exactly what `beat.SplittingSolver`
 implements: its `theta` argument selects between the two, and the `pde` and
 `ode` objects it is constructed from correspond to steps 2 and 1/3 above,
 respectively. The [convergence](../demos/monodomain_convergence.py) and
@@ -236,7 +236,7 @@ numerically using the method of manufactured solutions.
 
 ## 7. Alternative backends for the ODE/PDE steps
 
-`beat.MonodomainSplittingSolver` only depends on its `pde` and `ode` objects implementing a small
+`beat.SplittingSolver` only depends on its `pde` and `ode` objects implementing a small
 interface (`step`, `to_dolfin`/`from_dolfin`, ...), so either half of the split can be swapped out
 independently. Two optional backends are available.
 
@@ -245,7 +245,7 @@ independently. Two optional backends are available.
 The $\theta$-rule used in Section 6 gives at most second-order accuracy in time (at $\theta = 1/2$),
 and the explicit or Rush–Larsen schemes typically used for the ODE step in step 1/3 can struggle with
 very stiff cell models. `beat.IrksomeMonodomainModel` and `beat.IrksomeODESolver` are alternative
-implementations of the `pde` and `ode` roles in `beat.MonodomainSplittingSolver`, built on top of the
+implementations of the `pde` and `ode` roles in `beat.SplittingSolver`, built on top of the
 [Irksome](https://firedrakeproject.org/Irksome) library, that instead advance $v$ (and, for the ODE
 step, $s$) with a fully implicit Runge–Kutta method specified by a *Butcher tableau* — for example
 `irksome.BackwardEuler()` (first order, matching Godunov splitting) or `irksome.GaussLegendre(2)`
@@ -306,7 +306,7 @@ $N \times N$ block Jacobian, which does not scale to large state counts as clean
 `(num_states, num_points)` arrays used everywhere else in this repository. The
 [monolithic coupling demo](../demos/monolithic_external_operator.py) is a validated prototype of the
 pattern (checked against an independent, non-FEM reference) together with a quantitative comparison
-against `MonodomainSplittingSolver`, showing a several-times reduction in error at practical time
+against `SplittingSolver`, showing a several-times reduction in error at practical time
 steps — worth knowing the pattern exists even though it is not (yet) a drop-in solver class.
 
 ## 8. The reaction-eikonal model
@@ -382,7 +382,7 @@ The foot current enters the model in one of two ways:
   $$
 
   The foot guarantees activation no later than $t_a$, but diffusion can activate a point earlier.
-  In `beat` this is `beat.MonodomainSplittingSolver(pde, ode)` with an unstimulated
+  In `beat` this is `beat.SplittingSolver(pde, ode)` with an unstimulated
   `MonodomainModel` and the ODE solver wrapped in `beat.reaction_eikonal.FootCurrentODESolver`, so
   the operator splitting of Section 6 is unchanged.
 - **R-E$^-$** drops diffusion entirely, $C_m\, \partial v/\partial t = -I_{ion}(v, s) +

@@ -179,7 +179,7 @@ ode = beat.odesolver.DolfinODESolver(
 )
 
 # Combine PDE and ODE solver
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # Now we setup file for saving results
 # First remove any existing files

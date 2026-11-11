@@ -22,7 +22,7 @@
 # $$
 #
 # with $M$ and $I_{stim}$ expressed per unit membrane area (i.e. already divided by the surface to
-# volume ratio $\chi$), using `beat.MonodomainSplittingSolver`. See the
+# volume ratio $\chi$), using `beat.SplittingSolver`. See the
 # [mathematical background](../docs/math_background.md) page for the notation, and the
 # [FitzHugh–Nagumo demo](fitzhughnagumo.py) for a step-by-step introduction to the `beat` API.
 #
@@ -235,7 +235,7 @@ ode = beat.odesolver.DolfinODESolver(
     num_states=len(init_states),
     v_index=v_index,
 )
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 v = solver.pde.v
 
 # ## Tracking the spiral tip

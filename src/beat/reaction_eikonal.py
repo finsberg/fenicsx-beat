@@ -12,7 +12,7 @@ model through a foot current that starts at :math:`t_a`:
 The window follows openCARP: the paper's Eq. 27 states :math:`[t_a - T_{foot}, t_a]`, which
 contradicts its own appendix and the openCARP implementation.
 
-* R-E+ (with diffusion): ``MonodomainSplittingSolver(pde, FootCurrentODESolver(...))`` with a
+* R-E+ (with diffusion): ``SplittingSolver(pde, FootCurrentODESolver(...))`` with a
   PDE model without stimulus.
 * R-E- (without diffusion): ``ODEOnlySolver(FootCurrentODESolver(...))``.
 """
@@ -206,7 +206,7 @@ class ODEOnlySolver:
     """Advance only the cell model (with a :class:`FootCurrentODESolver`: the R-E- model)
 
     Same ``solve``/``step`` interface and telemetry as
-    :class:`beat.monodomain_solver.MonodomainSplittingSolver`; :attr:`v` is the ODE solver's
+    :class:`beat.monodomain_solver.SplittingSolver`; :attr:`v` is the ODE solver's
     ``v_ode``.
     """
 

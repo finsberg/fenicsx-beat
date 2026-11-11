@@ -217,7 +217,7 @@ ode = beat.odesolver.DolfinODESolver(
     num_states=len(init_states),
     v_index=v_index,
 )
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 v = solver.pde.v
 
 # ## Counting spiral tips

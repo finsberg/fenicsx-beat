@@ -146,7 +146,7 @@ def build(model, dx, cv, comm):
             params={"petsc_options": PETSC},
         )
         ode = FootCurrentODESolver(cell_solver(V, pde.state, markers), t_a, ExponentialFoot())
-    return beat.MonodomainSplittingSolver(pde=pde, ode=ode), pde.v, t_a, wedge
+    return beat.SplittingSolver(pde=pde, ode=ode), pde.v, t_a, wedge
 
 
 def main():

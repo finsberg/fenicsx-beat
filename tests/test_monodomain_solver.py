@@ -1,5 +1,6 @@
 import gc
 import logging
+import warnings
 
 from mpi4py import MPI
 
@@ -55,7 +56,7 @@ def test_splitting_solver_logs_both_ends_of_the_interval(caplog):
     mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
     pde = beat.MonodomainModel(time=time, mesh=mesh, M=1.0)
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=NullODESolver())
+    solver = beat.SplittingSolver(pde=pde, ode=NullODESolver())
 
     with caplog.at_level(logging.DEBUG, logger="beat.monodomain_solver"):
         solver.solve((0.0, 1.0), dt=0.5)
@@ -113,7 +114,7 @@ def test_monodomain_splitting_analytic(odespace):
         num_states=2,
         v_index=0,
     )
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     solver.solve((t0, T), dt=dt)
 
     v_exact = v_exact_func(x, time)
@@ -171,7 +172,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
             num_states=2,
             v_index=0,
         )
-        solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=1.0)
+        solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
         solver.solve((t0, T), dt=dt)
 
         v_exact = v_exact_func(x, time)
@@ -235,7 +236,7 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
             num_states=2,
             v_index=0,
         )
-        solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=theta)
+        solver = beat.SplittingSolver(pde=pde, ode=ode, theta=theta)
         solver.solve((t0, T), dt=dt)
         v_exact = v_exact_func(x, time)
 
@@ -314,7 +315,7 @@ def test_irksome_monodomain_splitting_analytic(odespace):
         v_index=0,
     )
 
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     solver.solve((t0, T), dt=dt)
 
     v_exact = v_exact_func(x, time)
@@ -388,7 +389,7 @@ def test_external_operator_monodomain_splitting_analytic(odespace):
         v_index=0,
     )
 
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     solver.solve((t0, T), dt=dt)
 
     v_exact = v_exact_func(x, time)
@@ -435,7 +436,7 @@ def build_restart_solver(theta):
         num_states=2,
         v_index=0,
     )
-    return beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=theta)
+    return beat.SplittingSolver(pde=pde, ode=ode, theta=theta)
 
 
 def run_steps(solver, first, last):
@@ -501,5 +502,28 @@ def test_restart_metadata_is_empty_for_a_pde_without_it():
 
         def assign_previous(self) -> None: ...
 
-    solver = beat.MonodomainSplittingSolver(pde=Bare(), ode=NullODESolver())  # type: ignore[arg-type]
+    solver = beat.SplittingSolver(pde=Bare(), ode=NullODESolver())  # type: ignore[arg-type]
     assert solver.restart_metadata() == {}
+
+
+def _small_pde():
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    return beat.MonodomainModel(time=time, mesh=mesh, M=1.0)
+
+
+def test_old_name_warns_at_the_call_site_and_still_works():
+    pde = _small_pde()
+    with pytest.warns(DeprecationWarning, match="use SplittingSolver") as record:
+        solver = beat.MonodomainSplittingSolver(pde=pde, ode=NullODESolver())
+    assert len(record) == 1
+    assert record[0].filename == __file__
+    assert isinstance(solver, beat.SplittingSolver)
+    solver.solve((0.0, 1.0), dt=0.5)
+
+
+def test_new_name_does_not_warn():
+    pde = _small_pde()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        beat.SplittingSolver(pde=pde, ode=NullODESolver())

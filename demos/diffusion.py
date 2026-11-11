@@ -10,7 +10,7 @@
 # on a unit square domain, using $C_m = 1$ (the default) and a constant, scalar conductivity $M = 1$.
 # The stimulus $I_{stim}$ is a constant value of $1$, applied only in the lower left corner of the
 # domain for the first $2.5$ ms of a simulation with time step $\Delta t = 0.1$ ms. Since there is no
-# `beat.MonodomainSplittingSolver` involved here (there is no ODE system to split against), this demo
+# `beat.SplittingSolver` involved here (there is no ODE system to split against), this demo
 # only exercises `beat.MonodomainModel` directly. See the
 # [mathematical background](../docs/math_background.md) page for where this equation comes from, and
 # the [FitzHugh–Nagumo demo](fitzhughnagumo.py) for the same equation with a non-trivial $I_{ion}$

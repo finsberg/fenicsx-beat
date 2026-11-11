@@ -216,7 +216,7 @@ ode = beat.odesolver.DolfinODESolver(
 # Combine the PDE and ODE solver, using the default $\theta = 1$ (Godunov splitting).
 
 # +
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, monitor=monitor)
+solver = beat.SplittingSolver(pde=pde, ode=ode, monitor=monitor)
 output_dir = Path("results-niederer-benchmark")
 output_dir.mkdir(exist_ok=True)
 filename = output_dir / f"results-{dt}-{dx}.xdmf"

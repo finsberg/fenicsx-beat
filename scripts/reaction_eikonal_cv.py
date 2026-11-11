@@ -82,7 +82,7 @@ def conduction_velocity(comm, dx, dt, direction):
         num_states=len(init),
         v_index=model["state_index"]("V"),
     )
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     tracker = ActivationTracker(pde.state, method="threshold")
     t = 0.0
     end = 25.0 if direction == "longitudinal" else 40.0

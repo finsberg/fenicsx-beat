@@ -75,7 +75,7 @@ def test_re_plus_follows_t_a():
     time = dolfinx.fem.Constant(mesh, 0.0)
     pde = beat.MonodomainModel(time=time, mesh=mesh, M=0.02)
     ode = FootCurrentODESolver(cell_model(V, pde.state), t_a, ExponentialFoot())
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     act = run(solver, pde.v)
     delay = owned(act) - owned(t_a)
     comm = mesh.comm

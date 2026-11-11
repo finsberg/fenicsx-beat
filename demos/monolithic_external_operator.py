@@ -8,7 +8,7 @@
 # supply a *derivative* for the cell-model right-hand side to solve the PDE and ODE **together, in one
 # fully implicit Newton system, with no operator splitting at all**. That eliminates the
 # operator-splitting error entirely (only the usual temporal/spatial discretization error remains),
-# something no other solver in this repository can do — `MonodomainSplittingSolver` is, by
+# something no other solver in this repository can do — `SplittingSolver` is, by
 # construction, built around alternating PDE and ODE half-steps.
 #
 # **This demo is a prototype, not a new `beat` API.** `FEMExternalOperator` currently refuses to use a
@@ -23,7 +23,7 @@
 #
 # We validate this pattern against an independent, non-FEM reference (a plain `scipy.optimize.fsolve`
 # backward-Euler solve, no `dolfinx`/UFL involved), and then quantify the benefit: for a range of time
-# steps, we compare the error of this monolithic scheme against `MonodomainSplittingSolver` with a
+# steps, we compare the error of this monolithic scheme against `SplittingSolver` with a
 # realistic Rush–Larsen ODE step (the scheme used throughout the rest of this repository, *not* a
 # strawman explicit-Euler comparison), against a well-resolved reference solution.
 
@@ -62,7 +62,7 @@ import beat
 # [Irksome demo](irksome_model_gotranx.py), generated twice: once through `gotranx`'s JAX backend
 # (`rhs(t, states, parameters)` as a JAX-traceable function, needed for automatic differentiation), and
 # once as an ordinary NumPy generalized Rush–Larsen scheme (needed for the fair comparison against
-# `MonodomainSplittingSolver`, which is how every other tissue demo in this repository steps a cell
+# `SplittingSolver`, which is how every other tissue demo in this repository steps a cell
 # model).
 
 ms_ode_code = """
@@ -368,7 +368,7 @@ def make_stimulus_tags(mesh):
 
 # ## Running the two schemes
 #
-# `run_split` is exactly the existing `beat.MonodomainModel` + `beat.MonodomainSplittingSolver`, using
+# `run_split` is exactly the existing `beat.MonodomainModel` + `beat.SplittingSolver`, using
 # the *realistic* generalized Rush–Larsen scheme for the ODE step (not a strawman explicit-Euler
 # comparison). `run_monolithic` uses `MonolithicCellModelProblem` above, evaluating the cell model and
 # the stimulus at the *new* time level (fully implicit).
@@ -395,7 +395,7 @@ def run_split(dt):
         num_states=num_states,
         v_index=v_index,
     )
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=1.0)
+    solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
     t = 0.0
     while t < T_end - 1e-9:
         solver.step((t, t + dt))
@@ -458,7 +458,7 @@ for dt in dts:
     print(f"{dt:<8}{err_split:<30.5f}{err_mono:<20.5f}{max_its:<12}")
 
 fig, ax = plt.subplots()
-ax.loglog(dts, split_errors, "o-", label="MonodomainSplittingSolver (Rush–Larsen)")
+ax.loglog(dts, split_errors, "o-", label="SplittingSolver (Rush–Larsen)")
 ax.loglog(dts, mono_errors, "s-", label="Monolithic implicit (this demo)")
 ax.set_xlabel(r"$\Delta t$")
 ax.set_ylabel("RMS error vs. fine-$\\Delta t$ reference")

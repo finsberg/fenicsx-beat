@@ -169,7 +169,7 @@ ode = beat.odesolver.DolfinODESolver(
     num_states=len(y),
     v_index=model["state_index"]("V"),
 )
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 checkpointfname = outdir / "pvc_checkpoint.bp"
 

@@ -370,10 +370,10 @@ ode = beat.odesolver.DolfinMultiODESolver(
 )
 
 # We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
-# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# `beat.SplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://scientificcomputing.github.io/io4dolfinx) package.
 

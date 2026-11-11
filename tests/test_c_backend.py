@@ -371,7 +371,7 @@ def run_monodomain(fun, model, num_states):
         num_states=num_states,
         v_index=model["state_index"]("V"),
     )
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     t, dt = 0.0, 0.05
     for _ in range(60):
         solver.step((t, t + dt))
