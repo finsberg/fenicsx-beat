@@ -43,7 +43,7 @@ def main():
         raise SystemExit(f"no snapshots {name}_v_t*.npy in {args.outdir}")
     bath, conductor = volume_conductor(comm, args.dx, args.margin)
     gx, gy, points = midplane_grid()
-    evaluate = PointEvaluator(bath.mesh, points)
+    evaluate = PointEvaluator(bath.geometry.mesh, points)
     v = dolfinx.fem.Function(conductor.V, name="v")
     maps = {}
     for t, path in snapshots.items():

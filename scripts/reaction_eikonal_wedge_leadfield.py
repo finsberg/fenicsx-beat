@@ -31,7 +31,7 @@ def main():
     Z = conductor.lead_field(ELECTRODE)
     array = gather_to_grid(Z, args.dx)
     iterations = conductor.ksp.getIterationNumber()
-    num_vertices = bath.mesh.topology.index_map(0).size_global
+    num_vertices = bath.geometry.mesh.topology.index_map(0).size_global
     if comm.rank == 0:
         if np.isnan(array).any():
             raise RuntimeError("The lead field is missing at some tissue grid vertices")

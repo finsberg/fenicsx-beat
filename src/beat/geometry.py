@@ -340,14 +340,13 @@ WEDGE_BATH_MARKERS: dict[str, int] = {"TISSUE": 1, "BATH": 2}
 class WedgeBathGeometry(NamedTuple):
     """The wedge of :func:`get_3D_wedge_geometry` immersed in a box of bath
 
-    ``cell_tags`` marks tissue and bath (:data:`WEDGE_BATH_MARKERS`), ``f0`` is the wedge's fiber
-    field extended over the box (only its tissue values matter), and ``margins`` the actual bath
-    thickness on each side along :math:`x, y, z` (mm).
+    ``geometry`` holds the box mesh and ``f0``, the wedge's fiber field extended over the box (only
+    its tissue values matter); ``cell_tags`` marks tissue and bath (:data:`WEDGE_BATH_MARKERS`), and
+    ``margins`` the actual bath thickness on each side along :math:`x, y, z` (mm).
     """
 
-    mesh: dolfinx.mesh.Mesh
+    geometry: Geometry
     cell_tags: dolfinx.mesh.MeshTags
-    f0: dolfinx.fem.Function
     margins: npt.NDArray[np.float64]
 
 
@@ -395,4 +394,8 @@ def get_3D_wedge_bath_geometry(
 
     f0 = dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, ("DG", 0, (3,))), name="f0")
     f0.interpolate(lambda x: np.vstack([np.zeros(x.shape[1]), np.cos(angle(x)), np.sin(angle(x))]))
-    return WedgeBathGeometry(mesh=mesh, cell_tags=cell_tags, f0=f0, margins=k * h)
+    return WedgeBathGeometry(
+        geometry=Geometry(mesh=mesh, f0=f0),
+        cell_tags=cell_tags,
+        margins=k * h,
+    )

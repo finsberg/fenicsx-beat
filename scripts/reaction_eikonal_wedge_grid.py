@@ -97,10 +97,10 @@ def midplane_grid():
 
 def volume_conductor(comm, dx, margin):
     bath = beat.geometry.get_3D_wedge_bath_geometry(comm, dx=dx, margin=margin)
-    sigma_i, sigma_e = sigma_tensors(bath.f0)
+    sigma_i, sigma_e = sigma_tensors(bath.geometry.f0)
     markers = beat.geometry.WEDGE_BATH_MARKERS
     conductor = beat.pseudo_bidomain.VolumeConductor(
-        bath.mesh,
+        bath.geometry.mesh,
         bath.cell_tags,
         markers["TISSUE"],
         markers["BATH"],

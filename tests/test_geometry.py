@@ -75,8 +75,8 @@ def test_wedge_bath_geometry_volumes_and_margins():
     comm = MPI.COMM_WORLD
     bath = beat.geometry.get_3D_wedge_bath_geometry(comm, dx=0.5, margin=1.0)
     assert np.allclose(bath.margins, 1.0)
-    dx = ufl.Measure("dx", domain=bath.mesh, subdomain_data=bath.cell_tags)
-    one = dolfinx.fem.Constant(bath.mesh, 1.0)
+    dx = ufl.Measure("dx", domain=bath.geometry.mesh, subdomain_data=bath.cell_tags)
+    one = dolfinx.fem.Constant(bath.geometry.mesh, 1.0)
 
     def volume(measure):
         return comm.allreduce(
@@ -105,7 +105,7 @@ def test_wedge_bath_tissue_vertices_coincide_with_the_wedge():
     Vw = dolfinx.fem.functionspace(wedge.geometry.mesh, ("P", 1))
     f = dolfinx.fem.Function(Vw)
     f.interpolate(lambda x: x[0] ** 2 + x[1] * x[2])
-    Vb = dolfinx.fem.functionspace(bath.mesh, ("P", 1))
+    Vb = dolfinx.fem.functionspace(bath.geometry.mesh, ("P", 1))
     g = dolfinx.fem.Function(Vb)
     cells = bath.cell_tags.find(beat.geometry.WEDGE_BATH_MARKERS["TISSUE"])
     g.interpolate_nonmatching(
@@ -116,3 +116,14 @@ def test_wedge_bath_tissue_vertices_coincide_with_the_wedge():
     dofs = np.unique(Vb.dofmap.list[cells])
     x = Vb.tabulate_dof_coordinates()[dofs]
     assert np.allclose(g.x.array[dofs], x[:, 0] ** 2 + x[:, 1] * x[:, 2], atol=1e-9)
+
+
+def test_wedge_bath_geometry_wraps_a_geometry_like_the_wedge():
+    bath = beat.geometry.get_3D_wedge_bath_geometry(MPI.COMM_WORLD, dx=1.0, margin=1.0)
+    wedge = beat.geometry.get_3D_wedge_geometry(MPI.COMM_WORLD, dx=1.0)
+    assert bath._fields == ("geometry", "cell_tags", "margins")
+    assert isinstance(bath.geometry, beat.geometry.Geometry)
+    assert isinstance(wedge.geometry, beat.geometry.Geometry)
+    assert bath.geometry.f0 is not None
+    assert bath.geometry.s0 is None and bath.geometry.n0 is None and bath.geometry.ffun is None
+    assert bath.cell_tags.dim == bath.geometry.mesh.topology.dim

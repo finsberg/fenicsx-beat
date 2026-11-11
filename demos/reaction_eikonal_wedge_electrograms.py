@@ -62,14 +62,15 @@ def S(name):
     return g[name].to("S/m").magnitude
 
 
-sigma_i_bath = beat.conductivities.conductivity_tensor(S("g_il"), S("g_it"), bath.f0)
-sigma_e_bath = beat.conductivities.conductivity_tensor(S("g_el"), S("g_et"), bath.f0)
+assert bath.geometry.f0 is not None
+sigma_i_bath = beat.conductivities.conductivity_tensor(S("g_il"), S("g_it"), bath.geometry.f0)
+sigma_e_bath = beat.conductivities.conductivity_tensor(S("g_el"), S("g_et"), bath.geometry.f0)
 markers = beat.geometry.WEDGE_BATH_MARKERS
 conductor = VolumeConductor(
-    bath.mesh, bath.cell_tags, markers["TISSUE"], markers["BATH"], sigma_i_bath, sigma_e_bath, S("g_b"),
+    bath.geometry.mesh, bath.cell_tags, markers["TISSUE"], markers["BATH"], sigma_i_bath, sigma_e_bath, S("g_b"),
 )
 if comm.rank == 0:
-    print(f"bath margins {bath.margins} mm, {bath.mesh.topology.index_map(0).size_global} vertices")
+    print(f"bath margins {bath.margins} mm, {bath.geometry.mesh.topology.index_map(0).size_global} vertices")
 # -
 
 # ## R-E$^-$ with an electrogram at $P_E$
@@ -126,7 +127,7 @@ while t < end_time - 1e-9:
 phi_e = conductor.solve(v)
 gx, gy = np.meshgrid(np.linspace(0, 25, 101), np.linspace(0, 25, 101))
 points = np.column_stack([gx.ravel(), gy.ravel(), np.full(gx.size, 2.5)])
-phi_grid = PointEvaluator(bath.mesh, points)(phi_e).reshape(gx.shape)
+phi_grid = PointEvaluator(bath.geometry.mesh, points)(phi_e).reshape(gx.shape)
 if comm.rank == 0:
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11, 4))
     cs = ax0.contourf(gx, gy, phi_grid, levels=21, cmap="jet")
