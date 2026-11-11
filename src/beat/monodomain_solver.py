@@ -14,19 +14,45 @@ EPS = 1e-12
 
 
 class ODESolver(Protocol):
-    def to_dolfin(self) -> None: ...
+    """What the splitting driver asks of an ODE (cell model) solver.
 
-    def from_dolfin(self) -> None: ...
+    The solver keeps the cell states at its own points (the degrees of freedom of ``v_ode``'s
+    space) and moves the potential between them and the PDE's space. :class:`SplittingSolver`
+    never copies between ``v_pde`` and the PDE model's ``v``: they must be the same Function (pass
+    ``v_pde=pde.state``). Without a PDE model (``pde=None``) ``v_pde`` is not used.
 
-    def ode_to_pde(self) -> None: ...
+    Implemented by every :class:`beat.odesolver.BaseDolfinODESolver` subclass and by
+    :class:`beat.reaction_eikonal.FootCurrentODESolver`.
+    """
 
-    def pde_to_ode(self) -> None: ...
+    @property
+    def v_ode(self) -> dolfinx.fem.Function:
+        """The transmembrane potential at the ODE points."""
 
-    def step(self, t0: float, dt: float) -> None: ...
+    @property
+    def v_pde(self) -> dolfinx.fem.Function:
+        """The transmembrane potential in the PDE space: the PDE model's ``v``."""
 
-    def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]: ...
+    def to_dolfin(self) -> None:
+        """Copy the potential from the cell states into ``v_ode``."""
 
-    def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None: ...
+    def from_dolfin(self) -> None:
+        """Copy ``v_ode`` back into the cell states."""
+
+    def ode_to_pde(self) -> None:
+        """Project ``v_ode`` into ``v_pde``."""
+
+    def pde_to_ode(self) -> None:
+        """Project ``v_pde`` into ``v_ode``."""
+
+    def step(self, t0: float, dt: float) -> None:
+        """Advance the cell states from ``t0`` by ``dt``."""
+
+    def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
+        """New Functions on ``v_ode``'s space holding every state, named ``names``."""
+
+    def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
+        """Set every state from ``functions`` (as returned by :meth:`states_to_dolfin`)."""
 
 
 class PDEModel(Protocol):

@@ -195,3 +195,13 @@ def test_ode_only_solver_accepts_no_monitor(V):
     ode = FootCurrentODESolver(make_ode(V), constant(V, 0.0))
     solver = ODEOnlySolver(ode, monitor=None)
     solver.solve((0.0, 0.1), 0.05)
+
+
+def test_wrapper_exposes_the_wrapped_solver_but_forwards_nothing_else(V):
+    inner = make_ode(V)
+    ode = FootCurrentODESolver(inner, constant(V, 0.0))
+    assert ode.ode is inner
+    assert ode.v_ode is inner.v_ode
+    assert ode.v_pde is inner.v_pde
+    with pytest.raises(AttributeError):
+        ode.full_values
