@@ -60,6 +60,7 @@ dolfinx
 dtype
 dvdt
 dvlp
+eigendirection
 eikonal
 Einthoven
 electrograms
@@ -106,6 +107,7 @@ gradu
 Guccione
 Gurev
 Hirschvogel
+HMIS
 Holohan
 Holzapfel
 holzapfelogden
@@ -115,6 +117,7 @@ hyperelastic
 hypre
 inds
 inproceedings
+interp
 Intracomm
 isclose
 isochoric
@@ -125,6 +128,7 @@ Jakub
 Jeong
 jitted
 keepdims
+Krylov
 kwargs
 Joakim
 Kluwer
@@ -169,10 +173,12 @@ neighbours
 neohookean
 Neumann
 Niederer
+nonmatching
 nopython
 normalisation
 normalised
 ntasks
+nullspace
 Numba
 numpy
 odesolver
@@ -241,6 +247,7 @@ subfolders
 subparser
 subplus
 Sundnes
+tbme
 tdim
 tentusscher
 Terje

@@ -69,3 +69,50 @@ def test_neic_conductivities():
     assert g["g_it"].to("S/m").magnitude == pytest.approx(0.04258)
     assert g["g_et"].to("S/m").magnitude == pytest.approx(0.236)
     assert g["chi"].to("1/cm").magnitude == pytest.approx(1400.0)
+
+
+def test_wedge_bath_geometry_volumes_and_margins():
+    comm = MPI.COMM_WORLD
+    bath = beat.geometry.get_3D_wedge_bath_geometry(comm, dx=0.5, margin=1.0)
+    assert np.allclose(bath.margins, 1.0)
+    dx = ufl.Measure("dx", domain=bath.mesh, subdomain_data=bath.cell_tags)
+    one = dolfinx.fem.Constant(bath.mesh, 1.0)
+
+    def volume(measure):
+        return comm.allreduce(
+            dolfinx.fem.assemble_scalar(dolfinx.fem.form(one * measure)),
+            op=MPI.SUM,
+        )
+
+    assert volume(dx(beat.geometry.WEDGE_BATH_MARKERS["TISSUE"])) == pytest.approx(3125.0)
+    assert volume(dx) == pytest.approx(27.0 * 27.0 * 7.0)
+
+
+def test_wedge_bath_margin_is_rounded_up_to_whole_cells():
+    bath = beat.geometry.get_3D_wedge_bath_geometry(MPI.COMM_WORLD, dx=0.4, margin=1.0)
+    h = np.array([25.0 / 62, 25.0 / 62, 5.0 / 12])
+    assert np.all(bath.margins >= 1.0 - 1e-12)
+    assert np.all(bath.margins < 1.0 + h)
+    assert np.allclose(bath.margins / h, np.rint(bath.margins / h))
+    with pytest.raises(ValueError, match="margin"):
+        beat.geometry.get_3D_wedge_bath_geometry(MPI.COMM_WORLD, dx=0.4, margin=0.0)
+
+
+def test_wedge_bath_tissue_vertices_coincide_with_the_wedge():
+    comm = MPI.COMM_WORLD
+    wedge = beat.geometry.get_3D_wedge_geometry(comm, dx=0.5)
+    bath = beat.geometry.get_3D_wedge_bath_geometry(comm, dx=0.5, margin=1.0)
+    Vw = dolfinx.fem.functionspace(wedge.geometry.mesh, ("P", 1))
+    f = dolfinx.fem.Function(Vw)
+    f.interpolate(lambda x: x[0] ** 2 + x[1] * x[2])
+    Vb = dolfinx.fem.functionspace(bath.mesh, ("P", 1))
+    g = dolfinx.fem.Function(Vb)
+    cells = bath.cell_tags.find(beat.geometry.WEDGE_BATH_MARKERS["TISSUE"])
+    g.interpolate_nonmatching(
+        f,
+        cells,
+        dolfinx.fem.create_interpolation_data(Vb, Vw, cells, padding=1e-8),
+    )
+    dofs = np.unique(Vb.dofmap.list[cells])
+    x = Vb.tabulate_dof_coordinates()[dofs]
+    assert np.allclose(g.x.array[dofs], x[:, 0] ** 2 + x[:, 1] * x[:, 2], atol=1e-9)

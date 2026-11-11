@@ -72,9 +72,17 @@ Operator-split PDE/ODE solve per timestep:
   vertices only → P1). `FootCurrentODESolver` wraps any ODE solver with the Neic 2017 foot current
   (openCARP window, not the paper's Eq. 27); R-E+ = `MonodomainSplittingSolver(pde, wrapped)`,
   R-E− = `ODEOnlySolver(wrapped)`. `ActivationTracker` records max-dv/dt or threshold times.
-  Wedge benchmark: `geometry.get_3D_wedge_geometry`, `scripts/reaction_eikonal_*.py`.
+  Wedge benchmark: `geometry.get_3D_wedge_geometry`, `scripts/reaction_eikonal_*.py`. Bath loading
+  / pseudo-bidomain (`pseudo_bidomain.py`): `interface_layer` + `define_augmented_conductivity_tensor`
+  (Neic Eqs. 14–15) for the monodomain, `VolumeConductor` (tissue+bath elliptic $\phi_e$ on a separate
+  mesh, non-matching interpolation of `v`) and `LeadFieldElectrodes` (electrograms by reciprocity);
+  wedge-in-bath geometry `get_3D_wedge_bath_geometry`; Fig. 7 pipeline
+  `scripts/reaction_eikonal_wedge_leadfield.py` → `scripts/reaction_eikonal_wedge.py` →
+  `scripts/reaction_eikonal_wedge_phie.py`, exchanging fields as grid arrays
+  (`scripts/reaction_eikonal_wedge_grid.py`; bath margin 1 mm because 2 mm does not fit in memory at
+  100 µm on the ~32 GB, ~21 GB free, machine).
 - **Conductivities/units** (`conductivities.py`, `units.py`): `pint` quantities → `M` via
-  `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop").
+  `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop", "Neic2017_wedge", "Neic2017_wedge_bath" with the bath `g_b`).
 - **Geometry** (`geometry.py`): `Geometry` NamedTuple + 2D/3D slab helpers; real ventricular geometries
   come from `cardiac-geometriesx`/`ukb-atlas`/`fenicsx-ldrb` (`demos`/`docs` extras).
 - **ECG** (`ecg.py`): `ECGRecovery`; `ElectrodePotentials` (one solve, potentials at named electrodes);

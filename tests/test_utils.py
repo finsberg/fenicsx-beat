@@ -156,3 +156,25 @@ def test_cpp_function_space_accepts_either_wrapper():
 
     assert beat.utils.cpp_function_space(V) is V._cpp_object
     assert beat.utils.cpp_function_space(V._cpp_object) is V._cpp_object
+
+
+def test_point_evaluator_matches_linear_function():
+    from mpi4py import MPI
+
+    import dolfinx
+    import numpy as np
+
+    from beat.utils import PointEvaluator
+
+    mesh = dolfinx.mesh.create_unit_cube(MPI.COMM_WORLD, 4, 4, 4)
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    u = dolfinx.fem.Function(V)
+    u.interpolate(lambda x: 1.0 + x[0] + 2.0 * x[1] + 3.0 * x[2])
+    points = np.array([[0.1, 0.2, 0.3], [0.9, 0.5, 0.5], [2.0, 0.0, 0.0]])
+    evaluate = PointEvaluator(mesh, points)
+    expected = 1.0 + points[:2, 0] + 2.0 * points[:2, 1] + 3.0 * points[:2, 2]
+    out = evaluate(u)
+    assert np.allclose(out[:2], expected)
+    assert out[2] == -np.inf
+    u.x.array[:] *= 2.0
+    assert np.allclose(evaluate(u)[:2], 2.0 * expected)
