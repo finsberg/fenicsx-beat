@@ -45,7 +45,7 @@ import scifem
 import beat
 from beat.activation import ActivationTracker
 from beat.eikonal import Source, solve_eikonal
-from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver
 
 comm = MPI.COMM_WORLD
 dx = 0.4  # mm
@@ -187,7 +187,10 @@ run("R-E+", beat.SplittingSolver(pde=pde, ode=ode), pde.v)
 # R-E$^-$: only the cell models, driven by the foot current; no linear solves at all.
 
 # +
-solver = ODEOnlySolver(FootCurrentODESolver(cell_solver(dolfinx.fem.Function(V)), t_a, ExponentialFoot()))
+solver = beat.SplittingSolver(
+    pde=None,
+    ode=FootCurrentODESolver(cell_solver(dolfinx.fem.Function(V)), t_a, ExponentialFoot()),
+)
 run("R-E-", solver, solver.v)
 # -
 

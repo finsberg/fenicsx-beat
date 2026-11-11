@@ -30,7 +30,7 @@ import numpy as np
 import beat
 from beat.eikonal import Source, solve_eikonal
 from beat.pseudo_bidomain import LeadFieldElectrodes, VolumeConductor
-from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver
 from beat.utils import PointEvaluator
 
 comm = MPI.COMM_WORLD
@@ -103,7 +103,7 @@ cells = beat.odesolver.DolfinMultiODESolver(
 cv = (0.594, 0.324, 0.324)  # mm/ms, from scripts/reaction_eikonal_cv.json
 sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
 t_a = solve_eikonal(mesh, cv, (geo.f0, geo.s0, geo.n0), sources)
-solver = ODEOnlySolver(FootCurrentODESolver(cells, t_a, ExponentialFoot()))
+solver = beat.SplittingSolver(pde=None, ode=FootCurrentODESolver(cells, t_a, ExponentialFoot()))
 v = solver.v
 
 assert geo.f0 is not None

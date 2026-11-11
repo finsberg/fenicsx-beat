@@ -387,7 +387,8 @@ The foot current enters the model in one of two ways:
   the operator splitting of Section 6 is unchanged.
 - **R-E$^-$** drops diffusion entirely, $C_m\, \partial v/\partial t = -I_{ion}(v, s) +
   C_m\, \partial v/\partial t|_{foot}$, so every point evolves independently and no linear system is
-  solved at all. This is `beat.reaction_eikonal.ODEOnlySolver(FootCurrentODESolver(...))`.
+  solved at all. This is `beat.SplittingSolver(pde=None, ode=FootCurrentODESolver(...))`: the same driver,
+  without a PDE.
 
 Both reproduce a fine R-D activation sequence on coarse meshes. They differ during repolarization:
 diffusion smooths the boundaries between regions with different action potential durations, and

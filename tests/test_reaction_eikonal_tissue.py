@@ -11,7 +11,7 @@ from beat.conductivities import conductivity_tensor
 from beat.eikonal import Source, solve_eikonal
 from beat.odesolver import DolfinODESolver
 from beat.pseudo_bidomain import LeadFieldElectrodes, VolumeConductor
-from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver
 
 V_REST, V_C, V_PEAK, K = -85.0, -60.0, 30.0, 1e-4  # dv/dt = -K (v-V_REST)(v-V_C)(v-V_PEAK)
 VL, VT = 0.6, 0.3
@@ -61,7 +61,7 @@ def owned(u):
 def test_re_minus_activates_after_t_a():
     mesh, V, t_a = setup()
     ode = FootCurrentODESolver(cell_model(V, dolfinx.fem.Function(V)), t_a, ExponentialFoot())
-    solver = ODEOnlySolver(ode)
+    solver = beat.SplittingSolver(pde=None, ode=ode)
     act = run(solver, solver.v)
     delay = owned(act) - owned(t_a)
     comm = mesh.comm
@@ -98,8 +98,9 @@ def slab_electrogram(comm, end=20.0, dt=0.02):
     s0 = dolfinx.fem.Constant(tissue, np.array([0.0, 1.0]))
     t_a = solve_eikonal(tissue, (VL, VT), (f0, s0), [Source(lambda x: np.isclose(x[0], 0.0))])
     V = t_a.function_space
-    solver = ODEOnlySolver(
-        FootCurrentODESolver(cell_model(V, dolfinx.fem.Function(V)), t_a, ExponentialFoot()),
+    solver = beat.SplittingSolver(
+        pde=None,
+        ode=FootCurrentODESolver(cell_model(V, dolfinx.fem.Function(V)), t_a, ExponentialFoot()),
     )
 
     fb = dolfinx.fem.Constant(bath, np.array([1.0, 0.0]))

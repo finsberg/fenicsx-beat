@@ -72,7 +72,7 @@ Operator-split PDE/ODE solve per timestep:
   `c_backend.build_library`, optional OpenMP, distributed by ghost min-exchange; any cell type,
   vertices only → P1). `FootCurrentODESolver` wraps any ODE solver with the Neic 2017 foot current
   (openCARP window, not the paper's Eq. 27); R-E+ = `SplittingSolver(pde, wrapped)`,
-  R-E− = `ODEOnlySolver(wrapped)`. `ActivationTracker` records max-dv/dt or threshold times.
+  R-E− = `SplittingSolver(None, wrapped)` (no PDE). `ActivationTracker` records max-dv/dt or threshold times.
   Wedge benchmark: `geometry.get_3D_wedge_geometry`, `scripts/reaction_eikonal_*.py`. Bath loading
   / pseudo-bidomain (`pseudo_bidomain.py`): `interface_layer` + `define_augmented_conductivity_tensor`
   (Neic Eqs. 14–15) for the monodomain, `VolumeConductor` (tissue+bath elliptic $\phi_e$ on a separate
