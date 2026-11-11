@@ -268,3 +268,29 @@ def test_subclass_overriding_the_old_methods_still_works():
     ode.step(0.0, 1.0)
     ode.to_dolfin()
     assert np.allclose(ode.v_ode.x.array, 2.0)
+
+
+@pytest.mark.parametrize("name", ["dolfin_multi", "irksome_multi", "external_operator_multi"])
+def test_dofs_outside_every_region_are_left_alone(name):
+    ode, _ = build(name)
+    comm = ode.v_ode.function_space.mesh.comm
+    m = ode.markers.x.array
+    outside = m == 2
+    # Drop region 2 from the bookkeeping: its dofs are now covered by no region
+    ode._marker_values = (1,)
+    ode.v_ode.x.array[:] = -5.0
+    ode.to_dolfin()
+    assert np.allclose(ode.v_ode.x.array[outside], -5.0)
+    assert np.allclose(ode.v_ode.x.array[m == 1], 1.0)
+    assert np.allclose(ode.full_values[:, outside], 0.0)
+    comm.Barrier()
+    del ode
+    comm.Barrier()
+    gc.collect()
+    comm.Barrier()
+
+
+def test_dolfin_multi_values_is_the_live_array():
+    ode, _ = build("dolfin_multi")
+    ode.values(1)[0, :] = 9.0
+    assert np.allclose(ode.full_values[0, ode.markers.x.array == 1], 9.0)

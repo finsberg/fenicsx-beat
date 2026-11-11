@@ -5,7 +5,7 @@ import dolfinx
 import numpy as np
 import ufl
 
-from beat.odesolver import BaseDolfinODESolver
+from beat.odesolver import BaseDolfinMultiODESolver, BaseDolfinODESolver
 from beat.telemetry import BaseMonitor, NullMonitor
 
 
@@ -100,7 +100,7 @@ class IrksomeODESolver(BaseDolfinODESolver):
         self.states.x.array[self._maps[index]] = values
 
 
-class IrksomeMultiODESolver(BaseDolfinODESolver):
+class IrksomeMultiODESolver(BaseDolfinMultiODESolver):
     """Multi-region counterpart to :class:`IrksomeODESolver`, analogous to how
     :class:`beat.odesolver.DolfinMultiODESolver` extends
     :class:`beat.odesolver.DolfinODESolver`: a different cell model (``fun``,
@@ -136,9 +136,6 @@ class IrksomeMultiODESolver(BaseDolfinODESolver):
     ):
         import irksome
 
-        if v_ode.x.array.size != markers.x.array.size:
-            raise RuntimeError("Marker and voltage need to be in the same function space")
-
         self.v_ode = v_ode
         self.v_pde = v_pde
         self.markers = markers
@@ -152,19 +149,17 @@ class IrksomeMultiODESolver(BaseDolfinODESolver):
         # Initialize base class properties
         self._initialize_metadata()
 
-        self._marker_values = tuple(init_states.keys())
+        self._setup_regions(init_states.keys())
         mesh = v_ode.function_space.mesh
         el = v_ode.function_space.ufl_element()
 
-        self._inds: dict[int, np.ndarray] = {}
         self._maps: dict[int, list[np.ndarray]] = {}
         self._states: dict[int, dolfinx.fem.Function] = {}
         self._dt: dict[int, dolfinx.fem.Constant] = {}
         self._steppers: dict = {}
 
         for marker in self._marker_values:
-            where = markers.x.array == marker
-            self._inds[marker] = where
+            where = self._inds[marker]
             n = num_states[marker]
 
             values = self._broadcast_init_states(init_states[marker], n, int(where.sum()))
@@ -215,17 +210,6 @@ class IrksomeMultiODESolver(BaseDolfinODESolver):
                 backend="dolfinx",
             )
 
-    @staticmethod
-    def _broadcast_init_states(init_states: np.ndarray, num_states: int, num_points: int):
-        """Broadcast ``init_states`` to shape ``(num_states, num_points)``, mirroring
-        :class:`beat.odesolver.DolfinMultiODESolver`."""
-        shape = (num_states, num_points)
-        if np.shape(init_states) == shape:
-            return np.copy(init_states)
-        values = np.zeros(shape)
-        values.T[:] = init_states
-        return values
-
     def step(self, t0: float, dt: float) -> None:
         with self.monitor.track_time("ode_total_step"):
             self.time.value = t0  # type: ignore[assignment]
@@ -234,89 +218,11 @@ class IrksomeMultiODESolver(BaseDolfinODESolver):
                     self._dt[marker].value = dt  # type: ignore[assignment]
                     self._steppers[marker].advance()
 
-    def to_dolfin(self) -> None:
-        """Move the voltage variable from the per-marker mixed ODE spaces into v_ode."""
-        arr = self.v_ode.x.array.copy()
-        for marker in self._marker_values:
-            where = self._inds[marker]
-            map_i = self._maps[marker][self.v_index[marker]]
-            arr[where] = self._states[marker].x.array[map_i][where]
-        self.v_ode.x.array[:] = arr
+    def _get_region_state(self, marker: int, index: int) -> np.ndarray:
+        return self._states[marker].x.array[self._maps[marker][index]][self._inds[marker]]
 
-    def from_dolfin(self) -> None:
-        """Move the voltage variable from v_ode back into the per-marker mixed ODE spaces."""
-        for marker in self._marker_values:
-            where = self._inds[marker]
-            map_i = self._maps[marker][self.v_index[marker]]
-            full = self._states[marker].x.array[map_i]
-            full[where] = self.v_ode.x.array[where]
-            self._states[marker].x.array[map_i] = full
-
-    def values(self, marker: int) -> np.ndarray:
-        where = self._inds[marker]
-        n = self.num_states[marker]
-        out = np.zeros((n, int(where.sum())))
-        for i in range(n):
-            map_i = self._maps[marker][i]
-            out[i, :] = self._states[marker].x.array[map_i][where]
-        return out
-
-    def num_parameters(self, marker: int) -> int:
-        return len(self.parameters[marker])
-
-    def num_points(self, marker: int) -> int:
-        return int(self._inds[marker].sum())
-
-    def shape(self, marker: int) -> tuple[int, int]:
-        return (self.num_states[marker], self.num_points(marker))
-
-    @property
-    def full_values(self):
-        num_states_values = tuple(self.num_states.values())
-        if any(n != num_states_values[0] for n in num_states_values):
-            msg = (
-                "Cannot get full values size states are not of equal size. "
-                f"Have {self.num_states=}, use .values(marker) instead"
-            )
-            raise RuntimeError(msg)
-
-        n = num_states_values[0]
-        vals = np.zeros((n, self.v_ode.x.array.size))
-        for marker in self._marker_values:
-            where = self._inds[marker]
-            for i in range(n):
-                map_i = self._maps[marker][i]
-                vals[i, where] = self._states[marker].x.array[map_i][where]
-        return vals
-
-    def assign_all_states(self, functions) -> None:
-        num_states = self.num_states[self._marker_values[0]]
-        assert len(functions) == num_states, "Number of functions must match number of states"
-        for index, f in enumerate(functions):
-            for marker in self._marker_values:
-                where = self._inds[marker]
-                map_i = self._maps[marker][index]
-                f.x.array[where] = self._states[marker].x.array[map_i][where]
-
-    def load_all_states(self, functions) -> None:
-        num_states = self.num_states[self._marker_values[0]]
-        assert len(functions) == num_states, "Number of functions must match number of states"
-        for index, f in enumerate(functions):
-            for marker in self._marker_values:
-                where = self._inds[marker]
-                # `x.array[map_i][where] = ...` would write into a copy of x.array (fancy
-                # indexing by map_i copies); index the map itself so the assignment lands
-                # on x.array directly.
-                map_i = np.asarray(self._maps[marker][index])
-                self._states[marker].x.array[map_i[where]] = f.x.array[where]
-        self.to_dolfin()
-
-    def states_to_dolfin(self, names=None):
-        functions = []
-        num_states = self.num_states[self._marker_values[0]]
-        for i in range(num_states):
-            name = names[i] if names else f"state_{i}"
-            f = dolfinx.fem.Function(self.v_ode.function_space, name=name)
-            functions.append(f)
-        self.assign_all_states(functions)
-        return functions
+    def _set_region_state(self, marker: int, index: int, values) -> None:
+        # Index the dof map itself so the write lands on x.array (fancy indexing x.array by the
+        # map first would write into a copy).
+        dofs = np.asarray(self._maps[marker][index])
+        self._states[marker].x.array[dofs[self._inds[marker]]] = values

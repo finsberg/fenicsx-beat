@@ -4,7 +4,7 @@ import basix
 import dolfinx
 import numpy as np
 
-from beat.odesolver import BaseDolfinODESolver
+from beat.odesolver import BaseDolfinMultiODESolver, BaseDolfinODESolver
 from beat.telemetry import BaseMonitor, NullMonitor
 
 
@@ -137,7 +137,7 @@ class ExternalOperatorODESolver(BaseDolfinODESolver):
         self.states.x.array[index :: self.num_states] = values
 
 
-class ExternalOperatorMultiODESolver(BaseDolfinODESolver):
+class ExternalOperatorMultiODESolver(BaseDolfinMultiODESolver):
     """Multi-region counterpart to :class:`ExternalOperatorODESolver`, analogous to how
     :class:`beat.odesolver.DolfinMultiODESolver` extends
     :class:`beat.odesolver.DolfinODESolver` and :class:`beat.irksome_odesolver.
@@ -174,9 +174,6 @@ class ExternalOperatorMultiODESolver(BaseDolfinODESolver):
         self._evaluate_operands = evaluate_operands
         self._evaluate_external_operators = evaluate_external_operators
 
-        if v_ode.x.array.size != markers.x.array.size:
-            raise RuntimeError("Marker and voltage need to be in the same function space")
-
         self.v_ode = v_ode
         self.v_pde = v_pde
         self.markers = markers
@@ -189,19 +186,17 @@ class ExternalOperatorMultiODESolver(BaseDolfinODESolver):
         # Initialize base class properties
         self._initialize_metadata()
 
-        self._marker_values = tuple(init_states.keys())
+        self._setup_regions(init_states.keys())
         mesh = v_ode.function_space.mesh
         el = v_ode.function_space.ufl_element()
 
-        self._inds: dict[int, np.ndarray] = {}
         self._states: dict[int, dolfinx.fem.Function] = {}
         self._operators: dict[int, list] = {}
         self._t0 = 0.0
         self._dt = 0.0
 
         for marker in self._marker_values:
-            where = markers.x.array == marker
-            self._inds[marker] = where
+            where = self._inds[marker]
             n = num_states[marker]
 
             values = self._broadcast_init_states(init_states[marker], n, int(where.sum()))
@@ -243,17 +238,6 @@ class ExternalOperatorMultiODESolver(BaseDolfinODESolver):
                 ),
             ]
 
-    @staticmethod
-    def _broadcast_init_states(init_states: np.ndarray, num_states: int, num_points: int):
-        """Broadcast ``init_states`` to shape ``(num_states, num_points)``, mirroring
-        :class:`beat.odesolver.DolfinMultiODESolver`."""
-        shape = (num_states, num_points)
-        if np.shape(init_states) == shape:
-            return np.copy(init_states)
-        values = np.zeros(shape)
-        values.T[:] = init_states
-        return values
-
     def step(self, t0: float, dt: float) -> None:
         with self.monitor.track_time("ode_total_step"):
             self._t0 = t0
@@ -264,85 +248,11 @@ class ExternalOperatorMultiODESolver(BaseDolfinODESolver):
                     coefficients = self._evaluate_operands(operators)
                     self._evaluate_external_operators(operators, coefficients)
 
-    def to_dolfin(self) -> None:
-        """Move the voltage variable from the per-marker state functions into v_ode."""
-        arr = self.v_ode.x.array.copy()
-        for marker in self._marker_values:
-            where = self._inds[marker]
-            n = self.num_states[marker]
-            arr[where] = self._states[marker].x.array[self.v_index[marker] :: n][where]
-        self.v_ode.x.array[:] = arr
-
-    def from_dolfin(self) -> None:
-        """Move the voltage variable from v_ode back into the per-marker state functions."""
-        for marker in self._marker_values:
-            where = self._inds[marker]
-            n = self.num_states[marker]
-            full = self._states[marker].x.array[self.v_index[marker] :: n]
-            full[where] = self.v_ode.x.array[where]
-            self._states[marker].x.array[self.v_index[marker] :: n] = full
-
-    def values(self, marker: int) -> np.ndarray:
-        where = self._inds[marker]
+    def _get_region_state(self, marker: int, index: int) -> np.ndarray:
         n = self.num_states[marker]
-        out = np.zeros((n, int(where.sum())))
-        for i in range(n):
-            out[i, :] = self._states[marker].x.array[i::n][where]
-        return out
+        return self._states[marker].x.array[index::n][self._inds[marker]]
 
-    def num_parameters(self, marker: int) -> int:
-        return len(self.parameters[marker])
-
-    def num_points(self, marker: int) -> int:
-        return int(self._inds[marker].sum())
-
-    def shape(self, marker: int) -> tuple[int, int]:
-        return (self.num_states[marker], self.num_points(marker))
-
-    @property
-    def full_values(self):
-        num_states_values = tuple(self.num_states.values())
-        if any(n != num_states_values[0] for n in num_states_values):
-            msg = (
-                "Cannot get full values size states are not of equal size. "
-                f"Have {self.num_states=}, use .values(marker) instead"
-            )
-            raise RuntimeError(msg)
-
-        n = num_states_values[0]
-        vals = np.zeros((n, self.v_ode.x.array.size))
-        for marker in self._marker_values:
-            where = self._inds[marker]
-            for i in range(n):
-                vals[i, where] = self._states[marker].x.array[i::n][where]
-        return vals
-
-    def assign_all_states(self, functions) -> None:
-        num_states = self.num_states[self._marker_values[0]]
-        assert len(functions) == num_states, "Number of functions must match number of states"
-        for index, f in enumerate(functions):
-            for marker in self._marker_values:
-                where = self._inds[marker]
-                n = self.num_states[marker]
-                f.x.array[where] = self._states[marker].x.array[index::n][where]
-
-    def load_all_states(self, functions) -> None:
-        num_states = self.num_states[self._marker_values[0]]
-        assert len(functions) == num_states, "Number of functions must match number of states"
-        for index, f in enumerate(functions):
-            for marker in self._marker_values:
-                where = self._inds[marker]
-                n = self.num_states[marker]
-                view = self._states[marker].x.array[index::n]  # basic slice -> a view
-                view[where] = f.x.array[where]
-        self.to_dolfin()
-
-    def states_to_dolfin(self, names=None):
-        functions = []
-        num_states = self.num_states[self._marker_values[0]]
-        for i in range(num_states):
-            name = names[i] if names else f"state_{i}"
-            f = dolfinx.fem.Function(self.v_ode.function_space, name=name)
-            functions.append(f)
-        self.assign_all_states(functions)
-        return functions
+    def _set_region_state(self, marker: int, index: int, values) -> None:
+        n = self.num_states[marker]
+        view = self._states[marker].x.array[index::n]  # a basic slice is a view
+        view[self._inds[marker]] = values
