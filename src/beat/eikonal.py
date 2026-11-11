@@ -39,7 +39,7 @@ KERNEL_LIBRARY = "libbeat_eikonal.so"
 FAR = 1e300
 
 
-class EikonalKernel:
+class _EikonalKernel:
     """The compiled FIM kernel (see ``eikonal_kernel.c``)"""
 
     def __init__(self, library: Path, num_threads: int | None = None) -> None:
@@ -98,7 +98,7 @@ class EikonalKernel:
         return int(status)
 
 
-def compile_kernel(
+def _compile_kernel(
     *,
     openmp: bool = False,
     num_threads: int | None = None,
@@ -106,7 +106,7 @@ def compile_kernel(
     cflags: Sequence[str] = c_backend.DEFAULT_CFLAGS,
     cache_dir: str | Path | None = None,
     comm: MPI.Comm = MPI.COMM_WORLD,
-) -> EikonalKernel:
+) -> _EikonalKernel:
     """Compile (or load from the cache) the FIM kernel on rank 0 and load it on every rank
 
     Parameters
@@ -136,7 +136,7 @@ def compile_kernel(
         source_name="eikonal_kernel.c",
         description="eikonal kernel",
     )
-    return EikonalKernel(library, num_threads)
+    return _EikonalKernel(library, num_threads)
 
 
 def vertex_connectivity(
@@ -301,7 +301,9 @@ class EikonalSolver:
     mesh_unit : str, optional
         Unit of the mesh coordinates, used to convert pint velocities, by default "mm"
     openmp, num_threads, cc, cflags, cache_dir
-        Kernel compilation, see :func:`compile_kernel`
+        Compilation of the C kernel: ``openmp`` runs its update phases with OpenMP
+        (``num_threads`` threads, by default OMP_NUM_THREADS or the OpenMP default); ``cc``,
+        ``cflags`` and ``cache_dir`` as in :func:`beat.c_backend.compile_scheme`
     """
 
     def __init__(
@@ -333,7 +335,7 @@ class EikonalSolver:
         # P1 dof coordinates are the vertex coordinates, also for higher-order geometry
         self._x = np.ascontiguousarray(self.V.tabulate_dof_coordinates(), dtype=np.float64)
         self._connectivity = vertex_connectivity(len(self._x), self._cells)
-        self._kernel = compile_kernel(
+        self._kernel = _compile_kernel(
             openmp=openmp,
             num_threads=num_threads,
             cc=cc,
