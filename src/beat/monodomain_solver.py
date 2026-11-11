@@ -74,16 +74,28 @@ class PDEModel(Protocol):
 
 @dataclass
 class SplittingSolver:
-    pde: PDEModel
+    """Advance a PDE model and an ODE solver by operator splitting (Godunov or Strang, ``theta``)
+
+    With ``pde=None`` only the cell model is advanced and ``theta`` is ignored. Wrapping the ODE
+    solver in :class:`beat.reaction_eikonal.FootCurrentODESolver` gives the R-E+ model (with a PDE)
+    or the R-E- model (``pde=None``).
+    """
+
+    pde: PDEModel | None
     ode: ODESolver
     theta: float = 1.0
     monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self) -> None:
-        # assert np.isclose(self.theta, 1.0), "Only first order splitting is implemented"
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
-        self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
-        self.pde.assign_previous()
+        if self.pde is not None:
+            self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
+            self.pde.assign_previous()
+
+    @property
+    def v(self) -> dolfinx.fem.Function:
+        """The transmembrane potential: ``pde.v``, or ``ode.v_ode`` without a PDE."""
+        return self.ode.v_ode if self.pde is None else self.pde.v
 
     def restart_functions(
         self,
@@ -93,17 +105,18 @@ class SplittingSolver:
 
         These are ``("v", pde.v)`` followed by ``("state_<name>", f)`` for each ODE state, named
         by ``state_names`` (one per state). Write them to save a checkpoint. On a fresh solver,
-        read into them and pass them to :meth:`load_restart`.
+        read into them and pass them to :meth:`load_restart`. Without a PDE, ``"v"`` is
+        ``ode.v_ode``.
         """
         states = self.ode.states_to_dolfin(list(state_names))
-        return [("v", self.pde.v)] + [(f"state_{name}", f) for name, f in zip(state_names, states)]
+        return [("v", self.v)] + [(f"state_{name}", f) for name, f in zip(state_names, states)]
 
     def restart_metadata(self) -> dict[str, Any]:
         """State beyond the Functions, to be stored with a checkpoint (JSON-serializable).
 
         Pass it back to :meth:`load_restart`. It is empty if the PDE model has none.
         """
-        if hasattr(self.pde, "restart_metadata"):
+        if self.pde is not None and hasattr(self.pde, "restart_metadata"):
             return {"pde": self.pde.restart_metadata()}
         return {}
 
@@ -116,18 +129,25 @@ class SplittingSolver:
 
         Overwrites ``pde.v`` and every ODE state, restores the PDE's metadata if given (as
         returned by :meth:`restart_metadata`), then sets the PDE's previous value, exactly as
-        construction does.
+        construction does. Without a PDE, the states are loaded and copied into ``v``; metadata with
+        PDE state is refused.
         """
         names = [name for name, _ in functions]
         if not names or names[0] != "v" or not all(n.startswith("state_") for n in names[1:]):
             raise ValueError(
                 f"Restart functions must be 'v' followed by 'state_<name>' ones, got {names}",
             )
+        if self.pde is None and metadata is not None and "pde" in metadata:
+            raise ValueError("The restart metadata has PDE state, but this solver has no PDE")
         v = functions[0][1]
-        if v is not self.pde.v:
-            self.pde.v.x.array[:] = v.x.array
-        self.pde.v.x.scatter_forward()
+        target = self.v
+        if v is not target:
+            target.x.array[:] = v.x.array
+        target.x.scatter_forward()
         self.ode.load_all_states([f for _, f in functions[1:]])
+        if self.pde is None:
+            self.ode.to_dolfin()
+            return
         if metadata is not None and "pde" in metadata:
             self.pde.load_restart_metadata(metadata["pde"])  # type: ignore[attr-defined]
         self.pde.assign_previous()
@@ -147,6 +167,16 @@ class SplittingSolver:
             t1 = t0 + dt
 
     def step(self, interval):
+        if self.pde is None:
+            t0, t1 = interval
+            with self.monitor.track_time("total_step"):
+                with self.monitor.track_time("ode_step"):
+                    self.ode.step(t0, t1 - t0)
+                with self.monitor.track_time("ode_to_dolfin"):
+                    self.ode.to_dolfin()
+            self.monitor.advance_step(t0, t1)
+            return
+
         # Extract some parameters for readability
         theta = self.theta
 

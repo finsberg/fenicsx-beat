@@ -300,7 +300,7 @@ shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
-    [solver.pde.v],
+    [solver.v],
     engine="BP4",
 )
 
@@ -309,12 +309,12 @@ vtx = dolfinx.io.VTXWriter(
 
 
 def save(t):
-    v = solver.pde.v.x.array
+    v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
     io4dolfinx.write_function_on_input_mesh(
         checkpointfname,
-        solver.pde.v,
+        solver.v,
         time=t,
         name="v",
     )

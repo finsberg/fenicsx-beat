@@ -387,7 +387,7 @@ shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
-    [solver.pde.v],
+    [solver.v],
     engine="BP4",
     mesh_policy=VTXMeshPolicy.reuse,
 )
@@ -398,7 +398,7 @@ io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 plotter_voltage = pyvista.Plotter()
 viridis = plt.get_cmap("viridis")
-grid.point_data["V"] = solver.pde.v.x.array
+grid.point_data["V"] = solver.v.x.array
 grid.set_active_scalars("V")
 renderer = plotter_voltage.add_mesh(
     grid,
@@ -413,11 +413,11 @@ plotter_voltage.open_gif(gif_file.as_posix())
 
 
 def save(t):
-    v = solver.pde.v.x.array
+    v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
-    grid.point_data["V"] = solver.pde.v.x.array
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
+    grid.point_data["V"] = solver.v.x.array
     plotter_voltage.write_frame()
 
 

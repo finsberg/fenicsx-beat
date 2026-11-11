@@ -236,7 +236,7 @@ ode = beat.odesolver.DolfinODESolver(
     v_index=v_index,
 )
 solver = beat.SplittingSolver(pde=pde, ode=ode)
-v = solver.pde.v
+v = solver.v
 
 # ## Tracking the spiral tip
 #

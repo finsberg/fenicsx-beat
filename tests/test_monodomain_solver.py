@@ -1,3 +1,4 @@
+import contextlib
 import gc
 import logging
 import warnings
@@ -527,3 +528,123 @@ def test_new_name_does_not_warn():
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
         beat.SplittingSolver(pde=pde, ode=NullODESolver())
+
+
+class RecordingMonitor(beat.BaseMonitor):
+    def __init__(self):
+        self.names, self.steps = [], []
+
+    @contextlib.contextmanager
+    def track_time(self, name):
+        self.names.append(name)
+        yield
+
+    def record_ksp(self, ksp):
+        pass
+
+    def advance_step(self, t0, t1):
+        self.steps.append((t0, t1))
+
+
+ODE_ONLY_DT = 0.125  # a power of two, so t1 - t0 == dt exactly
+
+
+def build_ode_only(theta=1.0, monitor=None):
+    """A pde=None solver over a 2-state forward-Euler ODE on P1, and its initial states"""
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8, dolfinx.cpp.mesh.CellType.triangle)
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    x = V.tabulate_dof_coordinates()
+    init_states = np.zeros((2, x.shape[0]))
+    init_states[0] = np.cos(2 * np.pi * x[:, 0])
+    init_states[1] = np.sin(2 * np.pi * x[:, 1])
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=dolfinx.fem.Function(V),
+        v_pde=dolfinx.fem.Function(V),
+        fun=simple_ode_forward_euler,
+        init_states=init_states.copy(),
+        parameters=None,
+        num_states=2,
+        v_index=0,
+    )
+    kwargs = {} if monitor is None else {"monitor": monitor}
+    return beat.SplittingSolver(pde=None, ode=ode, theta=theta, **kwargs), init_states
+
+
+def test_splitting_solver_v_is_the_pde_potential():
+    solver = build_restart_solver(1.0)
+    assert solver.v is solver.pde.v
+
+
+def test_ode_only_v_is_the_ode_potential_and_starts_at_the_initial_state():
+    solver, init = build_ode_only()
+    assert solver.v is solver.ode.v_ode
+    assert np.array_equal(solver.v.x.array, init[0])
+
+
+def test_ode_only_solve_matches_stepping_the_ode_alone():
+    solver, init = build_ode_only()
+    solver.solve((0.0, 5 * ODE_ONLY_DT), ODE_ONLY_DT)
+
+    reference, _ = build_ode_only()
+    ode = reference.ode
+    t = 0.0
+    for _ in range(5):
+        ode.step(t, ODE_ONLY_DT)
+        t += ODE_ONLY_DT
+    ode.to_dolfin()
+    assert np.array_equal(solver.v.x.array, ode.v_ode.x.array)
+    assert np.array_equal(solver.ode.values, ode.values)
+    assert not np.array_equal(solver.v.x.array, init[0])
+
+
+def test_ode_only_ignores_theta():
+    a, _ = build_ode_only(theta=1.0)
+    b, _ = build_ode_only(theta=0.5)
+    a.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
+    b.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
+    assert np.array_equal(a.ode.values, b.ode.values)
+
+
+def test_ode_only_telemetry():
+    monitor = RecordingMonitor()
+    solver, _ = build_ode_only(monitor=monitor)
+    solver.solve((0.0, 2 * ODE_ONLY_DT), ODE_ONLY_DT)
+    assert monitor.names == ["total_step", "ode_step", "ode_to_dolfin"] * 2
+    assert monitor.steps == [(0.0, ODE_ONLY_DT), (ODE_ONLY_DT, 2 * ODE_ONLY_DT)]
+
+
+def test_ode_only_restart_function_names():
+    solver, _ = build_ode_only()
+    functions = solver.restart_functions(["v", "s"])
+    assert [n for n, _ in functions] == ["v", "state_v", "state_s"]
+    assert functions[0][1] is solver.ode.v_ode
+    assert solver.restart_metadata() == {}
+
+
+def test_ode_only_restart_is_bit_for_bit():
+    a, _ = build_ode_only()
+    a.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
+    saved = [(n, f.x.array.copy()) for n, f in a.restart_functions(["v", "s"])]
+
+    b, _ = build_ode_only()
+    functions = b.restart_functions(["v", "s"])
+    for (_, f), (_, arr) in zip(functions, saved):
+        f.x.array[:] = arr
+    b.load_restart(functions, a.restart_metadata())
+
+    a.solve((3 * ODE_ONLY_DT, 6 * ODE_ONLY_DT), ODE_ONLY_DT)
+    b.solve((3 * ODE_ONLY_DT, 6 * ODE_ONLY_DT), ODE_ONLY_DT)
+    assert np.array_equal(a.v.x.array, b.v.x.array)
+    assert np.array_equal(a.ode.values, b.ode.values)
+
+
+def test_ode_only_refuses_pde_metadata_without_touching_anything():
+    solver, init = build_ode_only()
+    functions = solver.restart_functions(["v", "s"])
+    other = [(n, f.copy()) for n, f in functions]
+    for _, f in other:
+        f.x.array[:] = 7.0
+    with pytest.raises(ValueError, match="no PDE"):
+        solver.load_restart(other, {"pde": {"timestep": 0.1}})
+    assert np.array_equal(solver.v.x.array, init[0])
+    assert np.array_equal(solver.ode.values, init)
