@@ -93,39 +93,11 @@ class IrksomeODESolver(BaseDolfinODESolver):
             self.dt.value = dt  # type: ignore[assignment]
             self.stepper.advance()
 
-    def to_dolfin(self) -> None:
-        """Move the voltage variable from the mixed ODE space into v_ode."""
-        self.v_ode.x.array[:] = self.states.x.array[self._maps[self.v_index]]
+    def _get_state(self, index: int) -> np.ndarray:
+        return self.states.x.array[self._maps[index]]
 
-    def from_dolfin(self) -> None:
-        """Move the voltage variable from v_ode back into the mixed ODE space."""
-        self.states.x.array[self._maps[self.v_index]] = self.v_ode.x.array
-
-    @property
-    def full_values(self):
-        # FIX: Rely on the size of the target discrete array instead of the FEniCSx map object
-        vals = np.zeros((self.num_states, self.v_ode.x.array.size))
-        for i in range(self.num_states):
-            vals[i, :] = self.states.x.array[self._maps[i]]
-        return vals
-
-    def assign_all_states(self, functions) -> None:
-        for i, f in enumerate(functions):
-            f.x.array[:] = self.states.x.array[self._maps[i]]
-
-    def load_all_states(self, functions) -> None:
-        for i, f in enumerate(functions):
-            self.states.x.array[self._maps[i]] = f.x.array
-        self.to_dolfin()
-
-    def states_to_dolfin(self, names=None):
-        functions = []
-        for i in range(self.num_states):
-            name = names[i] if names else f"state_{i}"
-            f = dolfinx.fem.Function(self.v_ode.function_space, name=name)
-            functions.append(f)
-        self.assign_all_states(functions)
-        return functions
+    def _set_state(self, index: int, values) -> None:
+        self.states.x.array[self._maps[index]] = values
 
 
 class IrksomeMultiODESolver(BaseDolfinODESolver):

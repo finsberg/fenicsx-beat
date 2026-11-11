@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Callable, NamedTuple
 
@@ -83,12 +84,19 @@ class BaseDolfinODESolver(abc.ABC):
     """Base class of the ODE solvers that keep the cell states on a dolfinx function space
 
     ``v_ode`` is the potential on the ODE space (P1, DG, quadrature, ...) and ``v_pde`` the PDE
-    model's potential; :meth:`ode_to_pde` and :meth:`pde_to_ode` project between them. Subclasses
-    implement the state bookkeeping. Implements :class:`beat.monodomain_solver.ODESolver`.
+    model's potential; :meth:`ode_to_pde` and :meth:`pde_to_ode` project between them.
+    Implements :class:`beat.monodomain_solver.ODESolver`.
+
+    A backend stores its states however it likes and implements :meth:`step` and the two storage
+    primitives :meth:`_get_state` and :meth:`_set_state`; everything that moves states between
+    that storage and dolfinx Functions is built from them here. Multi-region backends derive from
+    :class:`BaseDolfinMultiODESolver` instead.
     """
 
     v_ode: dolfinx.fem.Function
     v_pde: dolfinx.fem.Function
+    num_states: Any
+    v_index: Any
     _metadata: dict[str, Any] | None = None
 
     def _initialize_metadata(self):
@@ -100,13 +108,33 @@ class BaseDolfinODESolver(abc.ABC):
         else:
             self._metadata = None
 
-    @abc.abstractmethod
-    def to_dolfin(self) -> None:
-        pass
+    def _get_state(self, index: int) -> npt.NDArray:
+        """State ``index`` at every point of ``v_ode``'s space (callers do not write to it)."""
+        raise NotImplementedError(f"{type(self).__name__} does not implement _get_state")
 
-    @abc.abstractmethod
+    def _set_state(self, index: int, values: npt.ArrayLike) -> None:
+        """Overwrite state ``index`` at every point of ``v_ode``'s space."""
+        raise NotImplementedError(f"{type(self).__name__} does not implement _set_state")
+
+    def _states_per_point(self) -> int:
+        """How many states each point carries: one Function per state in the methods below."""
+        return int(self.num_states)
+
+    def _check_count(self, items: Sequence[Any], what: str) -> None:
+        num_states = self._states_per_point()
+        if len(items) != num_states:
+            raise ValueError(
+                f"Number of {what} must match number of states, got {len(items)} {what}, "
+                f"but number of states is {num_states}",
+            )
+
+    def to_dolfin(self) -> None:
+        """Copy the potential from the cell states into ``v_ode``."""
+        self.v_ode.x.array[:] = self._get_state(self.v_index)
+
     def from_dolfin(self) -> None:
-        pass
+        """Copy ``v_ode`` back into the cell states."""
+        self._set_state(self.v_index, self.v_ode.x.array)
 
     def ode_to_pde(self) -> None:
         """Projects v_ode (DG0, quadrature space, ...) into v_pde (CG1)"""
@@ -129,23 +157,37 @@ class BaseDolfinODESolver(abc.ABC):
         pass
 
     @property
-    @abc.abstractmethod
     def full_values(self) -> npt.NDArray:
-        pass
+        """Every state at every point of ``v_ode``'s space, shape ``(num_states, n)``."""
+        return np.stack([self._get_state(i) for i in range(self._states_per_point())])
 
-    @abc.abstractmethod
     def assign_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
-        pass
+        """Copy state ``i`` into ``functions[i]`` (one per state, on ``v_ode``'s space)."""
+        self._check_count(functions, "functions")
+        for index, f in enumerate(functions):
+            f.x.array[:] = self._get_state(index)
 
-    @abc.abstractmethod
     def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
         """Inverse of :meth:`assign_all_states`: overwrite every ODE state from ``functions``
         (one per state, on ``v_ode``'s function space), e.g. when restarting from a checkpoint.
+        Ends with :meth:`to_dolfin`.
         """
+        self._check_count(functions, "functions")
+        for index, f in enumerate(functions):
+            self._set_state(index, f.x.array)
+        self.to_dolfin()
 
-    @abc.abstractmethod
     def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
-        pass
+        """New Functions on ``v_ode``'s space holding every state, named ``names`` (default
+        ``state_<i>``)."""
+        if names is None:
+            names = [f"state_{i}" for i in range(self._states_per_point())]
+        else:
+            self._check_count(names, "names")
+        V = self.v_ode.function_space
+        functions = [dolfinx.fem.Function(V, name=name) for name in names]
+        self.assign_all_states(functions)
+        return functions
 
 
 @dataclass
@@ -162,6 +204,8 @@ class DolfinODESolver(BaseDolfinODESolver):
     monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self):
+        if self.monitor is None:
+            self.monitor = NullMonitor()
         if np.shape(self.init_states) == self.shape:
             self._values = np.copy(self.init_states)
         else:
@@ -177,13 +221,11 @@ class DolfinODESolver(BaseDolfinODESolver):
         )
         self._initialize_metadata()
 
-    def to_dolfin(self) -> None:
-        """Assign values from numpy array to dolfin function"""
-        self.v_ode.x.array[:] = self._values[self.v_index, :]
+    def _get_state(self, index: int) -> npt.NDArray:
+        return self._values[index, :]
 
-    def from_dolfin(self) -> None:
-        """Assign values from dolfin function to numpy array"""
-        self._values[self.v_index, :] = self.v_ode.x.array
+    def _set_state(self, index: int, values: npt.ArrayLike) -> None:
+        self._values[index, :] = values
 
     @property
     def values(self):
@@ -210,42 +252,8 @@ class DolfinODESolver(BaseDolfinODESolver):
 
     @property
     def full_values(self):
+        """The live state array, shape ``(num_states, num_points)``."""
         return self._values
-
-    def assign_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
-        num_states = self._values.shape[0]
-        assert len(functions) == num_states, "Number of functions must match number of states"
-        for index, f in enumerate(functions):
-            f.x.array[:] = self._values[index, :]
-
-    def load_all_states(self, functions: list[dolfinx.fem.Function]) -> None:
-        num_states = self._values.shape[0]
-        assert len(functions) == num_states, "Number of functions must match number of states"
-        for index, f in enumerate(functions):
-            self._values[index, :] = f.x.array
-        self.to_dolfin()
-
-    def states_to_dolfin(self, names: list[str] | None = None) -> list[dolfinx.fem.Function]:
-        V = self.v_ode.function_space
-        functions = []
-        num_states = self._values.shape[0]
-
-        if names is not None:
-            msg = (
-                "Number of names must match number of states, got "
-                f"{len(names)} names, but number of states is {num_states}"
-            )
-            assert len(names) == num_states, msg
-        else:
-            names = [f"state_{i}" for i in range(num_states)]
-
-        for name in names:
-            f = dolfinx.fem.Function(V, name=name)
-            functions.append(f)
-
-        self.assign_all_states(functions)
-
-        return functions
 
 
 @dataclass

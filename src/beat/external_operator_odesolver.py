@@ -130,38 +130,11 @@ class ExternalOperatorODESolver(BaseDolfinODESolver):
                 coefficients = self._evaluate_operands(self._operators)
                 self._evaluate_external_operators(self._operators, coefficients)
 
-    def to_dolfin(self) -> None:
-        """Move the voltage variable from the ODE state function into v_ode."""
-        self.v_ode.x.array[:] = self.states.x.array[self.v_index :: self.num_states]
+    def _get_state(self, index: int) -> np.ndarray:
+        return self.states.x.array[index :: self.num_states]
 
-    def from_dolfin(self) -> None:
-        """Move the voltage variable from v_ode back into the ODE state function."""
-        self.states.x.array[self.v_index :: self.num_states] = self.v_ode.x.array
-
-    @property
-    def full_values(self):
-        vals = np.zeros((self.num_states, self.v_ode.x.array.size))
-        for i in range(self.num_states):
-            vals[i, :] = self.states.x.array[i :: self.num_states]
-        return vals
-
-    def assign_all_states(self, functions) -> None:
-        for i, f in enumerate(functions):
-            f.x.array[:] = self.states.x.array[i :: self.num_states]
-
-    def load_all_states(self, functions) -> None:
-        for i, f in enumerate(functions):
-            self.states.x.array[i :: self.num_states] = f.x.array
-        self.to_dolfin()
-
-    def states_to_dolfin(self, names=None):
-        functions = []
-        for i in range(self.num_states):
-            name = names[i] if names else f"state_{i}"
-            f = dolfinx.fem.Function(self.v_ode.function_space, name=name)
-            functions.append(f)
-        self.assign_all_states(functions)
-        return functions
+    def _set_state(self, index: int, values) -> None:
+        self.states.x.array[index :: self.num_states] = values
 
 
 class ExternalOperatorMultiODESolver(BaseDolfinODESolver):

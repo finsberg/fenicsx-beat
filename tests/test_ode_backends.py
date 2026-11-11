@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import ufl
 
+import beat
 import beat.utils
 from beat.odesolver import DolfinMultiODESolver, DolfinODESolver
 
@@ -201,3 +202,69 @@ def test_region_accessors(backend):
         assert ode.shape(marker) == (2, n)
         assert np.allclose(ode.values(marker), np.array([[v0], [s0]]))
     assert ode.num_parameters(1) == 0 and ode.num_parameters(2) == 1
+
+
+def test_wrong_number_of_names_or_functions_raises(backend):
+    ode, _ = backend
+    V = ode.v_ode.function_space
+    with pytest.raises(ValueError, match="must match number of states"):
+        ode.states_to_dolfin(["only_one"])
+    with pytest.raises(ValueError, match="must match number of states"):
+        ode.assign_all_states([dolfinx.fem.Function(V)])
+    with pytest.raises(ValueError, match="must match number of states"):
+        ode.load_all_states([dolfinx.fem.Function(V)])
+
+
+def test_monitor_none_is_a_null_monitor():
+    mesh, V = _spaces()
+    ode = DolfinODESolver(
+        v_ode=dolfinx.fem.Function(V),
+        v_pde=dolfinx.fem.Function(V),
+        init_states=np.zeros(2),
+        parameters=np.array([]),
+        fun=numpy_fun,
+        num_states=2,
+        monitor=None,
+    )
+    assert isinstance(ode.monitor, beat.NullMonitor)
+    ode.step(0.0, 0.1)
+
+
+def test_subclass_overriding_the_old_methods_still_works():
+    """A user backend written against the old abstract methods needs no primitives"""
+    from beat.odesolver import BaseDolfinODESolver
+
+    class OldStyle(BaseDolfinODESolver):
+        def __init__(self, v):
+            self.v_ode = self.v_pde = v
+            self._values = np.ones((1, v.x.array.size))
+
+        def to_dolfin(self):
+            self.v_ode.x.array[:] = self._values[0]
+
+        def from_dolfin(self):
+            self._values[0] = self.v_ode.x.array
+
+        def step(self, t0, dt):
+            self._values *= 2.0
+
+        @property
+        def full_values(self):
+            return self._values
+
+        def assign_all_states(self, functions):
+            functions[0].x.array[:] = self._values[0]
+
+        def load_all_states(self, functions):
+            self._values[0] = functions[0].x.array
+
+        def states_to_dolfin(self, names=None):
+            f = dolfinx.fem.Function(self.v_ode.function_space)
+            self.assign_all_states([f])
+            return [f]
+
+    mesh, V = _spaces()
+    ode = OldStyle(dolfinx.fem.Function(V))
+    ode.step(0.0, 1.0)
+    ode.to_dolfin()
+    assert np.allclose(ode.v_ode.x.array, 2.0)
