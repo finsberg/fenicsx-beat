@@ -333,6 +333,7 @@ class LeadFieldElectrodes:
     that mesh, in the units given to the :class:`VolumeConductor`. The values equal point
     evaluation of :meth:`VolumeConductor.solve` exactly when the tissue cells coincide, and up to
     interpolation error otherwise. Calling returns ``{name: value}``, the same on every rank.
+    Implements :class:`beat.ecg.ElectrodeRecorder`.
     """
 
     def __init__(

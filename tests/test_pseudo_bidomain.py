@@ -9,6 +9,7 @@ import scifem
 import ufl
 
 import beat
+from beat.ecg import ElectrodeRecorder, Lead, LeadSystem
 from beat.pseudo_bidomain import (
     LeadFieldElectrodes,
     VolumeConductor,
@@ -284,3 +285,18 @@ def test_uncovered_interpolation_raises_collectively():
     v_big = dolfinx.fem.Function(dolfinx.fem.functionspace(big, ("P", 1)))
     with pytest.raises(ValueError, match="not inside"):
         LeadFieldElectrodes(conductor, v_big, 1.0, {"a": [0.5, 0.5, 0.5]})
+
+
+# Annotated on purpose: mypy then checks the body, i.e. that LeadFieldElectrodes satisfies the
+# ElectrodeRecorder protocol. Keep the annotation.
+def test_lead_system_reads_a_lead_field_recording() -> None:
+    comm = MPI.COMM_WORLD
+    mesh, tags = box_with_bath(comm, n=12)
+    conductor = VolumeConductor(mesh, tags, 1, 2, SIGMA_I, SIGMA_E, 1.0)
+    tissue = dolfinx.mesh.create_unit_cube(comm, 12, 12, 12)
+    v = dolfinx.fem.Function(dolfinx.fem.functionspace(tissue, ("P", 1)))
+    v.interpolate(smooth)
+    recorder: ElectrodeRecorder = LeadFieldElectrodes(conductor, v, SIGMA_I, ELECTRODES)
+    potentials = recorder()
+    leads = LeadSystem((Lead("bipolar", {"tissue": 1.0, "bath": -1.0}),)).leads(potentials)
+    assert leads["bipolar"] == pytest.approx(potentials["tissue"] - potentials["bath"])
