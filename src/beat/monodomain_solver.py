@@ -4,6 +4,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from mpi4py import MPI
+
 import dolfinx
 import numpy as np
 
@@ -78,7 +80,8 @@ class SplittingSolver:
 
     With ``pde=None`` only the cell model is advanced and ``theta`` is ignored. Wrapping the ODE
     solver in :class:`beat.reaction_eikonal.FootCurrentODESolver` gives the R-E+ model (with a PDE)
-    or the R-E- model (``pde=None``).
+    or the R-E- model (``pde=None``). ``monitor=None`` (or leaving it out) records nothing
+    (a :class:`beat.telemetry.NullMonitor`).
     """
 
     pde: PDEModel | None
@@ -87,6 +90,8 @@ class SplittingSolver:
     monitor: BaseMonitor = field(default_factory=NullMonitor)
 
     def __post_init__(self) -> None:
+        if self.monitor is None:
+            self.monitor = NullMonitor()
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
         if self.pde is not None:
             self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
@@ -114,11 +119,14 @@ class SplittingSolver:
     def restart_metadata(self) -> dict[str, Any]:
         """State beyond the Functions, to be stored with a checkpoint (JSON-serializable).
 
-        Pass it back to :meth:`load_restart`. It is empty if the PDE model has none.
+        Pass it back to :meth:`load_restart`. ``"has_pde"`` records whether this solver has a PDE
+        model, so a checkpoint is not loaded into the other kind; ``"pde"`` holds the PDE model's
+        own metadata, if it has any.
         """
+        metadata: dict[str, Any] = {"has_pde": self.pde is not None}
         if self.pde is not None and hasattr(self.pde, "restart_metadata"):
-            return {"pde": self.pde.restart_metadata()}
-        return {}
+            metadata["pde"] = self.pde.restart_metadata()
+        return metadata
 
     def load_restart(
         self,
@@ -129,18 +137,38 @@ class SplittingSolver:
 
         Overwrites ``pde.v`` and every ODE state, restores the PDE's metadata if given (as
         returned by :meth:`restart_metadata`), then sets the PDE's previous value, exactly as
-        construction does. Without a PDE, the states are loaded and copied into ``v``; metadata with
-        PDE state is refused.
+        construction does.
+
+        Without a PDE, ``v`` is one of the ODE states, so the states are authoritative: the
+        checkpoint's ``"v"`` is overwritten by the loaded states (``ode.to_dolfin()``).
+
+        Raises ``ValueError``, before anything is modified and on every rank, if the checkpoint
+        was saved by a solver with a PDE and this one has none or the reverse (``metadata``'s
+        ``"has_pde"``; checkpoints without it are not checked), or if its ``"v"`` does not fit
+        this solver's ``v``.
         """
         names = [name for name, _ in functions]
         if not names or names[0] != "v" or not all(n.startswith("state_") for n in names[1:]):
             raise ValueError(
                 f"Restart functions must be 'v' followed by 'state_<name>' ones, got {names}",
             )
-        if self.pde is None and metadata is not None and "pde" in metadata:
-            raise ValueError("The restart metadata has PDE state, but this solver has no PDE")
+        has_pde = self.pde is not None
+        if metadata is not None:
+            saved_with_pde = metadata.get("has_pde", "pde" in metadata or has_pde)
+            if bool(saved_with_pde) != has_pde:
+                saved = "with a PDE" if saved_with_pde else "without a PDE"
+                this = "has one" if has_pde else "has no PDE"
+                raise ValueError(
+                    f"The checkpoint was saved by a solver {saved}, but this solver {this}",
+                )
         v = functions[0][1]
         target = self.v
+        comm = target.function_space.mesh.comm
+        if comm.allreduce(int(v.x.array.size != target.x.array.size), op=MPI.MAX):
+            raise ValueError(
+                "The checkpoint's 'v' does not fit this solver's v (different function space "
+                "or mesh)",
+            )
         if v is not target:
             target.x.array[:] = v.x.array
         target.x.scatter_forward()

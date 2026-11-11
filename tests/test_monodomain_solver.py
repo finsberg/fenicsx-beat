@@ -497,14 +497,14 @@ def test_restart_metadata_round_trips_the_pde_timestep():
     assert float(b.pde._timestep.value) == metadata["pde"]["timestep"]
 
 
-def test_restart_metadata_is_empty_for_a_pde_without_it():
+def test_restart_metadata_only_records_the_pde_for_a_pde_without_it():
     class Bare:
         v = None
 
         def assign_previous(self) -> None: ...
 
     solver = beat.SplittingSolver(pde=Bare(), ode=NullODESolver())  # type: ignore[arg-type]
-    assert solver.restart_metadata() == {}
+    assert solver.restart_metadata() == {"has_pde": True}
 
 
 def _small_pde():
@@ -618,7 +618,7 @@ def test_ode_only_restart_function_names():
     functions = solver.restart_functions(["v", "s"])
     assert [n for n, _ in functions] == ["v", "state_v", "state_s"]
     assert functions[0][1] is solver.ode.v_ode
-    assert solver.restart_metadata() == {}
+    assert solver.restart_metadata() == {"has_pde": False}
 
 
 def test_ode_only_restart_is_bit_for_bit():
@@ -648,3 +648,57 @@ def test_ode_only_refuses_pde_metadata_without_touching_anything():
         solver.load_restart(other, {"pde": {"timestep": 0.1}})
     assert np.array_equal(solver.v.x.array, init[0])
     assert np.array_equal(solver.ode.values, init)
+
+
+def test_restart_refuses_a_checkpoint_saved_without_a_pde_without_touching_anything():
+    saved_by, _ = build_ode_only()
+    metadata = saved_by.restart_metadata()
+    solver = build_restart_solver(1.0)
+    v_before = solver.v.x.array.copy()
+    values_before = solver.ode.values.copy()
+    # Same mesh and P1 spaces, so every Function fits: only the metadata can tell them apart
+    functions = [(n, f.copy()) for n, f in saved_by.restart_functions(["v", "s"])]
+    with pytest.raises(ValueError, match="without a PDE"):
+        solver.load_restart(functions, metadata)
+    assert np.array_equal(solver.v.x.array, v_before)
+    assert np.array_equal(solver.ode.values, values_before)
+
+
+def test_ode_only_refuses_a_checkpoint_saved_with_a_pde():
+    solver, init = build_ode_only()
+    functions = solver.restart_functions(["v", "s"])
+    with pytest.raises(ValueError, match="with a PDE"):
+        solver.load_restart(functions, {"has_pde": True})
+    assert np.array_equal(solver.ode.values, init)
+
+
+def test_load_restart_accepts_metadata_without_has_pde():
+    """Checkpoints written before ``has_pde`` existed only carry the PDE's metadata"""
+    a = build_restart_solver(1.0)
+    run_steps(a, 0, 2)
+    b = build_restart_solver(1.0)
+    b.load_restart(b.restart_functions(["v", "s"]), {"pde": a.restart_metadata()["pde"]})
+
+
+def test_load_restart_refuses_a_v_of_another_size_on_every_rank():
+    solver = build_restart_solver(1.0)
+    functions = solver.restart_functions(["v", "s"])
+    coarse = dolfinx.mesh.create_unit_square(
+        MPI.COMM_WORLD,
+        3,
+        3,
+        dolfinx.cpp.mesh.CellType.triangle,
+    )
+    v_other = dolfinx.fem.Function(dolfinx.fem.functionspace(coarse, ("P", 1)))
+    v_before = solver.v.x.array.copy()
+    with pytest.raises(ValueError, match="does not fit"):
+        solver.load_restart([("v", v_other), *functions[1:]], solver.restart_metadata())
+    assert np.array_equal(solver.v.x.array, v_before)
+
+
+def test_monitor_none_means_no_monitoring():
+    solver, _ = build_ode_only(monitor=None)
+    assert isinstance(solver.monitor, beat.NullMonitor)
+    explicit = beat.SplittingSolver(pde=None, ode=solver.ode, monitor=None)
+    assert isinstance(explicit.monitor, beat.NullMonitor)
+    explicit.solve((0.0, 2 * ODE_ONLY_DT), ODE_ONLY_DT)
