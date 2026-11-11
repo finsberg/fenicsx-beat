@@ -46,7 +46,9 @@ Operator-split PDE/ODE solve per timestep:
 - **ODE** (`odesolver.py`): `ODESystemSolver` steps a cell-model RHS (`fun(states, t, parameters, dt)`,
   usually `gotranx`-generated from `odes/*.ode`/CellML). `BaseDolfinODESolver` /
   `DolfinODESolver` / `DolfinMultiODESolver` (per-region) bridge the numpy state array to/from dolfinx
-  `Function`s via `local_project`.
+  `Function`s via `local_project`. A backend implements `step` plus `_get_state`/`_set_state` (single region,
+  `BaseDolfinODESolver`) or `_get_region_state`/`_set_region_state` (`BaseDolfinMultiODESolver`); the
+  base classes do all state movement.
 - **Coupling** (`monodomain_solver.py`): `SplittingSolver(pde, ode)` (`MonodomainSplittingSolver` is a
   deprecated alias that warns) drives Godunov/Strang
   splitting: ODE step → project to PDE → PDE step → project back → optional corrective ODE step if
@@ -54,7 +56,9 @@ Operator-split PDE/ODE solve per timestep:
 - **Irksome backend** (`irksome_model.py`, `irksome_odesolver.py`, `irksome` extra):
   `IrksomeMonodomainModel` / `IrksomeODESolver` / `IrksomeMultiODESolver` are drop-in alternatives that
   advance the PDE/ODE step with a fully implicit Runge–Kutta Butcher tableau instead of theta-rule/
-  explicit; freely mixable with the default classes in `SplittingSolver`. See install
+  explicit; freely mixable with the default classes in `SplittingSolver`. `IrksomeMonodomainModel` goes through `BaseModel.__init__`
+  (overrides `_setup_solver`/`_assemble_matrix`), so restart (to round-off), `monitor` and `bcs`
+  (built with `irksome.backends.dolfinx.dirichletbc`) work. See install
   gotcha above.
 - **external-operator ODE backend** (`external_operator_odesolver.py`, `external_operator` extra):
   `ExternalOperatorODESolver` / `ExternalOperatorMultiODESolver` are drop-in alternatives to

@@ -96,7 +96,7 @@ phi_e = record()["P_E"]
 | `BaseModel` | theta-scheme skeleton: assembles and solves one linear system per step, restart metadata, telemetry | — | (base class) |
 | `MonodomainModel` | the monodomain equation | `BaseModel`, `PDEModel` | most demos, e.g. [fitzhughnagumo](../demos/fitzhughnagumo.py) |
 | `BidomainModel` | the bidomain equations, $v$ and $u_e$ | `BaseModel`, `PDEModel` | [bidomain_convergence](../demos/bidomain_convergence.py) |
-| `IrksomeMonodomainModel` | monodomain advanced by an implicit Runge–Kutta method (`irksome` extra) | `MonodomainModel`, `PDEModel` | [irksome_model_gotranx](../demos/irksome_model_gotranx.py) |
+| `IrksomeMonodomainModel` | monodomain advanced by an implicit Runge–Kutta method (`irksome` extra); same parameters, `monitor`, `bcs` and restart as `MonodomainModel` | `MonodomainModel`, `PDEModel` | [irksome_model_gotranx](../demos/irksome_model_gotranx.py) |
 | `BidomainState` | `(v, u_e)` of a `BidomainModel` | `NamedTuple` | — |
 | `Results`, `Status` | return value of `BaseModel.solve` | `NamedTuple`, `Enum` | — |
 
@@ -104,20 +104,20 @@ phi_e = record()["P_E"]
 
 | Class | What it is for | Builds on / implements | Demos |
 |---|---|---|---|
-| `BaseDolfinODESolver` | cell states on a dolfinx space; projection between `v_ode` and `v_pde` | `ODESolver` | (base class) |
+| `BaseDolfinODESolver` | cell states on a dolfinx space; a backend implements `step` and two storage primitives, the base moves states to and from Functions and projects between `v_ode` and `v_pde` | `ODESolver` | (base class) |
+| `BaseDolfinMultiODESolver` | one cell model per region (marker value): region bookkeeping and per-region storage primitives | `BaseDolfinODESolver` | (base class) |
 | `DolfinODESolver` | one cell model everywhere, NumPy states, `fun(states, t, parameters, dt)` | `BaseDolfinODESolver` | most demos, e.g. [niederer_benchmark](../demos/niederer_benchmark.py) |
-| `DolfinMultiODESolver` | one cell model per region marker | `BaseDolfinODESolver` | [lv_endocardial](../demos/lv_endocardial.py), [slab](../demos/slab.py) |
+| `DolfinMultiODESolver` | one cell model per region marker | `BaseDolfinMultiODESolver` | [lv_endocardial](../demos/lv_endocardial.py), [slab](../demos/slab.py) |
 | `ODESystemSolver` | the NumPy stepper inside `DolfinODESolver` | — | — |
-| `IrksomeODESolver`, `IrksomeMultiODESolver` | cell model advanced by an implicit Runge–Kutta method (`irksome` extra) | `BaseDolfinODESolver` | [irksome_model_gotranx](../demos/irksome_model_gotranx.py) |
-| `ExternalOperatorODESolver`, `ExternalOperatorMultiODESolver` | cell model evaluated through `dolfinx-external-operator` | `BaseDolfinODESolver` | [external_operator_gotranx](../demos/external_operator_gotranx.py) |
+| `IrksomeODESolver`, `IrksomeMultiODESolver` | cell model advanced by an implicit Runge–Kutta method (`irksome` extra) | `BaseDolfinODESolver` / `BaseDolfinMultiODESolver` | [irksome_model_gotranx](../demos/irksome_model_gotranx.py) |
+| `ExternalOperatorODESolver`, `ExternalOperatorMultiODESolver` | cell model evaluated through `dolfinx-external-operator` | `BaseDolfinODESolver` / `BaseDolfinMultiODESolver` | [external_operator_gotranx](../demos/external_operator_gotranx.py) |
 | `CScheme` | a compiled C cell model, usable as `fun` (from `beat.c_backend.compile_scheme` / `from_ode`) | callable `fun` | [c_backend](../demos/c_backend.py) |
-| `ODEResults` | unused | `NamedTuple` | — |
 
 ### Coupling
 
 | Class | What it is for | Builds on / implements | Demos |
 |---|---|---|---|
-| `SplittingSolver` | Godunov/Strang splitting of a `PDEModel` and an `ODESolver`, or the ODE solver alone (`pde=None`); restart | uses `PDEModel`, `ODESolver` | almost every demo |
+| `SplittingSolver` | Godunov/Strang splitting of a `PDEModel` and an `ODESolver`, or the ODE solver alone (`pde=None`); restart; `solve` steps with `beat.utils.time_steps` | uses `PDEModel`, `ODESolver` | almost every demo |
 | `MonodomainSplittingSolver` | deprecated name of `SplittingSolver`; warns | `SplittingSolver` | — |
 | `PDEModel`, `ODESolver` | the protocols above | `Protocol` | — |
 

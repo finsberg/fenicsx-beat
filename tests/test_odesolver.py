@@ -240,3 +240,7 @@ def test_DolfinMultiODESolver():
     np.allclose(states[0].x.array[markers.x.array == 2], 1.0)
     np.allclose(states[1].x.array[markers.x.array == 1], first_v0 - first_p0 * first_s0 * dt)
     np.allclose(states[1].x.array[markers.x.array == 2], second_v0 - second_p0 * second_s0 * dt)
+
+
+def test_odesolver_has_no_unused_results_type():
+    assert not hasattr(beat.odesolver, "ODEResults")

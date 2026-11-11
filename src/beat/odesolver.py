@@ -4,7 +4,7 @@ import abc
 import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, NamedTuple
+from typing import Any, Callable
 
 import dolfinx
 import numpy as np
@@ -15,11 +15,6 @@ from .utils import local_project
 
 EPS = 1e-12
 logger = logging.getLogger(__name__)
-
-
-class ODEResults(NamedTuple):
-    y: npt.NDArray[np.float64]
-    t: npt.NDArray[np.float64]
 
 
 def solve(
