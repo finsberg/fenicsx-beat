@@ -155,10 +155,12 @@ if comm.rank == 0:
 # 90% (95%) of the R-E$^+$ potentials are within 2.4 mV (8.9 mV) of R-D and 90% (95%) of the
 # R-E$^-$ potentials within 1.2 mV (1.8 mV); at 320 ms the numbers are 0.22 mV (0.30 mV) for
 # R-E$^+$ and 2.3 mV (3.5 mV) for R-E$^-$. The paper reports 0.25 mV and 0.75 mV for 90% of R-E$^+$
-# and 95% of R-E$^-$ at 40 ms. Our R-E$^+$ tail at 40 ms is dominated by the thin depolarization
+# and 95% of R-E$^-$ at 40 ms, so both of our deviations at 40 ms are larger than the paper's:
+# R-E$^+$ by about a factor 10 (2.4 against 0.25 mV) and R-E$^-$ by about a factor 2.4 (1.8 against
+# 0.75 mV). Our R-E$^+$ tail at 40 ms is dominated by the thin depolarization
 # front: the 2 ms earlier eikonal activation (see the activation demo) probably shifts the steep
-# $\phi_e$ front, which gives large point-wise differences in a narrow band; the bulk of the map
-# agrees (median 0.50 mV). The electrograms of R-E$^+$ lie on top of R-D, also at 400 µm
+# $\phi_e$ front, which gives large point-wise differences in a narrow band. The median deviation
+# is 0.50 mV, still about twice the paper's 90% bound, so the disagreement is not confined to the tail. The electrograms of R-E$^+$ lie on top of R-D, also at 400 µm
 # (peak-to-peak 4.17 and 4.31 mV against 4.15 mV for R-D); R-E$^-$ has a deeper negative peak
 # ($-2.50$ against $-2.03$ mV) and a late deflection that peaks 1.5 ms later and is slightly
 # larger than R-D (2.19 against 2.13 mV), and it stays higher until the end (1.25 against 0.61 mV
