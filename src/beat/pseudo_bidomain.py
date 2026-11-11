@@ -221,7 +221,7 @@ class VolumeConductor:
         self.A.assemble()
         self._nullspace = PETSc.NullSpace().create(constant=True, comm=comm)
         self.A.setNullSpace(self._nullspace)
-        self.ksp = PETSc.KSP().create(comm)
+        self.ksp = PETSc.KSP().create(self.A.getComm())
         self.ksp.setOperators(self.A)
         prefix = f"beat_volume_conductor_{next(_prefixes)}_"
         self.ksp.setOptionsPrefix(prefix)
