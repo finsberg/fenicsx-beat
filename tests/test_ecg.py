@@ -226,3 +226,13 @@ def test_recovery_is_the_direct_integral_to_second_order(anisotropic, C_m):
     for name in electrodes:
         order = np.log2(e16[name] / e32[name])
         assert order >= 1.8, f"{name}: order {order:.2f}, errors {e16[name]:.3e} -> {e32[name]:.3e}"
+
+
+# Annotated on purpose: mypy then checks the body, i.e. that ElectrodePotentials satisfies the
+# ElectrodeRecorder protocol. Keep the annotation.
+def test_electrode_potentials_is_an_electrode_recorder() -> None:
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 4, 4)
+    v = dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, ("P", 1)))
+    recovery = beat.ECGRecovery(v=v)
+    recorder: beat.ecg.ElectrodeRecorder = beat.ecg.ElectrodePotentials(recovery, {"a": (0.5, 2.0)})
+    assert list(recorder()) == ["a"]

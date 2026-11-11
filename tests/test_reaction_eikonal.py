@@ -12,7 +12,6 @@ from beat.odesolver import DolfinMultiODESolver, DolfinODESolver
 from beat.reaction_eikonal import (
     ExponentialFoot,
     FootCurrentODESolver,
-    ODEOnlySolver,
     exponential_foot_rate,
 )
 
@@ -77,7 +76,7 @@ def test_strang_corrective_step_also_applies_the_foot(V):
     time = dolfinx.fem.Constant(V.mesh, 0.0)
     pde = beat.MonodomainModel(time=time, mesh=V.mesh, M=0.0)
     ode = FootCurrentODESolver(make_ode(V, v_pde=pde.state), constant(V, t_a))
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=0.5)
+    solver = beat.SplittingSolver(pde=pde, ode=ode, theta=0.5)
     v = np.full(V.dofmap.index_map.size_local + V.dofmap.index_map.num_ghosts, -85.0)
     t, dt = 0.0, 0.02
     rate = ExponentialFoot().rate
@@ -174,15 +173,38 @@ class RecordingMonitor(beat.BaseMonitor):
         self.steps.append((t0, t1))
 
 
-def test_ode_only_solver(V):
+# Annotated on purpose: mypy then checks the body, i.e. that FootCurrentODESolver satisfies
+# the ODESolver protocol (v_ode/v_pde included). Keep the annotations.
+def test_re_minus_solver(V: dolfinx.fem.FunctionSpace) -> None:
     monitor = RecordingMonitor()
     ode = FootCurrentODESolver(make_ode(V), constant(V, 0.0))
-    solver = ODEOnlySolver(ode, monitor=monitor)
+    solver = beat.SplittingSolver(pde=None, ode=ode, monitor=monitor)
     assert solver.v is ode.v_ode
     solver.solve((0.0, 2.0), dt=0.1)
     assert len(monitor.steps) == 20
     assert "ode_step" in monitor.names
     assert (solver.v.x.array >= -30.0).all()
+
+
+def test_re_minus_restart_is_bit_for_bit(V):
+    def build():
+        return beat.SplittingSolver(
+            pde=None,
+            ode=FootCurrentODESolver(make_ode(V), constant(V, 0.0)),
+        )
+
+    a = build()
+    a.solve((0.0, 0.5), dt=0.125)
+    saved = [f.x.array.copy() for _, f in a.restart_functions(["v"])]
+    b = build()
+    functions = b.restart_functions(["v"])
+    for (_, f), arr in zip(functions, saved):
+        f.x.array[:] = arr
+    b.load_restart(functions, a.restart_metadata())
+    a.solve((0.5, 1.0), dt=0.125)
+    b.solve((0.5, 1.0), dt=0.125)
+    assert np.array_equal(a.v.x.array, b.v.x.array)
+    assert not np.array_equal(a.v.x.array, constant(V, -85.0).x.array)
 
 
 def test_non_integer_marker_raises(V):
@@ -191,7 +213,11 @@ def test_non_integer_marker_raises(V):
         FootCurrentODESolver(make_ode(V), constant(V, 0.0), {1: ExponentialFoot()}, markers=markers)
 
 
-def test_ode_only_solver_accepts_no_monitor(V):
-    ode = FootCurrentODESolver(make_ode(V), constant(V, 0.0))
-    solver = ODEOnlySolver(ode, monitor=None)
-    solver.solve((0.0, 0.1), 0.05)
+def test_wrapper_exposes_the_wrapped_solver_but_forwards_nothing_else(V):
+    inner = make_ode(V)
+    ode = FootCurrentODESolver(inner, constant(V, 0.0))
+    assert ode.ode is inner
+    assert ode.v_ode is inner.v_ode
+    assert ode.v_pde is inner.v_pde
+    with pytest.raises(AttributeError):
+        ode.full_values

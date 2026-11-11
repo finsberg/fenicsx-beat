@@ -30,7 +30,7 @@ import numpy as np
 import beat
 from beat.eikonal import Source, solve_eikonal
 from beat.pseudo_bidomain import LeadFieldElectrodes, VolumeConductor
-from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver
 from beat.utils import PointEvaluator
 
 comm = MPI.COMM_WORLD
@@ -62,14 +62,15 @@ def S(name):
     return g[name].to("S/m").magnitude
 
 
-sigma_i_bath = beat.conductivities.conductivity_tensor(S("g_il"), S("g_it"), bath.f0)
-sigma_e_bath = beat.conductivities.conductivity_tensor(S("g_el"), S("g_et"), bath.f0)
+assert bath.geometry.f0 is not None
+sigma_i_bath = beat.conductivities.conductivity_tensor(S("g_il"), S("g_it"), bath.geometry.f0)
+sigma_e_bath = beat.conductivities.conductivity_tensor(S("g_el"), S("g_et"), bath.geometry.f0)
 markers = beat.geometry.WEDGE_BATH_MARKERS
 conductor = VolumeConductor(
-    bath.mesh, bath.cell_tags, markers["TISSUE"], markers["BATH"], sigma_i_bath, sigma_e_bath, S("g_b"),
+    bath.geometry.mesh, bath.cell_tags, markers["TISSUE"], markers["BATH"], sigma_i_bath, sigma_e_bath, S("g_b"),
 )
 if comm.rank == 0:
-    print(f"bath margins {bath.margins} mm, {bath.mesh.topology.index_map(0).size_global} vertices")
+    print(f"bath margins {bath.margins} mm, {bath.geometry.mesh.topology.index_map(0).size_global} vertices")
 # -
 
 # ## R-E$^-$ with an electrogram at $P_E$
@@ -103,7 +104,7 @@ cells = beat.odesolver.DolfinMultiODESolver(
 cv = (0.594, 0.324, 0.324)  # mm/ms, from scripts/reaction_eikonal_cv.json
 sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
 t_a = solve_eikonal(mesh, cv, (geo.f0, geo.s0, geo.n0), sources)
-solver = ODEOnlySolver(FootCurrentODESolver(cells, t_a, ExponentialFoot()))
+solver = beat.SplittingSolver(pde=None, ode=FootCurrentODESolver(cells, t_a, ExponentialFoot()))
 v = solver.v
 
 assert geo.f0 is not None
@@ -126,7 +127,7 @@ while t < end_time - 1e-9:
 phi_e = conductor.solve(v)
 gx, gy = np.meshgrid(np.linspace(0, 25, 101), np.linspace(0, 25, 101))
 points = np.column_stack([gx.ravel(), gy.ravel(), np.full(gx.size, 2.5)])
-phi_grid = PointEvaluator(bath.mesh, points)(phi_e).reshape(gx.shape)
+phi_grid = PointEvaluator(bath.geometry.mesh, points)(phi_e).reshape(gx.shape)
 if comm.rank == 0:
     fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(11, 4))
     cs = ax0.contourf(gx, gy, phi_grid, levels=21, cmap="jet")

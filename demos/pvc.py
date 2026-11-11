@@ -169,7 +169,7 @@ ode = beat.odesolver.DolfinODESolver(
     num_states=len(y),
     v_index=model["state_index"]("V"),
 )
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 checkpointfname = outdir / "pvc_checkpoint.bp"
 
@@ -178,10 +178,10 @@ io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
-    v = solver.pde.v.x.array
+    v = solver.v.x.array
     if t % 100.0 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
-    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
 
 
 # -

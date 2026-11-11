@@ -80,6 +80,13 @@ class ODESystemSolver:
 
 
 class BaseDolfinODESolver(abc.ABC):
+    """Base class of the ODE solvers that keep the cell states on a dolfinx function space
+
+    ``v_ode`` is the potential on the ODE space (P1, DG, quadrature, ...) and ``v_pde`` the PDE
+    model's potential; :meth:`ode_to_pde` and :meth:`pde_to_ode` project between them. Subclasses
+    implement the state bookkeeping. Implements :class:`beat.monodomain_solver.ODESolver`.
+    """
+
     v_ode: dolfinx.fem.Function
     v_pde: dolfinx.fem.Function
     _metadata: dict[str, Any] | None = None

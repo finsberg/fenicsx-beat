@@ -12,16 +12,15 @@ model through a foot current that starts at :math:`t_a`:
 The window follows openCARP: the paper's Eq. 27 states :math:`[t_a - T_{foot}, t_a]`, which
 contradicts its own appendix and the openCARP implementation.
 
-* R-E+ (with diffusion): ``MonodomainSplittingSolver(pde, FootCurrentODESolver(...))`` with a
+* R-E+ (with diffusion): ``SplittingSolver(pde, FootCurrentODESolver(...))`` with a
   PDE model without stimulus.
-* R-E- (without diffusion): ``ODEOnlySolver(FootCurrentODESolver(...))``.
+* R-E- (without diffusion): ``SplittingSolver(None, FootCurrentODESolver(...))``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 from mpi4py import MPI
 
@@ -29,8 +28,7 @@ import dolfinx
 import numpy as np
 import numpy.typing as npt
 
-from .monodomain_solver import EPS, ODESolver
-from .telemetry import BaseMonitor, NullMonitor
+from .monodomain_solver import ODESolver
 from .utils import interpolation_points
 
 # Unreached activation times are replaced by this before interpolation (inf * 0 = nan)
@@ -88,7 +86,8 @@ class FootCurrentODESolver:
 
     After the wrapped solver's step from ``t0`` to ``t1 = t0 + dt``:
     ``v += dt * foot.rate(t1 - t_a, v)``. Evaluating at ``t1`` means the step that contains
-    :math:`t_a` already gets the foot. All other ``ODESolver`` methods are the wrapped solver's.
+    :math:`t_a` already gets the foot. All other ``ODESolver`` methods are the wrapped solver's;
+    anything else is reachable through :attr:`ode`.
 
     Parameters
     ----------
@@ -114,7 +113,7 @@ class FootCurrentODESolver:
         allow_unreached: bool = False,
     ) -> None:
         self.ode = ode
-        v_ode: dolfinx.fem.Function = ode.v_ode  # type: ignore[attr-defined]
+        v_ode: dolfinx.fem.Function = ode.v_ode
         V = v_ode.function_space
         source = dolfinx.fem.Function(t_a.function_space)
         source.x.array[:] = np.where(np.isfinite(t_a.x.array), t_a.x.array, _LARGE)
@@ -156,17 +155,11 @@ class FootCurrentODESolver:
 
     @property
     def v_ode(self) -> dolfinx.fem.Function:
-        return self.ode.v_ode  # type: ignore[attr-defined]
+        return self.ode.v_ode
 
     @property
     def v_pde(self) -> dolfinx.fem.Function:
-        return self.ode.v_pde  # type: ignore[attr-defined]
-
-    def __getattr__(self, name: str) -> Any:
-        # Only called for attributes not found on the wrapper itself
-        if name == "ode" or name.startswith("__"):
-            raise AttributeError(name)
-        return getattr(self.ode, name)
+        return self.ode.v_pde
 
     def to_dolfin(self) -> None:
         self.ode.to_dolfin()
@@ -199,43 +192,3 @@ class FootCurrentODESolver:
             self._duration,
         )
         self.ode.from_dolfin()
-
-
-@dataclass
-class ODEOnlySolver:
-    """Advance only the cell model (with a :class:`FootCurrentODESolver`: the R-E- model)
-
-    Same ``solve``/``step`` interface and telemetry as
-    :class:`beat.monodomain_solver.MonodomainSplittingSolver`; :attr:`v` is the ODE solver's
-    ``v_ode``.
-    """
-
-    ode: ODESolver
-    monitor: BaseMonitor = field(default_factory=NullMonitor)
-
-    def __post_init__(self) -> None:
-        if self.monitor is None:  # type: ignore[unreachable]
-            self.monitor = NullMonitor()
-        self.ode.to_dolfin()
-
-    @property
-    def v(self) -> dolfinx.fem.Function:
-        return self.ode.v_ode  # type: ignore[attr-defined]
-
-    def solve(self, interval: tuple[float, float], dt: float | None) -> None:
-        T0, T = interval
-        if dt is None:
-            dt = T - T0
-        t0, t1 = T0, T0 + dt
-        while t1 < T + EPS:
-            self.step((t0, t1))
-            t0, t1 = t1, t1 + dt
-
-    def step(self, interval: tuple[float, float]) -> None:
-        t0, t1 = interval
-        with self.monitor.track_time("total_step"):
-            with self.monitor.track_time("ode_step"):
-                self.ode.step(t0, t1 - t0)
-            with self.monitor.track_time("ode_to_dolfin"):
-                self.ode.to_dolfin()
-        self.monitor.advance_step(t0, t1)

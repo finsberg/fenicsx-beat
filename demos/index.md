@@ -82,7 +82,7 @@ model and notation used throughout, then work through the
 - [Monolithic implicit PDE+ODE coupling with dolfinx-external-operator](monolithic_external_operator.py)
   — a prototype fully implicit Newton solve of the PDE and cell model *together*, with a
   JAX-autodifferentiated Jacobian and no operator-splitting error at all; validated against an
-  independent reference and quantitatively compared against `MonodomainSplittingSolver`.
+  independent reference and quantitatively compared against `SplittingSolver`.
 
 ```{bibliography}
 :filter: docname in docnames

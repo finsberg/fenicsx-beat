@@ -45,7 +45,7 @@ import scifem
 import beat
 from beat.activation import ActivationTracker
 from beat.eikonal import Source, solve_eikonal
-from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver
 
 comm = MPI.COMM_WORLD
 dx = 0.4  # mm
@@ -172,7 +172,7 @@ pde = beat.MonodomainModel(
     time=time, mesh=mesh, M=M, I_s=I_s, C_m=C_m, dx=I_s[0].dZ,
     params={"petsc_options": petsc_options},
 )
-run("R-D", beat.MonodomainSplittingSolver(pde=pde, ode=cell_solver(pde.state)), pde.v)
+run("R-D", beat.SplittingSolver(pde=pde, ode=cell_solver(pde.state)), pde.v)
 # -
 
 # R-E$^+$: the same PDE without stimulus; the cell model is wrapped in a `FootCurrentODESolver`.
@@ -181,13 +181,16 @@ run("R-D", beat.MonodomainSplittingSolver(pde=pde, ode=cell_solver(pde.state)), 
 time = dolfinx.fem.Constant(mesh, 0.0)
 pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, C_m=C_m, params={"petsc_options": petsc_options})
 ode = FootCurrentODESolver(cell_solver(pde.state), t_a, ExponentialFoot())
-run("R-E+", beat.MonodomainSplittingSolver(pde=pde, ode=ode), pde.v)
+run("R-E+", beat.SplittingSolver(pde=pde, ode=ode), pde.v)
 # -
 
 # R-E$^-$: only the cell models, driven by the foot current; no linear solves at all.
 
 # +
-solver = ODEOnlySolver(FootCurrentODESolver(cell_solver(dolfinx.fem.Function(V)), t_a, ExponentialFoot()))
+solver = beat.SplittingSolver(
+    pde=None,
+    ode=FootCurrentODESolver(cell_solver(dolfinx.fem.Function(V)), t_a, ExponentialFoot()),
+)
 run("R-E-", solver, solver.v)
 # -
 

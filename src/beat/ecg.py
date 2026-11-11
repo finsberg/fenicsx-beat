@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal, NamedTuple, Protocol
 
 from mpi4py import MPI
 from petsc4py import PETSc
@@ -190,7 +190,7 @@ def qt_interval(
     """
     Processes the ECG signal to compute the corrected QT interval (QTc).
 
-    Parameters:
+    Parameters
     ----------
     t : np.ndarray
         Time vector corresponding to the ECG signal in seconds.
@@ -203,7 +203,7 @@ def qt_interval(
     window_end_offset : int, optional
         End of the search window for T-wave end relative to R-peak (milliseconds). Defaults to 400.
 
-    Returns:
+    Returns
     -------
     QTIntervalResult
         A named tuple containing the start index, end index, and the QT interval in seconds.
@@ -332,6 +332,23 @@ class ElectrodePotentials:
         }
 
 
+class ElectrodeRecorder(Protocol):
+    """Records potentials at named electrodes from the current transmembrane potential
+
+    Built once with the electrode positions; each call returns ``{name: potential}``, the same on
+    every rank, ready for :meth:`LeadSystem.leads`. Implemented by :class:`ElectrodePotentials`
+    (infinite homogeneous medium around the heart) and
+    :class:`beat.pseudo_bidomain.LeadFieldElectrodes` (bounded tissue-and-bath volume conductor).
+
+    Their conductivities follow different conventions: :class:`ECGRecovery` takes the monodomain
+    tensor ``M`` as used by the PDE model (scaled by :math:`1/\\chi`) and a bath conductivity
+    ``sigma_b``; :class:`beat.pseudo_bidomain.VolumeConductor` and ``LeadFieldElectrodes`` take the
+    unscaled bidomain tensors :math:`\\sigma_i`, :math:`\\sigma_e` and :math:`\\sigma_b`.
+    """
+
+    def __call__(self) -> dict[str, float]: ...
+
+
 @dataclass(frozen=True)
 class Lead:
     """One lead: a named linear combination of potentials, ``Σ c·φ[p]``."""
@@ -392,7 +409,8 @@ class LeadSystem:
         self,
         potentials: Mapping[str, float | np.ndarray],
     ) -> dict[str, float | np.ndarray]:
-        """Each lead's ``Σ c·φ[p]``, in ``definitions`` order."""
+        """Each lead's ``Σ c·φ[p]``, in ``definitions`` order, from potentials such as an
+        :class:`ElectrodeRecorder` returns."""
         needed: dict[str, None] = {}
         for lead in self.definitions:
             for p in lead.terms:

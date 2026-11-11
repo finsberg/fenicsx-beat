@@ -40,7 +40,7 @@ from beat.pseudo_bidomain import (
     define_augmented_conductivity_tensor,
     interface_layer,
 )
-from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver
 from beat.utils import PointEvaluator
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,7 +108,7 @@ def build(model, dx, cv, comm):
             t_a,
             ExponentialFoot(),
         )
-        solver = ODEOnlySolver(ode)
+        solver = beat.SplittingSolver(pde=None, ode=ode)
         return solver, solver.v, t_a, wedge
     layer = interface_layer(mesh, num_layers=num_layers(dx))
     M = define_augmented_conductivity_tensor(f0=geo.f0, layer=layer, **g)
@@ -146,7 +146,8 @@ def build(model, dx, cv, comm):
             params={"petsc_options": PETSC},
         )
         ode = FootCurrentODESolver(cell_solver(V, pde.state, markers), t_a, ExponentialFoot())
-    return beat.MonodomainSplittingSolver(pde=pde, ode=ode), pde.v, t_a, wedge
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
+    return solver, solver.v, t_a, wedge
 
 
 def main():

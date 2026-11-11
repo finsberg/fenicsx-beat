@@ -29,7 +29,7 @@ def test_grid_round_trip_between_wedge_and_bath_meshes():
     array = comm.bcast(array, root=0)
 
     bath = beat.geometry.get_3D_wedge_bath_geometry(comm, dx=dx, margin=1.0)
-    w = dolfinx.fem.Function(dolfinx.fem.functionspace(bath.mesh, ("P", 1)))
+    w = dolfinx.fem.Function(dolfinx.fem.functionspace(bath.geometry.mesh, ("P", 1)))
     grid.scatter_from_grid(w, array, dx)
     x = w.function_space.tabulate_dof_coordinates()
     inside = np.all((x > -1e-9) & (x < np.array([25.0, 25.0, 5.0]) + 1e-9), axis=1)

@@ -337,7 +337,7 @@ def test_splitting_solver_drives_the_bidomain_model():
             num_states=2,
             v_index=0,
         )
-        beat.MonodomainSplittingSolver(pde=pde, ode=ode).solve((0.0, T), dt=dt)
+        beat.SplittingSolver(pde=pde, ode=ode).solve((0.0, T), dt=dt)
         return pde.v
 
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))

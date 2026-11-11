@@ -295,10 +295,10 @@ ode = beat.odesolver.DolfinMultiODESolver(
 )
 
 # We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
-# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# `beat.SplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://github.com/scientificcomputing/io4dolfinx) package.
 
@@ -312,7 +312,7 @@ shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
-    [solver.pde.v],
+    [solver.v],
     engine="BP4",
 )
 io4dolfinx.write_mesh(checkpointfname, geo.mesh)
@@ -321,10 +321,10 @@ io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 
 def save(t):
-    v = solver.pde.v.x.array
+    v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
 
 
 # We will save results every 1 ms

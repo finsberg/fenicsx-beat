@@ -1,5 +1,7 @@
+import contextlib
 import gc
 import logging
+import warnings
 
 from mpi4py import MPI
 
@@ -55,7 +57,7 @@ def test_splitting_solver_logs_both_ends_of_the_interval(caplog):
     mesh = dolfinx.mesh.create_unit_square(comm, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
     pde = beat.MonodomainModel(time=time, mesh=mesh, M=1.0)
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=NullODESolver())
+    solver = beat.SplittingSolver(pde=pde, ode=NullODESolver())
 
     with caplog.at_level(logging.DEBUG, logger="beat.monodomain_solver"):
         solver.solve((0.0, 1.0), dt=0.5)
@@ -113,7 +115,7 @@ def test_monodomain_splitting_analytic(odespace):
         num_states=2,
         v_index=0,
     )
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     solver.solve((t0, T), dt=dt)
 
     v_exact = v_exact_func(x, time)
@@ -171,7 +173,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
             num_states=2,
             v_index=0,
         )
-        solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=1.0)
+        solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
         solver.solve((t0, T), dt=dt)
 
         v_exact = v_exact_func(x, time)
@@ -235,7 +237,7 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
             num_states=2,
             v_index=0,
         )
-        solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=theta)
+        solver = beat.SplittingSolver(pde=pde, ode=ode, theta=theta)
         solver.solve((t0, T), dt=dt)
         v_exact = v_exact_func(x, time)
 
@@ -314,7 +316,7 @@ def test_irksome_monodomain_splitting_analytic(odespace):
         v_index=0,
     )
 
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     solver.solve((t0, T), dt=dt)
 
     v_exact = v_exact_func(x, time)
@@ -388,7 +390,7 @@ def test_external_operator_monodomain_splitting_analytic(odespace):
         v_index=0,
     )
 
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     solver.solve((t0, T), dt=dt)
 
     v_exact = v_exact_func(x, time)
@@ -435,7 +437,7 @@ def build_restart_solver(theta):
         num_states=2,
         v_index=0,
     )
-    return beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=theta)
+    return beat.SplittingSolver(pde=pde, ode=ode, theta=theta)
 
 
 def run_steps(solver, first, last):
@@ -495,11 +497,208 @@ def test_restart_metadata_round_trips_the_pde_timestep():
     assert float(b.pde._timestep.value) == metadata["pde"]["timestep"]
 
 
-def test_restart_metadata_is_empty_for_a_pde_without_it():
+def test_restart_metadata_only_records_the_pde_for_a_pde_without_it():
     class Bare:
         v = None
 
         def assign_previous(self) -> None: ...
 
-    solver = beat.MonodomainSplittingSolver(pde=Bare(), ode=NullODESolver())  # type: ignore[arg-type]
-    assert solver.restart_metadata() == {}
+    solver = beat.SplittingSolver(pde=Bare(), ode=NullODESolver())  # type: ignore[arg-type]
+    assert solver.restart_metadata() == {"has_pde": True}
+
+
+def _small_pde():
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 2, 2, dolfinx.cpp.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    return beat.MonodomainModel(time=time, mesh=mesh, M=1.0)
+
+
+def test_old_name_warns_at_the_call_site_and_still_works():
+    pde = _small_pde()
+    with pytest.warns(DeprecationWarning, match="use SplittingSolver") as record:
+        solver = beat.MonodomainSplittingSolver(pde=pde, ode=NullODESolver())
+    assert len(record) == 1
+    assert record[0].filename == __file__
+    assert isinstance(solver, beat.SplittingSolver)
+    solver.solve((0.0, 1.0), dt=0.5)
+
+
+def test_new_name_does_not_warn():
+    pde = _small_pde()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        beat.SplittingSolver(pde=pde, ode=NullODESolver())
+
+
+class RecordingMonitor(beat.BaseMonitor):
+    def __init__(self):
+        self.names, self.steps = [], []
+
+    @contextlib.contextmanager
+    def track_time(self, name):
+        self.names.append(name)
+        yield
+
+    def record_ksp(self, ksp):
+        pass
+
+    def advance_step(self, t0, t1):
+        self.steps.append((t0, t1))
+
+
+ODE_ONLY_DT = 0.125  # a power of two, so t1 - t0 == dt exactly
+
+
+def build_ode_only(theta=1.0, monitor=None):
+    """A pde=None solver over a 2-state forward-Euler ODE on P1, and its initial states"""
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8, dolfinx.cpp.mesh.CellType.triangle)
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    x = V.tabulate_dof_coordinates()
+    init_states = np.zeros((2, x.shape[0]))
+    init_states[0] = np.cos(2 * np.pi * x[:, 0])
+    init_states[1] = np.sin(2 * np.pi * x[:, 1])
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=dolfinx.fem.Function(V),
+        v_pde=dolfinx.fem.Function(V),
+        fun=simple_ode_forward_euler,
+        init_states=init_states.copy(),
+        parameters=None,
+        num_states=2,
+        v_index=0,
+    )
+    kwargs = {} if monitor is None else {"monitor": monitor}
+    return beat.SplittingSolver(pde=None, ode=ode, theta=theta, **kwargs), init_states
+
+
+def test_splitting_solver_v_is_the_pde_potential():
+    solver = build_restart_solver(1.0)
+    assert solver.v is solver.pde.v
+
+
+def test_ode_only_v_is_the_ode_potential_and_starts_at_the_initial_state():
+    solver, init = build_ode_only()
+    assert solver.v is solver.ode.v_ode
+    assert np.array_equal(solver.v.x.array, init[0])
+
+
+def test_ode_only_solve_matches_stepping_the_ode_alone():
+    solver, init = build_ode_only()
+    solver.solve((0.0, 5 * ODE_ONLY_DT), ODE_ONLY_DT)
+
+    reference, _ = build_ode_only()
+    ode = reference.ode
+    t = 0.0
+    for _ in range(5):
+        ode.step(t, ODE_ONLY_DT)
+        t += ODE_ONLY_DT
+    ode.to_dolfin()
+    assert np.array_equal(solver.v.x.array, ode.v_ode.x.array)
+    assert np.array_equal(solver.ode.values, ode.values)
+    assert not np.array_equal(solver.v.x.array, init[0])
+
+
+def test_ode_only_ignores_theta():
+    a, _ = build_ode_only(theta=1.0)
+    b, _ = build_ode_only(theta=0.5)
+    a.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
+    b.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
+    assert np.array_equal(a.ode.values, b.ode.values)
+
+
+def test_ode_only_telemetry():
+    monitor = RecordingMonitor()
+    solver, _ = build_ode_only(monitor=monitor)
+    solver.solve((0.0, 2 * ODE_ONLY_DT), ODE_ONLY_DT)
+    assert monitor.names == ["total_step", "ode_step", "ode_to_dolfin"] * 2
+    assert monitor.steps == [(0.0, ODE_ONLY_DT), (ODE_ONLY_DT, 2 * ODE_ONLY_DT)]
+
+
+def test_ode_only_restart_function_names():
+    solver, _ = build_ode_only()
+    functions = solver.restart_functions(["v", "s"])
+    assert [n for n, _ in functions] == ["v", "state_v", "state_s"]
+    assert functions[0][1] is solver.ode.v_ode
+    assert solver.restart_metadata() == {"has_pde": False}
+
+
+def test_ode_only_restart_is_bit_for_bit():
+    a, _ = build_ode_only()
+    a.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
+    saved = [(n, f.x.array.copy()) for n, f in a.restart_functions(["v", "s"])]
+
+    b, _ = build_ode_only()
+    functions = b.restart_functions(["v", "s"])
+    for (_, f), (_, arr) in zip(functions, saved):
+        f.x.array[:] = arr
+    b.load_restart(functions, a.restart_metadata())
+
+    a.solve((3 * ODE_ONLY_DT, 6 * ODE_ONLY_DT), ODE_ONLY_DT)
+    b.solve((3 * ODE_ONLY_DT, 6 * ODE_ONLY_DT), ODE_ONLY_DT)
+    assert np.array_equal(a.v.x.array, b.v.x.array)
+    assert np.array_equal(a.ode.values, b.ode.values)
+
+
+def test_ode_only_refuses_pde_metadata_without_touching_anything():
+    solver, init = build_ode_only()
+    functions = solver.restart_functions(["v", "s"])
+    other = [(n, f.copy()) for n, f in functions]
+    for _, f in other:
+        f.x.array[:] = 7.0
+    with pytest.raises(ValueError, match="no PDE"):
+        solver.load_restart(other, {"pde": {"timestep": 0.1}})
+    assert np.array_equal(solver.v.x.array, init[0])
+    assert np.array_equal(solver.ode.values, init)
+
+
+def test_restart_refuses_a_checkpoint_saved_without_a_pde_without_touching_anything():
+    saved_by, _ = build_ode_only()
+    metadata = saved_by.restart_metadata()
+    solver = build_restart_solver(1.0)
+    v_before = solver.v.x.array.copy()
+    values_before = solver.ode.values.copy()
+    # Same mesh and P1 spaces, so every Function fits: only the metadata can tell them apart
+    functions = [(n, f.copy()) for n, f in saved_by.restart_functions(["v", "s"])]
+    with pytest.raises(ValueError, match="without a PDE"):
+        solver.load_restart(functions, metadata)
+    assert np.array_equal(solver.v.x.array, v_before)
+    assert np.array_equal(solver.ode.values, values_before)
+
+
+def test_ode_only_refuses_a_checkpoint_saved_with_a_pde():
+    solver, init = build_ode_only()
+    functions = solver.restart_functions(["v", "s"])
+    with pytest.raises(ValueError, match="with a PDE"):
+        solver.load_restart(functions, {"has_pde": True})
+    assert np.array_equal(solver.ode.values, init)
+
+
+def test_load_restart_accepts_metadata_without_has_pde():
+    """Checkpoints written before ``has_pde`` existed only carry the PDE's metadata"""
+    a = build_restart_solver(1.0)
+    run_steps(a, 0, 2)
+    b = build_restart_solver(1.0)
+    b.load_restart(b.restart_functions(["v", "s"]), {"pde": a.restart_metadata()["pde"]})
+
+
+def test_load_restart_refuses_a_v_of_another_size_on_every_rank():
+    solver = build_restart_solver(1.0)
+    functions = solver.restart_functions(["v", "s"])
+    coarse = dolfinx.mesh.create_unit_square(
+        MPI.COMM_WORLD,
+        3,
+        3,
+        dolfinx.cpp.mesh.CellType.triangle,
+    )
+    v_other = dolfinx.fem.Function(dolfinx.fem.functionspace(coarse, ("P", 1)))
+    v_before = solver.v.x.array.copy()
+    with pytest.raises(ValueError, match="does not fit"):
+        solver.load_restart([("v", v_other), *functions[1:]], solver.restart_metadata())
+    assert np.array_equal(solver.v.x.array, v_before)
+
+
+def test_monitor_none_means_no_monitoring():
+    solver, _ = build_ode_only(monitor=None)
+    assert isinstance(solver.monitor, beat.NullMonitor)
+    explicit = beat.SplittingSolver(pde=None, ode=solver.ode, monitor=None)
+    assert isinstance(explicit.monitor, beat.NullMonitor)
+    explicit.solve((0.0, 2 * ODE_ONLY_DT), ODE_ONLY_DT)

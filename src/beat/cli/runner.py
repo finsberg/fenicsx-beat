@@ -31,7 +31,7 @@ import dolfinx
 import io4dolfinx
 import numpy as np
 
-from ..monodomain_solver import MonodomainSplittingSolver
+from ..monodomain_solver import SplittingSolver
 from ..telemetry import NullMonitor, PerformanceMonitor
 from .cellmodel import CellModel, build_cell_model, build_region_markers, state_index
 from .config import Config, ConfigError, ms
@@ -64,7 +64,7 @@ class Simulation:
     time: dolfinx.fem.Constant
     pde: Any
     ode: Any
-    solver: MonodomainSplittingSolver
+    solver: SplittingSolver
     cell: CellModel
     stimuli: StimulusSet
     V_ode: Any
@@ -253,7 +253,7 @@ def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulat
     V_ode = ode_space(geo.mesh)
     markers = build_region_markers(conf.cell, geo, V_ode)
     ode = build_ode(conf.solver, cell, markers, pde, time, monitor=monitor)
-    solver = MonodomainSplittingSolver(
+    solver = SplittingSolver(
         pde=pde,
         ode=ode,
         theta=conf.solver.theta,
@@ -310,7 +310,7 @@ def _load_restart(sim: Simulation) -> tuple[int, float, np.ndarray]:
     This is all the state the splitting scheme carries between steps: every step starts from
     the ODE states (``ode.step``), then overwrites the PDE state with the ODE's ``v``
     (``ode_to_pde``) and the PDE's previous value with that (``pde.assign_previous``). The PDE
-    state is still read (and ``assign_previous`` called, as ``MonodomainSplittingSolver`` does
+    state is still read (and ``assign_previous`` called, as ``SplittingSolver`` does
     on construction) so the restored model is consistent before the first step too.
     """
     folder = sim.conf.output.folder

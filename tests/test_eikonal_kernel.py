@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import beat.eikonal
-from beat.eikonal import FAR, compile_kernel, vertex_connectivity
+from beat.eikonal import FAR, _compile_kernel, vertex_connectivity
 
 # (row, column) of the 6 stored components of the symmetric metric
 COMPONENTS = ((0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2))
@@ -13,7 +13,7 @@ COMPONENTS = ((0, 0), (1, 1), (2, 2), (0, 1), (0, 2), (1, 2))
 
 @pytest.fixture(scope="module")
 def kernel(tmp_path_factory):
-    return compile_kernel(cache_dir=tmp_path_factory.mktemp("kernel"), comm=MPI.COMM_SELF)
+    return _compile_kernel(cache_dir=tmp_path_factory.mktemp("kernel"), comm=MPI.COMM_SELF)
 
 
 def simplices(n, lengths):
@@ -124,7 +124,7 @@ def test_solution_is_the_fixed_point_of_the_local_update(kernel, n, lengths):
 
 
 def test_openmp_build_matches_serial(kernel, tmp_path):
-    omp = compile_kernel(openmp=True, num_threads=2, cache_dir=tmp_path, comm=MPI.COMM_SELF)
+    omp = _compile_kernel(openmp=True, num_threads=2, cache_dir=tmp_path, comm=MPI.COMM_SELF)
     assert omp.max_threads() >= 1
     x, cells = simplices((10, 10, 6), (4.0, 4.0, 3.0))
     M = metric(np.tile([0.0, 1.0, 0.0], (len(cells), 1)), 0.6, 0.3)
@@ -137,9 +137,9 @@ def test_openmp_build_matches_serial(kernel, tmp_path):
 
 
 def test_kernel_is_cached(tmp_path):
-    k1 = compile_kernel(cache_dir=tmp_path, comm=MPI.COMM_SELF)
+    k1 = _compile_kernel(cache_dir=tmp_path, comm=MPI.COMM_SELF)
     mtime = k1.library.stat().st_mtime_ns
-    k2 = compile_kernel(cache_dir=tmp_path, comm=MPI.COMM_SELF)
+    k2 = _compile_kernel(cache_dir=tmp_path, comm=MPI.COMM_SELF)
     assert k2.library == k1.library
     assert k2.library.stat().st_mtime_ns == mtime
     assert k1.library.name == beat.eikonal.KERNEL_LIBRARY
@@ -156,4 +156,9 @@ def test_max_iter_reports_non_convergence(kernel):
 
 def test_num_threads_requires_openmp():
     with pytest.raises(ValueError, match="openmp=True"):
-        compile_kernel(num_threads=2, comm=MPI.COMM_SELF)
+        _compile_kernel(num_threads=2, comm=MPI.COMM_SELF)
+
+
+def test_kernel_is_private():
+    assert not hasattr(beat.eikonal, "compile_kernel")
+    assert not hasattr(beat.eikonal, "EikonalKernel")

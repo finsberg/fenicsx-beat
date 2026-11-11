@@ -29,7 +29,7 @@ import scifem
 
 import beat
 from beat.eikonal import Source, solve_eikonal
-from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver, ODEOnlySolver
+from beat.reaction_eikonal import ExponentialFoot, FootCurrentODESolver
 
 comm = MPI.COMM_WORLD
 dx, dt = 0.4, 0.05  # mm, ms: R-E- has no diffusion, so a larger time step is fine
@@ -65,7 +65,7 @@ cells = beat.odesolver.DolfinMultiODESolver(
 )
 sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
 t_a = solve_eikonal(geo.mesh, (CV_L, CV_T, CV_T), (geo.f0, geo.s0, geo.n0), sources)
-solver = ODEOnlySolver(FootCurrentODESolver(cells, t_a, ExponentialFoot()))
+solver = beat.SplittingSolver(pde=None, ode=FootCurrentODESolver(cells, t_a, ExponentialFoot()))
 start = walltime.perf_counter()
 solver.solve((0.0, end_time), dt)
 if comm.rank == 0:

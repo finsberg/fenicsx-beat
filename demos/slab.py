@@ -272,7 +272,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
 # $\theta = 1$, i.e. (first-order) Godunov splitting.
 
 t = 0.0
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 vtxfname = results_folder / "slab.bp"
 checkpointfname = results_folder / "slab_checkpoint.bp"
@@ -282,7 +282,7 @@ shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
-    [solver.pde.v],
+    [solver.v],
     engine="BP4",
     mesh_policy=VTXMeshPolicy.reuse,
 )
@@ -291,10 +291,10 @@ io4dolfinx.write_mesh(checkpointfname, mesh)
 
 
 def save(t):
-    v = solver.pde.v.x.array
+    v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
 
 
 i = 0

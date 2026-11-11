@@ -242,7 +242,7 @@ def run_monodomain(fun):
         v_index=v_index,
     )
     monitor = beat.PerformanceMonitor(log_frequency=0, comm=comm)
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, monitor=monitor)
+    solver = beat.SplittingSolver(pde=pde, ode=ode, monitor=monitor)
     t = 0.0
     for _ in range(round(end_time / dt)):
         solver.step((t, t + dt))

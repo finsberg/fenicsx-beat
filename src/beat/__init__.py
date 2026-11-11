@@ -28,7 +28,7 @@ from .external_operator_odesolver import ExternalOperatorMultiODESolver, Externa
 from .irksome_model import IrksomeMonodomainModel
 from .irksome_odesolver import IrksomeMultiODESolver, IrksomeODESolver
 from .monodomain_model import MonodomainModel
-from .monodomain_solver import MonodomainSplittingSolver
+from .monodomain_solver import MonodomainSplittingSolver, SplittingSolver
 from .stimulation import Stimulus
 from .telemetry import BaseMonitor, NullMonitor, PerformanceMonitor
 
@@ -52,6 +52,7 @@ __all__ = [
     "MonodomainModel",
     "monodomain_solver",
     "MonodomainSplittingSolver",
+    "SplittingSolver",
     "utils",
     "conductivities",
     "stimulation",

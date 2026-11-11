@@ -11,7 +11,7 @@
 # fully implicit Runge–Kutta method, specified as a *Butcher tableau* (e.g. `irksome.BackwardEuler()`
 # for a first-order implicit step, or `irksome.GaussLegendre(2)` for a fourth-order one). Since they
 # implement the same `pde`/`ode` interfaces as the default solvers, they plug directly into
-# `beat.MonodomainSplittingSolver` and can even be mixed with the default solvers (an
+# `beat.SplittingSolver` and can even be mixed with the default solvers (an
 # `IrksomeMonodomainModel` PDE step can be paired with a plain `DolfinODESolver` ODE step, or vice
 # versa) — see `tests/test_monodomain_solver.py::test_irksome_monodomain_splitting_analytic` for such
 # a mix. `IrksomeMonodomainModel` can also be used entirely on its own (without any splitting or cell
@@ -26,7 +26,7 @@
 #
 # This demo combines both: a [`gotranx`](https://finsberg.github.io/gotranx)-generated UFL cell model
 # (the two-variable Mitchell–Schaeffer model) is solved with `IrksomeODESolver`, coupled through
-# `beat.MonodomainSplittingSolver` (Godunov splitting, $\theta = 1$) to an `IrksomeMonodomainModel` PDE
+# `beat.SplittingSolver` (Godunov splitting, $\theta = 1$) to an `IrksomeMonodomainModel` PDE
 # step, on a domain with a banded, strongly heterogeneous conductivity $M$. We track when each point
 # first crosses a voltage threshold to build an activation-time map, which should show fast activation
 # in the high-conductivity band and progressively slower activation as $M$ decreases.
@@ -222,7 +222,7 @@ ode = IrksomeODESolver(
     parameters=default_params,
 )
 
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=1.0)
+solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
 
 # ## Time stepping
 #
