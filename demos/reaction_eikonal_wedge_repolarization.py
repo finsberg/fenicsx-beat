@@ -94,6 +94,9 @@ if comm.rank == 0:
 # with the normalised spatial derivative (dotted). Bottom: histograms of the absolute deviation
 # $|v_{R-D} - v_{R-E}|$ at $t_{r50}$ over the mid-plane (paper Eq. 34). Right: action potentials
 # at the centres of the endocardial and M layers. As in the paper, R-E$^+$ matches R-D closely,
-# while R-E$^-$ has steps at the layer boundaries and larger deviations.
+# while R-E$^-$ has steps at the layer boundaries and larger deviations. Quantitatively, over the
+# mid-plane the absolute deviation from R-D at 100 µm has a median of 0.7 mV for R-E$^+$ at 400 µm
+# (90% of the points below 2.2 mV, 95% below 2.4 mV) and 2.0 mV for R-E$^-$ (90% below 11.5 mV,
+# 95% below 16.7 mV, dominated by the layer-boundary steps).
 #
 # ![Fig. 5](../docs/_static/reaction_eikonal_fig5.png)

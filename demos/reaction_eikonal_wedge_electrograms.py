@@ -150,7 +150,35 @@ if comm.rank == 0:
 #
 # ![Fig. 7](../docs/_static/reaction_eikonal_fig7.png)
 #
-# RESULTS-PARAGRAPH (written in Task 10 from the measured deviations; compare with the paper: 90% of
-# the R-E$^+$ and 95% of the R-E$^-$ potentials within 0.25 mV and 0.75 mV of R-D at 40 ms, R-E$^+$
-# electrograms virtually indistinguishable from R-D also at 400 µm, and R-E$^-$ overestimating the
-# late repolarization deflection).
+# Left: $\phi_e$ on the mid-plane at 40 and 320 ms for R-D, R-E$^+$ (100 and 400 µm) and R-E$^-$,
+# with histograms of the deviation from R-D at 100 µm; right: the electrogram at $P_E$. At 40 ms,
+# 90% (95%) of the R-E$^+$ potentials are within 2.4 mV (8.9 mV) of R-D and 90% (95%) of the
+# R-E$^-$ potentials within 1.2 mV (1.8 mV); at 320 ms the numbers are 0.22 mV (0.30 mV) for
+# R-E$^+$ and 2.3 mV (3.5 mV) for R-E$^-$. The paper reports 0.25 mV and 0.75 mV for 90% of R-E$^+$
+# and 95% of R-E$^-$ at 40 ms. Our R-E$^+$ tail at 40 ms is dominated by the thin depolarization
+# front: the 2 ms earlier eikonal activation (see the activation demo) probably shifts the steep
+# $\phi_e$ front, which gives large point-wise differences in a narrow band; the bulk of the map
+# agrees (median 0.50 mV). The electrograms of R-E$^+$ lie on top of R-D, also at 400 µm
+# (peak-to-peak 4.17 and 4.31 mV against 4.15 mV for R-D); R-E$^-$ has a deeper negative peak
+# ($-2.50$ against $-2.03$ mV) and a late deflection that peaks 1.5 ms later and is slightly
+# larger than R-D (2.19 against 2.13 mV), and it stays higher until the end (1.25 against 0.61 mV
+# at 395 ms), qualitatively as in the paper. As a check, the maps at $P_E$ equal the electrogram samples (for
+# example $-1.395$ mV for R-D at 40 ms).
+#
+# The amplitudes differ from the paper's Fig. 7C, where the electrogram at $P_E$ ranges from about
+# $-8$ to $+5$ mV during depolarization and reaches about 5 mV near 300 ms; ours peaks at about
+# $\pm 2$ mV (R-D: $-2.03$ and $2.13$ mV), although our $\phi_e$ maps cover about the same color range
+# as the paper's (about $-7$ to $15$ mV against $-10$ to $15$ mV). The solver chain is exact (the
+# potential at $P_E$ agrees to $10^{-10}$ between three independent routes), so the difference is in
+# the setup, which the paper only partly specifies. We measured the sensitivity with R-D at 400 µm
+# and other electrodes: $P_E$ at the center of the endocardial face, 1 mm bath: peak-to-peak
+# 4.2 mV (range $-2.3$ to $1.9$ mV); $P_E$ moved 0.5 mm into the bath: 3.7 mV; a point on the top
+# face $z = 5$ mm above the endocardial layer ($x = 22.5$ mm): 6.1 mV ($-2.6$ to $3.6$ mV); points on the
+# endocardial face closer to the S3 corner ($y = 3$ and $6.25$ mm): 7.0 and 6.5 mV ($-4.5$ to $2.6$
+# mV). With a 2 mm instead of 1 mm bath, $P_E$ gives 4.0 mV and the late deflection falls from
+# 1.9 to 1.2 mV. So the amplitude is sensitive to the electrode position (by a factor of up to 1.7
+# in the depolarization peaks) and to the bath size, and the unspecified placement of $P_E$ and bath
+# size in the paper can plausibly explain part of the difference, though not all: no electrode
+# we tried reaches the paper's $-8$ mV or the 5 mV late deflection. We do not know which of
+# these, or of other unstated details (for example the potential reference, which we take as
+# zero mean over the bath box), accounts for the rest.

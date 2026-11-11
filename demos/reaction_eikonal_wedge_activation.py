@@ -241,8 +241,20 @@ if comm.rank == 0:
 #
 # ![Fig. 2](../docs/_static/reaction_eikonal_fig2.png)
 #
+# Against R-D at 100 µm, the median relative deviation of the activation time is 13% (90% of the
+# points below 25%) for R-D at 400 µm, 2.7% (90% below 5.2%) for R-E$^+$ at 400 µm and 0.8% (90%
+# below 2.5%) for R-E$^-$ at 400 µm; at 200 µm it is 1.5% for R-D. R-E$^+$ at 200 µm has a median
+# of 7.4%, larger than at 400 µm, because its activation is systematically early: with the bath
+# layer the 100 µm R-D wave is slower than the eikonal wave at the measured velocities, which are
+# unchanged. The size of the augmentation layer matters little: with three rings at every
+# resolution (instead of a constant 0.3 mm) the 400 µm R-D median would be 10.9% and R-E$^+$
+# 3.0%. In the 100 µm panels R-E$^+$ shows a small kink in the contours at the left edge.
+#
 # The upstrokes at $P_E$ (cf. the paper's Fig. 4): R-D at 200 and 400 µm activates late, the R-E
 # models do not; R-E$^-$ has a faster upstroke and a larger overshoot because it ignores
-# diffusion.
+# diffusion. The upstroke at $P_E$ occurs at 31.3 ms (R-D), 29.1 ms (R-E$^+$) and 30.5 ms
+# (R-E$^-$) at 100 µm, and at 33.0, 30.0 and 31.2 ms at 400 µm: the R-E times hardly depend on the
+# mesh, whereas R-D is delayed by 1.7 ms. The R-E$^+$ and R-E$^-$ times differ from R-D by about
+# 2 ms and 0.8 ms (100 µm).
 #
 # ![Fig. 4](../docs/_static/reaction_eikonal_fig4.png)
