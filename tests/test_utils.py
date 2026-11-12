@@ -210,3 +210,16 @@ def test_time_steps_skips_the_partial_last_step():
 def test_time_steps_rejects_bad_dt(dt):
     with pytest.raises(ValueError):
         list(beat.utils.time_steps((0.0, 1.0), dt))
+
+
+def test_time_steps_keeps_the_last_step_at_large_times():
+    """At t ~ 2e4 ms, T + 1e-12 == T in floating point; the last step must still be taken"""
+    assert len(list(beat.utils.time_steps((0.0, 20000.0), 0.5))) == 40000
+    assert len(list(beat.utils.time_steps((16384.0, 16385.0), 0.5))) == 2
+
+
+def test_time_steps_one_step_interval_survives_round_off():
+    """solve((t, t + dt), dt) with an accumulated t: (t + dt) - t is not exactly dt"""
+    t = 20000.1
+    assert (t + 0.1) - t != 0.1
+    assert len(list(beat.utils.time_steps((t, t + 0.1), 0.1))) == 1
