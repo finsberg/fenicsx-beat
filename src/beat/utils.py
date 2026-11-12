@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import math
+from collections.abc import Iterator
 from typing import Any
 
 from mpi4py import MPI
@@ -435,3 +437,36 @@ class PointEvaluator:
             out[self.indices] = u.eval(self.points, self.cells).ravel()
         self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
         return out
+
+
+def time_steps(
+    interval: tuple[float, float],
+    dt: float | None,
+) -> Iterator[tuple[float, float]]:
+    """The steps ``(t0, t1)`` of length ``dt`` that cover ``interval = (T0, T)``
+
+    The number of steps is ``floor((T - T0) / dt)``, up to round-off in that one division, so a
+    ``dt`` that does not divide the interval leaves the remainder out. The times accumulate
+    (``t1 = t0 + dt``), as the time loops have always done. ``dt=None`` is one step over the whole
+    interval.
+
+    Raises
+    ------
+    ValueError
+        If ``dt`` is not positive or is longer than the interval.
+    """
+    T0, T = interval
+    if dt is None:
+        yield (T0, T)
+        return
+    if dt <= 0:
+        raise ValueError(f"dt must be positive, got {dt}")
+    # Count the steps from one division (its round-off does not grow with the number of steps,
+    # unlike the accumulated times), allowing for that round-off when dt divides the interval.
+    num_steps = math.floor((T - T0) / dt + 1e-9)
+    if num_steps < 1:
+        raise ValueError(f"dt={dt} is longer than the interval {interval}")
+    t0, t1 = T0, T0 + dt
+    for _ in range(num_steps):
+        yield (t0, t1)
+        t0, t1 = t1, t1 + dt

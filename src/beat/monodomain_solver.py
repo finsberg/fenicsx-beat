@@ -10,9 +10,9 @@ import dolfinx
 import numpy as np
 
 from .telemetry import BaseMonitor, NullMonitor
+from .utils import time_steps
 
 logger = logging.getLogger(__name__)
-EPS = 1e-12
 
 
 class ODESolver(Protocol):
@@ -180,19 +180,11 @@ class SplittingSolver:
             self.pde.load_restart_metadata(metadata["pde"])  # type: ignore[attr-defined]
         self.pde.assign_previous()
 
-    def solve(self, interval, dt):
-        T0, T = interval
-        if dt is None:
-            dt = T - T0
-        t0 = T0
-        t1 = T0 + dt
-
-        while t1 < T + EPS:
+    def solve(self, interval: tuple[float, float], dt: float | None) -> None:
+        """Step over ``interval`` with time step ``dt`` (see :func:`beat.utils.time_steps`)."""
+        for t0, t1 in time_steps(interval, dt):
             logger.debug(f"Solving on t = ({t0:.2f}, {t1:.2f})")
             self.step((t0, t1))
-
-            t0 = t1
-            t1 = t0 + dt
 
     def step(self, interval):
         if self.pde is None:

@@ -133,47 +133,6 @@ def detect_t_end(
     return int(t_end_index_absolute)
 
 
-# def correct_qt_interval(
-#     qt_interval_ms: float,
-#     rr_interval_duration_s: float,
-#     method: Literal["bazett", "fridericia"] = "bazett",
-# ):
-#     """
-#     Corrects the QT interval for heart rate using Bazett's or Fridericia's formula.
-
-#     Parameters:
-#     ----------
-#     qt_interval_ms : float
-#         The QT interval in milliseconds. Can be None.
-#     rr_interval_duration_s : float
-#         The RR interval duration in seconds.
-#     method : str, optional
-#         The correction method ('bazett' or 'fridericia'). Defaults to 'bazett'.
-
-#     Returns:
-#     -------
-#     float
-#         The corrected QT interval (QTc) in milliseconds. Returns None if input is invalid.
-
-#     """
-
-#     qt_interval_s = qt_interval_ms / 1000.0  # Convert QT to seconds for formula
-
-#     if method.lower() == "bazett":
-#         # QTc = QT / sqrt(RR)
-#         qtc_s = qt_interval_s / np.sqrt(rr_interval_duration_s)
-#     elif method.lower() == "fridericia":
-#         # QTc = QT / cubic-sqrt(RR)
-#         qtc_s = qt_interval_s / (rr_interval_duration_s ** (1 / 3))
-#     else:
-#         raise ValueError(
-#             f"Invalid QTc correction method '{method}'. Use 'bazett' or 'fridericia'.",
-#         )
-
-#     qtc_ms = qtc_s * 1000.0  # Convert back to milliseconds
-#     return qtc_ms
-
-
 class QTIntervalResult(NamedTuple):
     qt_interval: float
     start_index: int

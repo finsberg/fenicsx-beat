@@ -2,6 +2,7 @@ from mpi4py import MPI
 
 import dolfinx
 import numpy as np
+import pytest
 import scifem
 
 import beat
@@ -178,3 +179,47 @@ def test_point_evaluator_matches_linear_function():
     assert out[2] == -np.inf
     u.x.array[:] *= 2.0
     assert np.allclose(evaluate(u)[:2], 2.0 * expected)
+
+
+def test_time_steps_exact_multiple():
+    steps = list(beat.utils.time_steps((0.0, 1.0), 0.25))
+    assert steps == [(0.0, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1.0)]
+
+
+def test_time_steps_accumulates_like_before():
+    """t1 = t0 + dt, t0 = t1: the same floats the old loops produced"""
+    steps = list(beat.utils.time_steps((0.0, 1.0), 0.1))
+    t0, t1, expected = 0.0, 0.1, []
+    while t1 < 1.0 + 1e-12:
+        expected.append((t0, t1))
+        t0, t1 = t1, t1 + 0.1
+    assert steps == expected
+
+
+def test_time_steps_whole_interval_when_dt_is_none():
+    assert list(beat.utils.time_steps((2.0, 3.0), None)) == [(2.0, 3.0)]
+
+
+def test_time_steps_skips_the_partial_last_step():
+    steps = list(beat.utils.time_steps((0.0, 1.0), 0.3))
+    assert len(steps) == 3
+    assert steps[-1][1] == pytest.approx(0.9)
+
+
+@pytest.mark.parametrize("dt", [0.0, -0.1, 1.5])
+def test_time_steps_rejects_bad_dt(dt):
+    with pytest.raises(ValueError):
+        list(beat.utils.time_steps((0.0, 1.0), dt))
+
+
+def test_time_steps_keeps_the_last_step_at_large_times():
+    """At t ~ 2e4 ms, T + 1e-12 == T in floating point; the last step must still be taken"""
+    assert len(list(beat.utils.time_steps((0.0, 20000.0), 0.5))) == 40000
+    assert len(list(beat.utils.time_steps((16384.0, 16385.0), 0.5))) == 2
+
+
+def test_time_steps_one_step_interval_survives_round_off():
+    """solve((t, t + dt), dt) with an accumulated t: (t + dt) - t is not exactly dt"""
+    t = 20000.1
+    assert (t + 0.1) - t != 0.1
+    assert len(list(beat.utils.time_steps((t, t + 0.1), 0.1))) == 1

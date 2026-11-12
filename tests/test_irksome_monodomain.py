@@ -1,4 +1,6 @@
+import contextlib
 import gc
+import logging
 
 from mpi4py import MPI
 
@@ -7,6 +9,7 @@ import numpy as np
 import pytest
 import ufl
 
+import beat
 from beat.irksome_model import IrksomeMonodomainModel
 
 irksome = pytest.importorskip("irksome")
@@ -215,3 +218,110 @@ def test_irksome_monodomain_higher_order_temporal_convergence(num_stages, expect
     rates = [np.log(e1 / e2) / np.log(2) for e1, e2 in zip(errors[:-1], errors[1:])]
     # Assert that the final computed rate (asymptotic regime) meets the expected theoretical order
     assert rates[-1] >= expected_rate, f"Failed for {num_stages} stages: rates {rates}"
+
+
+class RecordingMonitor(beat.BaseMonitor):
+    def __init__(self):
+        self.names = []
+
+    @contextlib.contextmanager
+    def track_time(self, name):
+        self.names.append(name)
+        yield
+
+    def record_ksp(self, ksp):
+        pass
+
+    def advance_step(self, t0, t1):
+        pass
+
+
+def _split_solver(mesh, **pde_kwargs):
+    time = dolfinx.fem.Constant(mesh, 0.0)
+    pde = IrksomeMonodomainModel(
+        time=time,
+        mesh=mesh,
+        M=1.0,
+        butcher_tableau=irksome.BackwardEuler(),
+        **pde_kwargs,
+    )
+    V = pde.state.function_space
+    x = V.tabulate_dof_coordinates()
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=dolfinx.fem.Function(V),
+        v_pde=pde.state,
+        init_states=np.cos(np.pi * x[:, 0])[None, :].copy(),
+        parameters=np.array([]),
+        fun=lambda states, t, parameters, dt: states,
+        num_states=1,
+    )
+    return beat.SplittingSolver(pde=pde, ode=ode)
+
+
+def test_irksome_restart_continues_to_round_off():
+    """Irksome reuses the previous stages as the next solve's starting guess, and a checkpoint does
+    not hold them, so a restart reproduces the run to round-off rather than bit for bit"""
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 6, 6)
+    a = _split_solver(mesh)
+    a.solve((0.0, 0.3), 0.1)
+    saved = [f.x.array.copy() for _, f in a.restart_functions(["v"])]
+    b = _split_solver(mesh)
+    functions = b.restart_functions(["v"])
+    for (_, f), arr in zip(functions, saved):
+        f.x.array[:] = arr
+    b.load_restart(functions, a.restart_metadata())
+    b.pde.time.value = a.pde.time.value
+    a.solve((0.3, 0.6), 0.1)
+    b.solve((0.3, 0.6), 0.1)
+    assert np.allclose(a.v.x.array, b.v.x.array, rtol=1e-12, atol=1e-14)
+
+
+def test_irksome_model_uses_its_monitor():
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 4, 4)
+    monitor = RecordingMonitor()
+    solver = _split_solver(mesh, monitor=monitor)
+    solver.solve((0.0, 0.2), 0.1)
+    assert solver.pde.monitor is monitor
+    assert monitor.names.count("pde_total_step") == 2
+
+
+def test_irksome_model_warns_about_unknown_parameters_and_arguments(caplog):
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 2, 2)
+    with caplog.at_level(logging.WARNING, logger="beat.base_model"):
+        IrksomeMonodomainModel(
+            time=dolfinx.fem.Constant(mesh, 0.0),
+            mesh=mesh,
+            M=1.0,
+            butcher_tableau=irksome.BackwardEuler(),
+            params={"not_a_parameter": 1},
+            typo_kwarg=2,
+        )
+    text = caplog.text
+    assert "Unknown parameters" in text and "not_a_parameter" in text
+    assert "Unused keyword arguments" in text and "typo_kwarg" in text
+
+
+def test_irksome_model_honours_a_bcs_factory():
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 4, 4)
+
+    def bcs(model):
+        mesh = model.V.mesh
+        mesh.topology.create_connectivity(1, 2)
+        facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+        dofs = dolfinx.fem.locate_dofs_topological(model.V, 1, facets)
+        one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
+        from irksome.backends.dolfinx import dirichletbc
+
+        return [dirichletbc(one, dofs, model.V)]
+
+    time = dolfinx.fem.Constant(mesh, 0.0)
+    pde = IrksomeMonodomainModel(
+        time=time,
+        mesh=mesh,
+        M=1.0,
+        butcher_tableau=irksome.BackwardEuler(),
+        bcs=bcs,
+    )
+    pde.step((0.0, 0.1))
+    dofs = pde.bcs[0].dof_indices()[0]
+    assert np.allclose(pde.state.x.array[dofs], 1.0)

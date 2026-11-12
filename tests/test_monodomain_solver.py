@@ -702,3 +702,20 @@ def test_monitor_none_means_no_monitoring():
     explicit = beat.SplittingSolver(pde=None, ode=solver.ode, monitor=None)
     assert isinstance(explicit.monitor, beat.NullMonitor)
     explicit.solve((0.0, 2 * ODE_ONLY_DT), ODE_ONLY_DT)
+
+
+def test_solve_with_a_dt_longer_than_the_interval_raises():
+    solver = build_restart_solver(1.0)
+    with pytest.raises(ValueError, match="longer than"):
+        solver.solve((0.0, 0.01), 0.02)
+    with pytest.raises(ValueError, match="longer than"):
+        solver.pde.solve((0.0, 0.01), 0.02)
+
+
+def test_base_model_solve_steps_match_time_steps():
+    solver = build_restart_solver(1.0)
+    seen = []
+    step = solver.pde.step
+    solver.pde.step = lambda interval: (seen.append(interval), step(interval))[1]
+    solver.pde.solve((0.0, 0.05), 0.01)
+    assert seen == list(beat.utils.time_steps((0.0, 0.05), 0.01))

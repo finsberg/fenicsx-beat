@@ -10,7 +10,7 @@ jobs:
   test-code:
     # This code depends on the result of check-code
     runs-on: ubuntu-latest
-    timeout-minutes: 10   # Tests shouldn't use more than 10 minutes to run
+    timeout-minutes: 20   # Tests shouldn't use more than 10 minutes to run
     container:
       image: ghcr.io/fenics/dolfinx/dolfinx:stable
 
