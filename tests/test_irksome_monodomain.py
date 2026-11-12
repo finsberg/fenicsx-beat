@@ -310,7 +310,9 @@ def test_irksome_model_honours_a_bcs_factory():
         facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
         dofs = dolfinx.fem.locate_dofs_topological(model.V, 1, facets)
         one = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(1.0))
-        return [irksome.backends.dolfinx.dirichletbc(one, dofs, model.V)]
+        from irksome.backends.dolfinx import dirichletbc
+
+        return [dirichletbc(one, dofs, model.V)]
 
     time = dolfinx.fem.Constant(mesh, 0.0)
     pde = IrksomeMonodomainModel(
