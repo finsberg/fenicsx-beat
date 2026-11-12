@@ -4,6 +4,7 @@ FEniCSx-Beat
 
 .. automodule:: beat
     :members:
+    :exclude-members: Stimulus
 
 
 .. automodule:: beat.base_model
