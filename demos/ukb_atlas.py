@@ -397,7 +397,13 @@ io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 
 
 # We also make a gif of the voltage on the surface of the heart, seen from the front with the apex
-# pointing down.
+# pointing down. The long axis of the heart goes from the apex to the base, which we take as the
+# centre of the four valve rings, and we use it as the camera's up direction.
+
+valve_facets = np.hstack([geo.ffun.find(geo.markers[name][0]) for name in ["MV", "AV", "TV", "PV"]])
+x = geo.mesh.geometry.x
+base = x[dolfinx.mesh.entities_to_geometry(geo.mesh, 2, valve_facets).ravel()].mean(axis=0)
+apex = x[np.argmax(np.linalg.norm(x - base, axis=1))]
 
 plotter_voltage = pyvista.Plotter()
 viridis = plt.get_cmap("viridis")
@@ -411,6 +417,8 @@ renderer = plotter_voltage.add_mesh(
     scalar_bar_args=dict(title="v (mV)", color="black"),
 )
 plotter_voltage.view_yx()
+plotter_voltage.camera.up = tuple(base - apex)
+plotter_voltage.reset_camera()
 plotter_voltage.camera.zoom(1.05)
 gif_file = Path("ukb_purkinje_sim.gif")
 gif_file.unlink(missing_ok=True)
