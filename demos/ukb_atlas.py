@@ -396,17 +396,22 @@ io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
 
+# We also make a gif of the voltage on the surface of the heart, seen from the front with the apex
+# pointing down.
+
 plotter_voltage = pyvista.Plotter()
 viridis = plt.get_cmap("viridis")
 grid.point_data["V"] = solver.v.x.array
 grid.set_active_scalars("V")
 renderer = plotter_voltage.add_mesh(
     grid,
-    show_edges=True,
-    lighting=False,
+    smooth_shading=True,
     cmap=viridis,
     clim=[-90.0, 40.0],
+    scalar_bar_args=dict(title="v (mV)", color="black"),
 )
+plotter_voltage.view_yx()
+plotter_voltage.camera.zoom(1.05)
 gif_file = Path("ukb_purkinje_sim.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
@@ -418,6 +423,7 @@ def save(t):
     vtx.write(t)
     io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
     grid.point_data["V"] = solver.v.x.array
+    plotter_voltage.add_text(f"t = {t:.0f} ms", name="time", color="black", font_size=14)
     plotter_voltage.write_frame()
 
 
@@ -448,3 +454,8 @@ plotter_voltage.close()
 # -
 
 # ![_](ukb_purkinje_sim.gif)
+
+# Here is the same simulation run for a whole beat (`end_time = 400.0`), with a frame every 0.5 ms
+# during activation (the first 30 ms) and every 5 ms during repolarization:
+#
+# ![_](../docs/_static/ukb_atlas.gif)
