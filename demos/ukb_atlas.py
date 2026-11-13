@@ -396,9 +396,9 @@ io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
 
-# We also make a gif of the voltage on the surface of the heart, seen from the front with the apex
-# pointing down. The long axis of the heart goes from the apex to the base, which we take as the
-# centre of the four valve rings, and we use it as the camera's up direction.
+# We also make a gif of the voltage on the surface of the heart, with the apex pointing down and
+# the outflow tracts in view. The long axis of the heart goes from the apex to the base, which we
+# take as the centre of the four valve rings, and we use it as the camera's up direction.
 
 valve_facets = np.hstack([geo.ffun.find(geo.markers[name][0]) for name in ["MV", "AV", "TV", "PV"]])
 x = geo.mesh.geometry.x
@@ -412,14 +412,20 @@ grid.set_active_scalars("V")
 renderer = plotter_voltage.add_mesh(
     grid,
     smooth_shading=True,
+    show_edges=True,
+    edge_color="black",
+    edge_opacity=0.4,
+    line_width=0.5,
     cmap=viridis,
     clim=[-90.0, 40.0],
     scalar_bar_args=dict(title="v (mV)", color="black"),
 )
 plotter_voltage.view_yx()
 plotter_voltage.camera.up = tuple(base - apex)
+plotter_voltage.camera.azimuth = 225  # turn around the long axis to face the outflow tracts
+plotter_voltage.camera.elevation = 25  # and look slightly down onto the base
 plotter_voltage.reset_camera()
-plotter_voltage.camera.zoom(1.05)
+plotter_voltage.camera.zoom(0.95)
 gif_file = Path("ukb_purkinje_sim.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
