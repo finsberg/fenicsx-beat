@@ -4,6 +4,7 @@ FEniCSx-Beat
 
 .. automodule:: beat
     :members:
+    :exclude-members: Stimulus
 
 
 .. automodule:: beat.base_model
@@ -31,4 +32,40 @@ FEniCSx-Beat
     :members:
 
 .. automodule:: beat.utils
+    :members:
+
+.. automodule:: beat.eikonal
+    :members:
+
+.. automodule:: beat.reaction_eikonal
+    :members:
+
+.. automodule:: beat.pseudo_bidomain
+    :members:
+
+.. automodule:: beat.activation
+    :members:
+
+.. automodule:: beat.geometry
+    :members:
+
+.. automodule:: beat.bidomain_model
+    :members:
+
+.. automodule:: beat.ecg
+    :members:
+
+.. automodule:: beat.stimulation
+    :members:
+
+.. automodule:: beat.conductivities
+    :members:
+
+.. automodule:: beat.telemetry
+    :members:
+
+.. automodule:: beat.single_cell
+    :members:
+
+.. automodule:: beat.units
     :members:

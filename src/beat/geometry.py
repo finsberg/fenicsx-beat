@@ -4,6 +4,7 @@ from mpi4py import MPI
 
 import dolfinx
 import numpy as np
+import numpy.typing as npt
 
 
 class Geometry(NamedTuple):
@@ -216,3 +217,185 @@ def get_2D_slab_geometry(
     mesh = get_2D_slab_mesh(comm, dx, Lx, Ly, cell_type, dtype)
     f0, s0 = get_2D_slab_microstructure(mesh, transverse)
     return Geometry(mesh=mesh, f0=f0, s0=s0)
+
+
+#: Marker values of the transmural layers of the wedge
+WEDGE_LAYERS: dict[str, int] = {"EPI": 1, "M": 2, "ENDO": 3}
+
+
+class WedgeGeometry(NamedTuple):
+    """The transmural wedge of Neic et al. (2017)
+
+    ``geometry.markers`` and ``cell_tags`` hold the stimulus regions S1-S3, ``stimuli`` maps
+    their names to ``(tag, t0)`` (``t0`` in ms), ``electrode`` is the recording site
+    :math:`P_E` and ``length`` the transmural extent (mm).
+    """
+
+    geometry: Geometry
+    cell_tags: dolfinx.mesh.MeshTags
+    stimuli: dict[str, tuple[int, float]]
+    electrode: npt.NDArray[np.float64]
+    length: float
+
+
+def wedge_layer_markers(V: dolfinx.fem.FunctionSpace, length: float = 25.0) -> dolfinx.fem.Function:
+    """Layer markers (:data:`WEDGE_LAYERS`) on ``V``: epi for the 25% of the wall nearest
+    :math:`x = 0`, then 45% M, then 30% endo
+
+    ``length`` must match the transmural length of the wedge (pass ``wedge.length``)."""
+    markers = dolfinx.fem.Function(V, name="layers")
+
+    def layer(x):
+        xi = x[0] / length
+        return np.where(
+            xi < 0.25,
+            WEDGE_LAYERS["EPI"],
+            np.where(xi < 0.70, WEDGE_LAYERS["M"], WEDGE_LAYERS["ENDO"]),
+        ).astype(float)
+
+    markers.interpolate(layer)
+    return markers
+
+
+def get_3D_wedge_geometry(
+    comm: MPI.Intracomm,
+    dx: float = 0.4,
+    *,
+    length: float = 25.0,
+    width: float = 25.0,
+    thickness: float = 5.0,
+    stimulus_size: float = 1.0,
+    cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellType.tetrahedron,
+    fiber_space: tuple[str, int] = ("DG", 0),
+) -> WedgeGeometry:
+    """The wedge benchmark of Neic et al. (2017), in mm
+
+    The box :math:`[0, L] \\times [0, W] \\times [0, H]` has the wall across :math:`x` (epi at
+    :math:`x = 0`, endo at :math:`x = L`). The fibres rotate in the :math:`yz`-plane from
+    -60 degrees at the epicardium to +60 degrees at the endocardium; the sheet direction is
+    :math:`e_x`. The stimuli are full-thickness corner columns: S1 at :math:`(0, W)` and S3 at
+    :math:`(L, 0)` at :math:`t = 0`, S2 at :math:`(0, 0)` at :math:`t = 5` ms (read off the
+    paper's Figs. 1 and 2). :math:`P_E` is the centre of the endocardial face.
+
+    The mesh size is rounded so that it divides the box, so ``dx`` is only approximate and the
+    stimulus columns are whole cells of width approximately ``stimulus_size``.
+    ``geometry.markers`` names the stimulus tags (``S1``, ``S2``, ``S3``), whose cell tags are
+    in ``cell_tags``.
+    """
+    mesh = get_3D_slab_mesh(comm, dx, length, width, thickness, cell_type)
+    family, degree = fiber_space
+    V = dolfinx.fem.functionspace(mesh, (family, degree, (3,)))
+
+    def angle(x):
+        return np.deg2rad(-60.0 + 120.0 * x[0] / length)
+
+    f0 = dolfinx.fem.Function(V, name="f0")
+    f0.interpolate(lambda x: np.vstack([np.zeros(x.shape[1]), np.cos(angle(x)), np.sin(angle(x))]))
+    s0 = dolfinx.fem.Function(V, name="s0")
+    s0.interpolate(lambda x: np.vstack([np.ones(x.shape[1]), np.zeros((2, x.shape[1]))]))
+    n0 = dolfinx.fem.Function(V, name="n0")
+    n0.interpolate(lambda x: np.vstack([np.zeros(x.shape[1]), np.sin(angle(x)), -np.cos(angle(x))]))
+
+    s, eps = stimulus_size, 1e-10
+    regions = {
+        "S1": (1, 0.0, lambda x: (x[0] <= s + eps) & (x[1] >= width - s - eps)),
+        "S2": (2, 5.0, lambda x: (x[0] <= s + eps) & (x[1] <= s + eps)),
+        "S3": (3, 0.0, lambda x: (x[0] >= length - s - eps) & (x[1] <= s + eps)),
+    }
+    tdim = mesh.topology.dim
+    indices, values = [], []
+    for name, (tag, _, inside) in regions.items():
+        cells = dolfinx.mesh.locate_entities(mesh, tdim, inside)
+        if comm.allreduce(len(cells)) == 0:
+            raise ValueError(f"No cells in the {name} stimulus region; use dx <= stimulus_size")
+        indices.append(cells)
+        values.append(np.full(len(cells), tag, dtype=np.int32))
+    order = np.argsort(np.concatenate(indices))
+    cell_tags = dolfinx.mesh.meshtags(
+        mesh,
+        tdim,
+        np.concatenate(indices)[order].astype(np.int32),
+        np.concatenate(values)[order],
+    )
+    geometry = Geometry(
+        mesh=mesh,
+        markers={name: (tag, tdim) for name, (tag, _, _) in regions.items()},
+        f0=f0,
+        s0=s0,
+        n0=n0,
+    )
+    return WedgeGeometry(
+        geometry=geometry,
+        cell_tags=cell_tags,
+        stimuli={name: (tag, t0) for name, (tag, t0, _) in regions.items()},
+        electrode=np.array([length, width / 2, thickness / 2]),
+        length=length,
+    )
+
+
+#: Cell tags of :func:`get_3D_wedge_bath_geometry`
+WEDGE_BATH_MARKERS: dict[str, int] = {"TISSUE": 1, "BATH": 2}
+
+
+class WedgeBathGeometry(NamedTuple):
+    """The wedge of :func:`get_3D_wedge_geometry` immersed in a box of bath
+
+    ``geometry`` holds the box mesh and ``f0``, the wedge's fiber field extended over the box (only
+    its tissue values matter); ``cell_tags`` marks tissue and bath (:data:`WEDGE_BATH_MARKERS`), and
+    ``margins`` the actual bath thickness on each side along :math:`x, y, z` (mm).
+    """
+
+    geometry: Geometry
+    cell_tags: dolfinx.mesh.MeshTags
+    margins: npt.NDArray[np.float64]
+
+
+def get_3D_wedge_bath_geometry(
+    comm: MPI.Intracomm,
+    dx: float = 0.4,
+    *,
+    margin: float = 2.0,
+    length: float = 25.0,
+    width: float = 25.0,
+    thickness: float = 5.0,
+    cell_type: dolfinx.mesh.CellType = dolfinx.mesh.CellType.tetrahedron,
+) -> WedgeBathGeometry:
+    """The wedge of Neic et al. (2017) in a bath that extends ``margin`` mm beyond every face
+
+    The box uses the same grid as ``get_3D_wedge_geometry(comm, dx)`` (whose spacing per axis is
+    the side length divided by ``rint(side / dx)``), extended by a whole number of cells, so the
+    tissue part of this mesh has exactly the wedge's vertices and cells. ``margin`` is therefore
+    rounded up to whole cells on each axis; ``margins`` holds the result.
+    """
+    if margin <= 0:
+        raise ValueError(f"margin must be positive, got {margin}")
+    sizes = np.array([length, width, thickness])
+    n = np.rint(sizes / dx).astype(int)
+    h = sizes / n
+    k = np.ceil(margin / h - 1e-9).astype(int)
+    mesh = dolfinx.mesh.create_box(
+        comm=comm,
+        points=[-k * h, sizes + k * h],
+        n=[int(m) for m in n + 2 * k],
+        cell_type=cell_type,
+    )
+    tdim = mesh.topology.dim
+    imap = mesh.topology.index_map(tdim)
+    cells = np.arange(imap.size_local + imap.num_ghosts, dtype=np.int32)
+    midpoints = dolfinx.mesh.compute_midpoints(mesh, tdim, cells)
+    tissue = np.all((midpoints >= 0.0) & (midpoints <= sizes), axis=1)
+    values = np.where(tissue, WEDGE_BATH_MARKERS["TISSUE"], WEDGE_BATH_MARKERS["BATH"]).astype(
+        np.int32,
+    )
+    cell_tags = dolfinx.mesh.meshtags(mesh, tdim, cells, values)
+
+    def angle(x):
+        return np.deg2rad(-60.0 + 120.0 * np.clip(x[0], 0.0, length) / length)
+
+    f0 = dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, ("DG", 0, (3,))), name="f0")
+    f0.interpolate(lambda x: np.vstack([np.zeros(x.shape[1]), np.cos(angle(x)), np.sin(angle(x))]))
+    return WedgeBathGeometry(
+        geometry=Geometry(mesh=mesh, f0=f0),
+        cell_tags=cell_tags,
+        margins=k * h,
+    )

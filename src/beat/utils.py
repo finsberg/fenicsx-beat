@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import logging
+import math
+from collections.abc import Iterator
 from typing import Any
+
+from mpi4py import MPI
 
 import basix
 import dolfinx
@@ -404,3 +408,65 @@ def expand_layer_biv(
         xdmf.write_function(uh_rv)
 
     return uh_rv
+
+
+class PointEvaluator:
+    """Evaluate a Function at fixed points; the point location is done once
+
+    ``points`` has shape ``(N, 3)`` (pad 2D points with a zero) and must be the same on every rank.
+    Calling the evaluator returns the values at all points on every rank, ``-inf`` where a point is
+    outside the mesh. Unlike ``scifem.evaluate_function`` the collision search is not repeated on
+    every call. Do not evaluate functions containing NaN (the ranks are combined with a MAX).
+    """
+
+    def __init__(self, mesh: dolfinx.mesh.Mesh, points: np.ndarray) -> None:
+        points = np.ascontiguousarray(points, dtype=np.float64)
+        self.comm = mesh.comm
+        self.num_points = len(points)
+        tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
+        candidates = dolfinx.geometry.compute_collisions_points(tree, points)
+        cells = dolfinx.geometry.compute_colliding_cells(mesh, candidates, points)
+        self.indices = np.flatnonzero(cells.offsets[1:] - cells.offsets[:-1])
+        self.cells = cells.array[cells.offsets[self.indices]]
+        self.points = points[self.indices]
+
+    def __call__(self, u: dolfinx.fem.Function) -> np.ndarray:
+        u.x.scatter_forward()
+        out = np.full(self.num_points, -np.inf)
+        if len(self.indices) > 0:
+            out[self.indices] = u.eval(self.points, self.cells).ravel()
+        self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
+        return out
+
+
+def time_steps(
+    interval: tuple[float, float],
+    dt: float | None,
+) -> Iterator[tuple[float, float]]:
+    """The steps ``(t0, t1)`` of length ``dt`` that cover ``interval = (T0, T)``
+
+    The number of steps is ``floor((T - T0) / dt)``, up to round-off in that one division, so a
+    ``dt`` that does not divide the interval leaves the remainder out. The times accumulate
+    (``t1 = t0 + dt``), as the time loops have always done. ``dt=None`` is one step over the whole
+    interval.
+
+    Raises
+    ------
+    ValueError
+        If ``dt`` is not positive or is longer than the interval.
+    """
+    T0, T = interval
+    if dt is None:
+        yield (T0, T)
+        return
+    if dt <= 0:
+        raise ValueError(f"dt must be positive, got {dt}")
+    # Count the steps from one division (its round-off does not grow with the number of steps,
+    # unlike the accumulated times), allowing for that round-off when dt divides the interval.
+    num_steps = math.floor((T - T0) / dt + 1e-9)
+    if num_steps < 1:
+        raise ValueError(f"dt={dt} is longer than the interval {interval}")
+    t0, t1 = T0, T0 + dt
+    for _ in range(num_steps):
+        yield (t0, t1)
+        t0, t1 = t1, t1 + dt

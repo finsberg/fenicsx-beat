@@ -185,7 +185,7 @@ for i, dt in enumerate(dts):
         v_index=0,
     )
 
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=theta)
+    solver = beat.SplittingSolver(pde=pde, ode=ode, theta=theta)
     solver.solve((t0, T), dt=dt)
 
     # Advance time.value to the final endpoint T before calculating error

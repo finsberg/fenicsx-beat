@@ -20,7 +20,7 @@ keywords = ["cardiac", "electrophysiology"]
 dependencies = [
     "numpy",
     "scipy",
-    "scifem>=0.2.14",
+    "scifem>=0.25",
     "pint",
     "rich",
     "fenics-dolfinx",
@@ -45,7 +45,7 @@ Tracker = "https://github.com/finsberg/fenicsx-beat/issues"
 # `beat.cli._available_templates()`) so `beat init --template <name>` works from a wheel/sdist
 # install, not just this editable checkout.
 "beat.cli" = ["templates/*/*"]
-"beat" = ["c_backend_driver.c"]
+"beat" = ["c_backend_driver.c", "eikonal_kernel.c"]
 
 [project.optional-dependencies]
 test = [
@@ -103,6 +103,7 @@ docs = [
    "pyvista[jupyter]",
    "sphinx-codeautolink",
    "sphinxcontrib-bibtex",
+   "sphinxcontrib-mermaid",
     "sphinx-copybutton",
 ]
 all = [
@@ -137,13 +138,16 @@ markers = [
 ]
 
 [[tool.mypy.overrides]]
-# Third-party packages without type information, and cell models the demos generate at runtime.
+# Third-party packages without type information, docs-only packages that are not installed in the
+# test environment (sphinx, used by docs/_ext), and cell models the demos generate at runtime.
 module = [
     "scipy.*",
     "numba.*",
     "scifem.*",
     "irksome.*",
     "dolfinx_external_operator.*",
+    "docutils.*",
+    "sphinx.*",
     "tentusscher_panfilov_2006_epi_cell",
     "tentusscher_panfilov_2006_epi_cell_tau_f",
     "ToRORd_dynCl_endo",

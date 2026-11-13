@@ -6,7 +6,7 @@
 # `FEMExternalOperator`, which lets a cell-model right-hand side be evaluated as a plain array
 # operation and spliced back into the dolfinx `Function` machinery. See the
 # [mathematical background](../docs/math_background.md) page (Section 7.2) for how it fits into the
-# monodomain model and `beat.MonodomainSplittingSolver`.
+# monodomain model and `beat.SplittingSolver`.
 #
 # The headline feature is that it is a genuine drop-in replacement: it calls your existing cell-model
 # function with the *exact same* `fun(states, t, parameters, dt)` convention already used by
@@ -112,7 +112,7 @@ parameters = model.init_parameter_values(stim_amplitude=0.0)
 
 # ## Running the simulation with ExternalOperatorODESolver
 #
-# Everything here — `beat.MonodomainModel`, `beat.MonodomainSplittingSolver` — is exactly what the
+# Everything here — `beat.MonodomainModel`, `beat.SplittingSolver` — is exactly what the
 # other demos use; only the ODE solver class changes.
 
 pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, I_s=I_s)
@@ -125,7 +125,7 @@ ode = ExternalOperatorODESolver(
     num_states=num_states,
     v_index=v_index,
 )
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 T = 5.0
 dt = 0.05
@@ -174,7 +174,7 @@ ode_ref = beat.odesolver.DolfinODESolver(
     num_states=num_states,
     v_index=v_index,
 )
-solver_ref = beat.MonodomainSplittingSolver(pde=pde_ref, ode=ode_ref)
+solver_ref = beat.SplittingSolver(pde=pde_ref, ode=ode_ref)
 
 t = 0.0
 while t < T + 1e-12:

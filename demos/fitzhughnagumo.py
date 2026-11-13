@@ -6,7 +6,7 @@
 # monodomain model — using the simplest possible ionic current model. If you
 # are not yet familiar with the monodomain model, the transmembrane
 # potential $v$, or the operator splitting scheme used by
-# `beat.MonodomainSplittingSolver`, see the
+# `beat.SplittingSolver`, see the
 # [mathematical background](../docs/math_background.md) page first; the notation used
 # below follows that page.
 #
@@ -144,7 +144,7 @@ fig.savefig(Path("fitzhughnagumo_0D.png"))
 # $C_m = 1$ implicitly (the default in `beat.MonodomainModel`). The conductivity tensor $M$ is passed
 # in directly as a scalar below (rather than being built from fibre directions and physical
 # conductivities, as in the more realistic tissue demos), and the two sub-problems above are combined
-# with a `beat.MonodomainSplittingSolver`, see the
+# with a `beat.SplittingSolver`, see the
 # [mathematical background](../docs/math_background.md) page for the splitting scheme it implements.
 # Let us first create a unit square mesh of size $10 \times 10$ elements
 #
@@ -241,7 +241,7 @@ ode = beat.odesolver.DolfinODESolver(
 # Here, we also need to specify the index of the state variable corresponding to the membrane potential, which in our case is the second state variable, with index 1.
 # We combine the PDE and ODE models into a single solver using a splitting scheme
 
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # Let us set up some way to save the solution to a file. We will use the VTXWriter from FEniCSx where you can visualize the solution using ParaView.
 
@@ -252,7 +252,7 @@ shutil.rmtree("fitzhughnagumo.bp", ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     "fitzhughnagumo.bp",
-    [solver.pde.v],
+    [solver.v],
     engine="BP4",
 )
 
@@ -272,9 +272,9 @@ else:
     plotter = pyvista.Plotter()
     viridis = plt.get_cmap("viridis")
     grid = pyvista.UnstructuredGrid(
-        *dolfinx.plot.vtk_mesh(solver.pde.v.function_space.mesh),
+        *dolfinx.plot.vtk_mesh(solver.v.function_space.mesh),
     )
-    grid.point_data["V"] = solver.pde.v.x.array
+    grid.point_data["V"] = solver.v.x.array
     grid.set_active_scalars("V")
     renderer = plotter.add_mesh(
         grid,
@@ -295,12 +295,12 @@ T = 50
 t = 0.0
 i = 0
 while t < T:
-    v = solver.pde.v.x.array
+    v = solver.v.x.array
     if i % 200 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
         vtx.write(t)
         if pyvista:
-            grid.point_data["V"] = solver.pde.v.x.array
+            grid.point_data["V"] = solver.v.x.array
             plotter.write_frame()
 
     solver.step((t, t + dt))

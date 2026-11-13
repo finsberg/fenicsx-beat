@@ -4,6 +4,7 @@ Alfio
 allclose
 allreduce
 arange
+arctanh
 Arens
 argmin
 argsort
@@ -11,6 +12,7 @@ Aslak
 astype
 atol
 Augustin
+Aurel
 Bartolucci
 basix
 bazett
@@ -49,6 +51,8 @@ cpus
 Cristobal
 ctypes
 Culloch
+dataclass
+dataclasses
 deviatoric
 dirichletbc
 dofmap
@@ -56,8 +60,12 @@ dofs
 dolfin
 dolfinx
 dtype
+dvdt
 dvlp
+eigendirection
+eikonal
 Einthoven
+electrograms
 Elife
 Elsevier
 endo
@@ -77,6 +85,7 @@ figsize
 finsberg
 Fitz
 fitzhughnagumo
+flatnonzero
 Francesco
 Frederik
 fridericia
@@ -87,6 +96,7 @@ genexpr
 geodir
 geometriesx
 geox
+Gernot
 getattr
 getpid
 Gilles
@@ -99,6 +109,7 @@ gradu
 Guccione
 Gurev
 Hirschvogel
+HMIS
 Holohan
 Holzapfel
 holzapfelogden
@@ -108,6 +119,7 @@ hyperelastic
 hypre
 inds
 inproceedings
+interp
 Intracomm
 isclose
 isochoric
@@ -115,7 +127,10 @@ isscalar
 Istim
 jacfwd
 Jakub
+Jeong
 jitted
+keepdims
+Krylov
 kwargs
 Joakim
 Kluwer
@@ -139,6 +154,7 @@ meshtags
 MICCAI
 midwall
 Minchole
+minimises
 Mises
 Monodomain
 mpirun
@@ -153,14 +169,18 @@ Nagumo
 Nattel
 nbeats
 ndarray
+Neic
 Neighbouring
+neighbours
 neohookean
 Neumann
 Niederer
+nonmatching
 nopython
 normalisation
 normalised
 ntasks
+nullspace
 Numba
 numpy
 odesolver
@@ -171,6 +191,7 @@ Oreste
 Orovio
 outdir
 Panfilov
+parallelise
 Paraview
 Passini
 pendo
@@ -178,6 +199,7 @@ petsc
 Piola
 pmatrix
 Potse
+Prassl
 preconditioner
 preonly
 prepace
@@ -227,6 +249,7 @@ subfolders
 subparser
 subplus
 Sundnes
+tbme
 tdim
 tentusscher
 Terje
@@ -238,14 +261,17 @@ transmembrane
 transmurally
 transmural
 travelling
+triu
 Tusscher
 Tveito
+unconverged
 unpreconditioned
 ureg
 varepsilon
 Venant
 Verlag
 Viatcheslav
+Vigmond
 Virag
 viridis
 viscoelastic
@@ -280,3 +306,15 @@ DBEAT
 alya
 pytestmark
 savetxt
+subsimplices
+Minv
+lexsort
+Vinv
+nonpositive
+nloc
+Comput
+arctan
+Zhisong
+autouse
+refnode
+astext

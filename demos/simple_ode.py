@@ -14,7 +14,7 @@
 # for a toy right-hand side (a simple undamped oscillator with $I_{ion}(v, s) = s$ and
 # $f(v, s) = -v$), at `num_points` independent points at once, using
 # `beat.odesolver.solve` with a forward Euler scheme. This is exactly the kind of ODE step that
-# `beat.MonodomainSplittingSolver` performs at every mesh point during steps 1 and 3 of the operator
+# `beat.SplittingSolver` performs at every mesh point during steps 1 and 3 of the operator
 # splitting scheme — here without any PDE step or diffusion coupling in between.
 #
 # First we import the necessary packages

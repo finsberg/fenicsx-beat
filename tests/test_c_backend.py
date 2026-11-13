@@ -1,3 +1,4 @@
+import ctypes
 import threading
 from pathlib import Path
 
@@ -370,7 +371,7 @@ def run_monodomain(fun, model, num_states):
         num_states=num_states,
         v_index=model["state_index"]("V"),
     )
-    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+    solver = beat.SplittingSolver(pde=pde, ode=ode)
     t, dt = 0.0, 0.05
     for _ in range(60):
         solver.step((t, t + dt))
@@ -505,3 +506,35 @@ def test_many_states_and_parameters_heap_path(cache_dir):
         t1, t2 = _check_big(threaded, n, 7)
         np.testing.assert_array_equal(s1, t1)
         np.testing.assert_array_equal(s2, t2)
+
+
+def test_build_library_custom_names_and_description(tmp_path):
+    source = "int beat_test_answer(void) { return 42; }\n"
+    library = beat.c_backend.build_library(
+        source,
+        cc=beat.c_backend.default_compiler(),
+        cflags=("-O2",),
+        cache_dir=tmp_path,
+        comm=MPI.COMM_SELF,
+        library_name="libbeat_test.so",
+        source_name="test.c",
+        description="test library",
+    )
+    assert library.name == "libbeat_test.so"
+    assert (library.parent / "test.c").read_text() == source
+    lib = ctypes.CDLL(str(library))
+    assert lib.beat_test_answer() == 42
+
+
+def test_build_library_error_uses_description(tmp_path):
+    with pytest.raises(RuntimeError, match="Compiling the test library failed"):
+        beat.c_backend.build_library(
+            "this is not C",
+            cc=beat.c_backend.default_compiler(),
+            cflags=("-O2",),
+            cache_dir=tmp_path,
+            comm=MPI.COMM_SELF,
+            library_name="libbeat_test.so",
+            source_name="test.c",
+            description="test library",
+        )

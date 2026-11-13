@@ -370,10 +370,10 @@ ode = beat.odesolver.DolfinMultiODESolver(
 )
 
 # We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
-# `beat.MonodomainSplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# `beat.SplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://scientificcomputing.github.io/io4dolfinx) package.
 
@@ -387,7 +387,7 @@ shutil.rmtree(checkpointfname, ignore_errors=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
-    [solver.pde.v],
+    [solver.v],
     engine="BP4",
     mesh_policy=VTXMeshPolicy.reuse,
 )
@@ -396,28 +396,48 @@ io4dolfinx.write_mesh(checkpointfname, geo.mesh)
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
 
+# We also make a gif of the voltage on the surface of the heart, with the apex pointing down and
+# the outflow tracts in view. The long axis of the heart goes from the apex to the base, which we
+# take as the centre of the four valve rings, and we use it as the camera's up direction.
+
+valve_facets = np.hstack([geo.ffun.find(geo.markers[name][0]) for name in ["MV", "AV", "TV", "PV"]])
+x = geo.mesh.geometry.x
+base = x[dolfinx.mesh.entities_to_geometry(geo.mesh, 2, valve_facets).ravel()].mean(axis=0)
+apex = x[np.argmax(np.linalg.norm(x - base, axis=1))]
+
 plotter_voltage = pyvista.Plotter()
 viridis = plt.get_cmap("viridis")
-grid.point_data["V"] = solver.pde.v.x.array
+grid.point_data["V"] = solver.v.x.array
 grid.set_active_scalars("V")
 renderer = plotter_voltage.add_mesh(
     grid,
+    smooth_shading=True,
     show_edges=True,
-    lighting=False,
+    edge_color="black",
+    edge_opacity=0.4,
+    line_width=0.5,
     cmap=viridis,
     clim=[-90.0, 40.0],
+    scalar_bar_args=dict(title="v (mV)", color="black"),
 )
+plotter_voltage.view_yx()
+plotter_voltage.camera.up = tuple(base - apex)
+plotter_voltage.camera.azimuth = 225  # turn around the long axis to face the outflow tracts
+plotter_voltage.camera.elevation = 25  # and look slightly down onto the base
+plotter_voltage.reset_camera()
+plotter_voltage.camera.zoom(0.95)
 gif_file = Path("ukb_purkinje_sim.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 
 
 def save(t):
-    v = solver.pde.v.x.array
+    v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.pde.v, time=t, name="v")
-    grid.point_data["V"] = solver.pde.v.x.array
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
+    grid.point_data["V"] = solver.v.x.array
+    plotter_voltage.add_text(f"t = {t:.0f} ms", name="time", color="black", font_size=14)
     plotter_voltage.write_frame()
 
 
@@ -448,3 +468,8 @@ plotter_voltage.close()
 # -
 
 # ![_](ukb_purkinje_sim.gif)
+
+# Here is the same simulation run for a whole beat (`end_time = 400.0`), with a frame every 0.5 ms
+# during activation (the first 30 ms) and every 5 ms during repolarization:
+#
+# ![_](../docs/_static/ukb_atlas.gif)

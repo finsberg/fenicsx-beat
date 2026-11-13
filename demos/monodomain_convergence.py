@@ -12,7 +12,7 @@
 #
 # (with $C_m = 1$ and constant $M$) exactly satisfied by our chosen $v$ and $s$. Since we then know the
 # exact solution, we can measure the $L^2$ error of the numerical solution produced by
-# `beat.MonodomainSplittingSolver` for decreasing mesh size $h = 1/N$ and time step $\Delta t$, and
+# `beat.SplittingSolver` for decreasing mesh size $h = 1/N$ and time step $\Delta t$, and
 # check that it decreases at the expected rate — second order in space (from the finite element
 # discretization) and first order in time for Godunov splitting ($\theta = 1$, the solver's default).
 # See the [verification demo](verification.py) for the corresponding second-order-in-time check using
@@ -117,7 +117,7 @@ def main():
                         num_states=2,
                         v_index=0,
                     )
-                    solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode, theta=1.0)
+                    solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
                     solver.solve((t0, T), dt=dt)
 
                     v_exact = v_exact_func(x, T)

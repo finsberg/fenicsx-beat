@@ -120,12 +120,10 @@ def build_pde(
 
     from ..irksome_model import IrksomeMonodomainModel
 
-    # IrksomeMonodomainModel's __init__ builds the Irksome stepper directly (it does not call
-    # BaseModel.__init__) and does not use a ``monitor`` -- it is silently discarded via
-    # **kwargs if passed, so we don't pass it at all.
     return IrksomeMonodomainModel(
         butcher_tableau=_tableau(solver.pde.tableau, solver.pde.stages),
         params=params,
+        monitor=monitor or NullMonitor(),
         **kwargs,
     )
 

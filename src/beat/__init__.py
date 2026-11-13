@@ -1,11 +1,13 @@
 from importlib.metadata import metadata
 
 from . import (
+    activation,
     base_model,
     bidomain_model,
     c_backend,
     conductivities,
     ecg,
+    eikonal,
     external_operator_odesolver,
     geometry,
     irksome_model,
@@ -13,6 +15,8 @@ from . import (
     monodomain_model,
     monodomain_solver,
     odesolver,
+    pseudo_bidomain,
+    reaction_eikonal,
     single_cell,
     stimulation,
     telemetry,
@@ -24,7 +28,7 @@ from .external_operator_odesolver import ExternalOperatorMultiODESolver, Externa
 from .irksome_model import IrksomeMonodomainModel
 from .irksome_odesolver import IrksomeMultiODESolver, IrksomeODESolver
 from .monodomain_model import MonodomainModel
-from .monodomain_solver import MonodomainSplittingSolver
+from .monodomain_solver import MonodomainSplittingSolver, SplittingSolver
 from .stimulation import Stimulus
 from .telemetry import BaseMonitor, NullMonitor, PerformanceMonitor
 
@@ -36,8 +40,11 @@ __email__ = meta["Author-email"]
 __program_name__ = meta["Name"]
 
 __all__ = [
+    "activation",
     "monodomain_model",
     "odesolver",
+    "reaction_eikonal",
+    "pseudo_bidomain",
     "base_model",
     "bidomain_model",
     "c_backend",
@@ -45,6 +52,7 @@ __all__ = [
     "MonodomainModel",
     "monodomain_solver",
     "MonodomainSplittingSolver",
+    "SplittingSolver",
     "utils",
     "conductivities",
     "stimulation",
@@ -52,6 +60,7 @@ __all__ = [
     "single_cell",
     "stimulation",
     "ecg",
+    "eikonal",
     "Stimulus",
     "ECGRecovery",
     "telemetry",

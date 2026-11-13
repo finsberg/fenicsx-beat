@@ -39,6 +39,18 @@ model and notation used throughout, then work through the
 - [Spiral wave breakup in a 2D sheet of human ventricular tissue](spiral_wave_breakup.py) — the same
   setup with the steep-restitution parameter set from {cite}`tentusscher2006alternans`, where the
   spiral breaks up into many smaller spirals, as in the transition to ventricular fibrillation.
+- [Activation times from the eikonal equation](eikonal.py) — `beat.eikonal`'s Fast Iterative
+  Method solver: an anisotropic point source against the exact solution, colliding fronts, and the
+  wedge of {cite}`neic2017efficient`.
+- [The reaction-eikonal model: activation in a ventricular wedge](reaction_eikonal_wedge_activation.py)
+  — R-D, R-E$^+$ and R-E$^-$ on the wedge of {cite}`neic2017efficient` (their Figs. 2 and 4):
+  activation maps, deviations and upstrokes.
+- [The reaction-eikonal model: repolarisation in a ventricular wedge](reaction_eikonal_wedge_repolarization.py)
+  — transmural repolarisation gradients of R-D, R-E$^+$ and R-E$^-$ (Fig. 5 of
+  {cite}`neic2017efficient`).
+- [The reaction-eikonal model: electrograms in a ventricular wedge](reaction_eikonal_wedge_electrograms.py)
+  — pseudo-bidomain extracellular potentials and electrograms of R-D, R-E$^+$ and R-E$^-$ in a
+  bath (Fig. 7 of {cite}`neic2017efficient`).
 
 ## Verification
 
@@ -70,7 +82,7 @@ model and notation used throughout, then work through the
 - [Monolithic implicit PDE+ODE coupling with dolfinx-external-operator](monolithic_external_operator.py)
   — a prototype fully implicit Newton solve of the PDE and cell model *together*, with a
   JAX-autodifferentiated Jacobian and no operator-splitting error at all; validated against an
-  independent reference and quantitatively compared against `MonodomainSplittingSolver`.
+  independent reference and quantitatively compared against `SplittingSolver`.
 
 ```{bibliography}
 :filter: docname in docnames

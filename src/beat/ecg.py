@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal, NamedTuple, Protocol
 
 from mpi4py import MPI
 from petsc4py import PETSc
@@ -133,47 +133,6 @@ def detect_t_end(
     return int(t_end_index_absolute)
 
 
-# def correct_qt_interval(
-#     qt_interval_ms: float,
-#     rr_interval_duration_s: float,
-#     method: Literal["bazett", "fridericia"] = "bazett",
-# ):
-#     """
-#     Corrects the QT interval for heart rate using Bazett's or Fridericia's formula.
-
-#     Parameters:
-#     ----------
-#     qt_interval_ms : float
-#         The QT interval in milliseconds. Can be None.
-#     rr_interval_duration_s : float
-#         The RR interval duration in seconds.
-#     method : str, optional
-#         The correction method ('bazett' or 'fridericia'). Defaults to 'bazett'.
-
-#     Returns:
-#     -------
-#     float
-#         The corrected QT interval (QTc) in milliseconds. Returns None if input is invalid.
-
-#     """
-
-#     qt_interval_s = qt_interval_ms / 1000.0  # Convert QT to seconds for formula
-
-#     if method.lower() == "bazett":
-#         # QTc = QT / sqrt(RR)
-#         qtc_s = qt_interval_s / np.sqrt(rr_interval_duration_s)
-#     elif method.lower() == "fridericia":
-#         # QTc = QT / cubic-sqrt(RR)
-#         qtc_s = qt_interval_s / (rr_interval_duration_s ** (1 / 3))
-#     else:
-#         raise ValueError(
-#             f"Invalid QTc correction method '{method}'. Use 'bazett' or 'fridericia'.",
-#         )
-
-#     qtc_ms = qtc_s * 1000.0  # Convert back to milliseconds
-#     return qtc_ms
-
-
 class QTIntervalResult(NamedTuple):
     qt_interval: float
     start_index: int
@@ -190,7 +149,7 @@ def qt_interval(
     """
     Processes the ECG signal to compute the corrected QT interval (QTc).
 
-    Parameters:
+    Parameters
     ----------
     t : np.ndarray
         Time vector corresponding to the ECG signal in seconds.
@@ -203,7 +162,7 @@ def qt_interval(
     window_end_offset : int, optional
         End of the search window for T-wave end relative to R-peak (milliseconds). Defaults to 400.
 
-    Returns:
+    Returns
     -------
     QTIntervalResult
         A named tuple containing the start index, end index, and the QT interval in seconds.
@@ -332,6 +291,23 @@ class ElectrodePotentials:
         }
 
 
+class ElectrodeRecorder(Protocol):
+    """Records potentials at named electrodes from the current transmembrane potential
+
+    Built once with the electrode positions; each call returns ``{name: potential}``, the same on
+    every rank, ready for :meth:`LeadSystem.leads`. Implemented by :class:`ElectrodePotentials`
+    (infinite homogeneous medium around the heart) and
+    :class:`beat.pseudo_bidomain.LeadFieldElectrodes` (bounded tissue-and-bath volume conductor).
+
+    Their conductivities follow different conventions: :class:`ECGRecovery` takes the monodomain
+    tensor ``M`` as used by the PDE model (scaled by :math:`1/\\chi`) and a bath conductivity
+    ``sigma_b``; :class:`beat.pseudo_bidomain.VolumeConductor` and ``LeadFieldElectrodes`` take the
+    unscaled bidomain tensors :math:`\\sigma_i`, :math:`\\sigma_e` and :math:`\\sigma_b`.
+    """
+
+    def __call__(self) -> dict[str, float]: ...
+
+
 @dataclass(frozen=True)
 class Lead:
     """One lead: a named linear combination of potentials, ``Σ c·φ[p]``."""
@@ -392,7 +368,8 @@ class LeadSystem:
         self,
         potentials: Mapping[str, float | np.ndarray],
     ) -> dict[str, float | np.ndarray]:
-        """Each lead's ``Σ c·φ[p]``, in ``definitions`` order."""
+        """Each lead's ``Σ c·φ[p]``, in ``definitions`` order, from potentials such as an
+        :class:`ElectrodeRecorder` returns."""
         needed: dict[str, None] = {}
         for lead in self.definitions:
             for p in lead.terms:

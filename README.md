@@ -7,6 +7,14 @@ Cardiac electrophysiology research uses computational modeling to study heart rh
 
 This tool, fenicsx-beat, is a cardiac electrophysiology simulator built specifically for the FEniCSx platform. It provides a dedicated and easy-to-use tool for researchers already using [FEniCSx](https://fenicsproject.org) to perform simulations based on the Monodomain model.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/spiral_wave.gif" alt="A spiral wave in a 2D tissue slab" height="320">
+  <img src="https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/docs/_static/ukb_atlas.gif" alt="A heartbeat in a UK Biobank atlas heart" height="320">
+</p>
+<p align="center">
+  <em>Left: a spiral wave in a tissue slab (<a href="https://finsberg.github.io/fenicsx-beat/demos/spiral_wave.html">demo</a>). Right: one beat (activation and repolarization) of a heart from the UK Biobank atlas, with many small random stimuli on the endocardium mimicking the Purkinje network (<a href="https://finsberg.github.io/fenicsx-beat/demos/ukb_atlas.html">demo</a>).</em>
+</p>
+
 - Source code: https://github.com/finsberg/fenicsx-beat
 - Documentation: https://finsberg.github.io/fenicsx-beat
 
@@ -179,7 +187,7 @@ ode = beat.odesolver.DolfinODESolver(
 )
 
 # Combine PDE and ODE solver
-solver = beat.MonodomainSplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # Now we setup file for saving results
 # First remove any existing files
@@ -194,7 +202,7 @@ t = 0.0
 dt = 0.01
 i = 0
 while t < T:
-    v = solver.pde.state.x.array
+    v = solver.v.x.array
     solver.step((t, t + dt))
     t += dt
     if i % 500 == 0:

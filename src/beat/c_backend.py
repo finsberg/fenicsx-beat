@@ -94,8 +94,17 @@ def cache_key(source: str, cc: str, cc_version: str, flags: Sequence[str]) -> st
     return h.hexdigest()[:32]
 
 
-def _compile(source: str, cc: str, flags: Sequence[str], directory: Path) -> Path:
-    library = directory / LIBRARY_NAME
+def _compile(
+    source: str,
+    cc: str,
+    flags: Sequence[str],
+    directory: Path,
+    *,
+    library_name: str = LIBRARY_NAME,
+    source_name: str = "scheme.c",
+    description: str = "C scheme",
+) -> Path:
+    library = directory / library_name
     if library.is_file():
         return library
     directory.mkdir(parents=True, exist_ok=True)
@@ -108,7 +117,7 @@ def _compile(source: str, cc: str, flags: Sequence[str], directory: Path) -> Pat
     # An unknown scheme name must fail here, not as an undefined symbol when the library is loaded
     cmd = [cc, *flags, "-Werror=implicit-function-declaration", "-shared", "-fPIC"]
     cmd += ["-o", lib_tmp, c_tmp, "-lm"]
-    logger.debug("Compiling the C scheme: %s", " ".join(cmd))
+    logger.debug("Compiling the %s: %s", description, " ".join(cmd))
     try:
         result = _run_compiler(cmd)
     except FileNotFoundError as e:
@@ -122,19 +131,19 @@ def _compile(source: str, cc: str, flags: Sequence[str], directory: Path) -> Pat
         if "-fopenmp" in flags:
             hint = "\nOpenMP was requested: check that the compiler supports -fopenmp."
         raise RuntimeError(
-            f"Compiling the C scheme failed:\n{' '.join(cmd)}\n{result.stderr}{hint}",
+            f"Compiling the {description} failed:\n{' '.join(cmd)}\n{result.stderr}{hint}",
         )
     if library.is_file():
         # Another job finished the same key first; keep its files
         Path(c_tmp).unlink(missing_ok=True)
         Path(lib_tmp).unlink(missing_ok=True)
         return library
-    os.replace(c_tmp, directory / "scheme.c")
+    os.replace(c_tmp, directory / source_name)
     os.replace(lib_tmp, library)
     return library
 
 
-def _check_visible(library: Path, comm: MPI.Intracomm) -> None:
+def _check_visible(library: Path, comm: MPI.Comm) -> None:
     """Raise on all ranks if any rank cannot see the library that rank 0 built"""
     if not comm.allreduce(library.is_file(), op=MPI.LAND):
         raise RuntimeError(
@@ -143,7 +152,7 @@ def _check_visible(library: Path, comm: MPI.Intracomm) -> None:
         )
 
 
-def _run_on_rank0(comm: MPI.Intracomm, func: Callable[[], T]) -> T:
+def _run_on_rank0(comm: MPI.Comm, func: Callable[[], T]) -> T:
     """Run ``func`` on rank 0 and broadcast its result; raise its error on every rank"""
     result: T | None = None
     error: str | None = None
@@ -164,9 +173,16 @@ def build_library(
     cc: str,
     cflags: tuple[str, ...],
     cache_dir: Path,
-    comm: MPI.Intracomm,
+    comm: MPI.Comm,
+    library_name: str = LIBRARY_NAME,
+    source_name: str = "scheme.c",
+    description: str = "C scheme",
 ) -> Path:
-    """Compile ``source`` on rank 0 (unless it is cached) and return the library on all ranks"""
+    """Compile ``source`` on rank 0 (unless it is cached) and return the library on all ranks
+
+    ``library_name`` and ``source_name`` are the file names inside the cache entry, and
+    ``description`` names the library in log and error messages.
+    """
 
     def build() -> Path:
         key = cache_key(
@@ -175,7 +191,15 @@ def build_library(
             compiler_version(cc),
             (*cflags, target_signature(cc, cflags)),
         )
-        return _compile(source, cc, cflags, cache_dir / key)
+        return _compile(
+            source,
+            cc,
+            cflags,
+            cache_dir / key,
+            library_name=library_name,
+            source_name=source_name,
+            description=description,
+        )
 
     library = _run_on_rank0(comm, build)
     _check_visible(library, comm)

@@ -51,6 +51,18 @@ def default_conductivities(name="Niederer") -> dict[str, pint.Quantity]:
             "g_et": 1.2 * ureg("mS/cm"),
             "chi": 800.0 * ureg("cm**-1"),
         }
+    elif name == "Neic2017_wedge":
+        # Wedge benchmark of Neic et al. 2017 (J. Comput. Phys. 346:191), CV 0.6 / 0.3 m/s
+        return {
+            "g_il": 0.16069 * ureg("S/m"),
+            "g_it": 0.04258 * ureg("S/m"),
+            "g_el": 0.625 * ureg("S/m"),
+            "g_et": 0.236 * ureg("S/m"),
+            "chi": 1400.0 * ureg("cm**-1"),
+        }
+    elif name == "Neic2017_wedge_bath":
+        # The wedge in its 1 S/m bath, for define_augmented_conductivity_tensor
+        return {**default_conductivities("Neic2017_wedge"), "g_b": 1.0 * ureg("S/m")}
     else:
         raise ValueError(f"Unknown conductivity tensor {name}")
 

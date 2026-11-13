@@ -100,3 +100,18 @@ def test_external_operator_backend(tmp_path):
     pytest.importorskip("dolfinx_external_operator")
     _, ode = assemble(tmp_path, solver={"ode": {"type": "external_operator"}})
     assert isinstance(ode, beat.ExternalOperatorODESolver)
+
+
+def test_irksome_pde_gets_the_monitor(tmp_path):
+    pytest.importorskip("irksome")
+    data = minimal_config_dict(tmp_path)
+    data["solver"].update({"pde": {"type": "irksome"}})
+    conf = Config.model_validate(data)
+    check_backends_available(conf.solver)
+    geo = build_geometry(conf.geometry, MPI.COMM_WORLD)
+    time = dolfinx.fem.Constant(geo.mesh, 0.0)
+    M = build_conductivity(conf.ep, geo, conf.geometry.fibers)
+    stim = build_stimuli(conf.stimulus, geo, conf.ep, time, "mm", conf.solver.t_end_ms())
+    monitor = beat.PerformanceMonitor(comm=MPI.COMM_WORLD)
+    pde = build_pde(conf.solver, geo.mesh, time, M, stim, C_m=0.01, monitor=monitor)
+    assert pde.monitor is monitor

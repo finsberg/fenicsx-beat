@@ -40,15 +40,20 @@ API:
 | Symbol | Meaning | Corresponds to |
 | --- | --- | --- |
 | $u_i$, $u_e$ | Intracellular / extracellular potential | — |
-| $v = u_i - u_e$ | Transmembrane potential | `pde.state` / `solver.pde.state` |
+| $v = u_i - u_e$ | Transmembrane potential | `pde.state` / `solver.v` |
 | $s$ | Vector of gating / concentration state variables | ODE `states` array |
-| $M_i$, $M_e$ | Intracellular / extracellular conductivity tensors | — |
+| $M_i$, $M_e$ | Intracellular / extracellular conductivity tensors | `M_i` / `M_e` arguments to `beat.BidomainModel`; `sigma_i` / `sigma_e` arguments to `beat.pseudo_bidomain.VolumeConductor` (`sigma_i` also to `LeadFieldElectrodes`) |
 | $M$ | Effective (monodomain) conductivity tensor | `M` argument to `beat.MonodomainModel` |
 | $\chi$ | Membrane surface-to-volume ratio | `chi` argument to `beat.stimulation.define_stimulus` / `beat.conductivities.define_conductivity_tensor` |
 | $C_m$ | Membrane capacitance (per unit area) | `C_m` argument to `beat.MonodomainModel` |
 | $I_{ion}(v, s)$ | Total ionic current density through the membrane | Right-hand side of the cell model (`fun`) |
 | $I_{stim}$ | Externally applied stimulus current | `beat.Stimulus` / `I_s` |
-| $\theta$ | Splitting / time-stepping parameter, $\theta \in [0, 1]$ | `theta` argument to `beat.MonodomainSplittingSolver` and `parameters["theta"]` |
+| $\theta$ | Splitting / time-stepping parameter, $\theta \in [0, 1]$ | `theta` argument to `beat.SplittingSolver` and `parameters["theta"]` |
+| $t_a$ | Local activation time | Output of `beat.eikonal.solve_eikonal`, `t_a` argument to `beat.reaction_eikonal.FootCurrentODESolver` |
+| $c_f$, $c_s$, $c_n$ | Conduction velocities along the fiber, sheet and sheet-normal directions | `velocities` argument to `beat.eikonal.EikonalSolver` |
+| $\mathcal{V}$ | Velocity tensor of the eikonal equation | Built from `velocities` and `fibers` |
+| $\phi_e$ | Extracellular potential in tissue and bath (equals $u_e$ in the tissue) | Output of `beat.pseudo_bidomain.VolumeConductor.solve` |
+| $\sigma_b$ | Bath conductivity | `sigma_b` argument to `beat.pseudo_bidomain.VolumeConductor`, `g_b` to `define_augmented_conductivity_tensor` |
 
 $\theta = 1$ gives (first-order) Godunov splitting and a backward Euler PDE
 step, while $\theta = 0.5$ gives (second-order) Strang splitting and a
@@ -222,7 +227,7 @@ Choosing $\theta = 1$ collapses step 3 and gives **Godunov splitting**
 (first-order accurate in time, and consistent with a first-order backward
 Euler PDE step); choosing $\theta = 1/2$ gives **Strang splitting** combined
 with a **Crank–Nicolson** PDE step, which is second-order accurate overall.
-This is exactly what `beat.MonodomainSplittingSolver`
+This is exactly what `beat.SplittingSolver`
 implements: its `theta` argument selects between the two, and the `pde` and
 `ode` objects it is constructed from correspond to steps 2 and 1/3 above,
 respectively. The [convergence](../demos/monodomain_convergence.py) and
@@ -231,7 +236,7 @@ numerically using the method of manufactured solutions.
 
 ## 7. Alternative backends for the ODE/PDE steps
 
-`beat.MonodomainSplittingSolver` only depends on its `pde` and `ode` objects implementing a small
+`beat.SplittingSolver` only depends on its `pde` and `ode` objects implementing a small
 interface (`step`, `to_dolfin`/`from_dolfin`, ...), so either half of the split can be swapped out
 independently. Two optional backends are available.
 
@@ -240,7 +245,7 @@ independently. Two optional backends are available.
 The $\theta$-rule used in Section 6 gives at most second-order accuracy in time (at $\theta = 1/2$),
 and the explicit or Rush–Larsen schemes typically used for the ODE step in step 1/3 can struggle with
 very stiff cell models. `beat.IrksomeMonodomainModel` and `beat.IrksomeODESolver` are alternative
-implementations of the `pde` and `ode` roles in `beat.MonodomainSplittingSolver`, built on top of the
+implementations of the `pde` and `ode` roles in `beat.SplittingSolver`, built on top of the
 [Irksome](https://firedrakeproject.org/Irksome) library, that instead advance $v$ (and, for the ODE
 step, $s$) with a fully implicit Runge–Kutta method specified by a *Butcher tableau* — for example
 `irksome.BackwardEuler()` (first order, matching Godunov splitting) or `irksome.GaussLegendre(2)`
@@ -301,10 +306,162 @@ $N \times N$ block Jacobian, which does not scale to large state counts as clean
 `(num_states, num_points)` arrays used everywhere else in this repository. The
 [monolithic coupling demo](../demos/monolithic_external_operator.py) is a validated prototype of the
 pattern (checked against an independent, non-FEM reference) together with a quantitative comparison
-against `MonodomainSplittingSolver`, showing a several-times reduction in error at practical time
+against `SplittingSolver`, showing a several-times reduction in error at practical time
 steps — worth knowing the pattern exists even though it is not (yet) a drop-in solver class.
 
-## 8. Where to go from here
+## 8. The reaction-eikonal model
+
+Everything above resolves the depolarization wavefront in space. In human ventricular tissue the
+upstroke front is well under a millimeter wide, so a reaction-diffusion (R-D) model needs meshes of
+roughly $100$–$250\ \mu$m and time steps of a few hundredths of a millisecond before conduction
+velocity stops depending on the discretization; on coarser meshes the wave travels too slowly or
+fails to propagate at all. The *reaction-eikonal* (R-E) model of Neic et al.
+{cite}`neic2017efficient` avoids this by computing *when* each point activates from a cheap
+geometric problem, the eikonal equation, and only then letting the cell model produce the action
+potential. The front no longer has to be resolved, so the same model runs on meshes several times
+coarser while keeping the activation sequence of a fine R-D simulation.
+
+### 8.1 Activation times from the eikonal equation
+
+Let $t_a(x)$ be the time at which the wavefront reaches the point $x$. If the front moves with
+conduction velocity $c_f$ along the fibers, $c_s$ along the sheets and $c_n$ normal to them, $t_a$
+satisfies the anisotropic **eikonal equation**
+
+$$
+\sqrt{\nabla t_a \cdot \mathcal{V}\, \nabla t_a} = 1,
+\qquad
+\mathcal{V} = c_f^2\, f f^\top + c_s^2\, s s^\top + c_n^2\, n n^\top,
+$$
+
+with $t_a = t_0$ at each stimulus site that fires at time $t_0$. Its solution is the earliest
+arrival time over all paths from the stimulus sites, where a path's travel time is measured in the
+metric $\mathcal{V}^{-1}$; where fronts from different sites meet they simply collide. The
+velocities are inputs here, not outputs: in a monodomain model they scale roughly like
+$\sqrt{M_\zeta / (\chi C_m)}$ in each direction $\zeta$, and in practice one measures them once from
+a fine R-D simulation of the same tissue (the
+[wedge activation demo](../demos/reaction_eikonal_wedge_activation.py) does exactly this).
+
+`beat.eikonal.EikonalSolver` (or the one-shot `beat.eikonal.solve_eikonal`) computes $t_a$ at the
+mesh vertices with the **Fast Iterative Method** (FIM) of Jeong and Whitaker
+{cite}`jeong2008fast` in the form of Fu, Kirby and Whitaker {cite}`fu2013fast`. FIM keeps a list of
+active vertices and repeatedly replaces each one's value by the smallest arrival time it can get
+through any of its cells, given the current values at the cell's other vertices; a vertex leaves
+the list once its value stops changing, and wakes its neighbours. Quadrilateral and hexahedral cells
+are split into triangles and tetrahedra for this, and higher-order geometries use their vertices
+only, so $t_a$ is always a piecewise linear ($P_1$) function. The kernel is compiled C (optionally
+with OpenMP) and runs in parallel over MPI by exchanging the smallest value at shared vertices
+between ranks; the [eikonal demo](../demos/eikonal.py) checks it against exact solutions.
+
+### 8.2 Coupling activation back to the cell model: R-E$^+$ and R-E$^-$
+
+The activation map is turned back into action potentials by a **foot current** that kicks each
+point's cell model across its excitation threshold at $t = t_a$. In the notation of this page it is
+a source of transmembrane potential,
+
+$$
+\left.\frac{\partial v}{\partial t}\right|_{foot}
+    = \frac{A}{\tau_F}\, e^{(t - t_a)/\tau_F}
+    \quad \text{for } 0 \le t - t_a \le T_{foot} \text{ and } v < V_{th},
+$$
+
+and zero otherwise, with $A = 0.91$ mV, $\tau_F = 0.25$ ms, $T_{foot} = 5$ ms and
+$V_{th} = -30$ mV by default (`beat.reaction_eikonal.ExponentialFoot`). The exponential mimics the
+rise of $v$ ahead of a real front; the threshold switches it off once the cell's own sodium current
+has taken over. The time window follows the openCARP implementation, which starts the foot at
+$t_a$; Eq. 27 of {cite}`neic2017efficient` states the window $[t_a - T_{foot}, t_a]$ instead,
+which contradicts the paper's own appendix.
+
+The foot current enters the model in one of two ways:
+
+- **R-E$^+$** keeps diffusion. Each step solves the monodomain model of Section 4, without
+  $I_{stim}$, with the foot current added to the reaction part:
+
+  $$
+  C_m \frac{\partial v}{\partial t}
+      = \nabla \cdot (M \nabla v) - I_{ion}(v, s) + C_m \left.\frac{\partial v}{\partial t}\right|_{foot}.
+  $$
+
+  The foot guarantees activation no later than $t_a$, but diffusion can activate a point earlier.
+  In `beat` this is `beat.SplittingSolver(pde, ode)` with an unstimulated
+  `MonodomainModel` and the ODE solver wrapped in `beat.reaction_eikonal.FootCurrentODESolver`, so
+  the operator splitting of Section 6 is unchanged.
+- **R-E$^-$** drops diffusion entirely, $C_m\, \partial v/\partial t = -I_{ion}(v, s) +
+  C_m\, \partial v/\partial t|_{foot}$, so every point evolves independently and no linear system is
+  solved at all. This is `beat.SplittingSolver(pde=None, ode=FootCurrentODESolver(...))`: the same driver,
+  without a PDE.
+
+Both reproduce a fine R-D activation sequence on coarse meshes. They differ during repolarization:
+diffusion smooths the boundaries between regions with different action potential durations, and
+without it R-E$^-$ produces repolarization gradients that are far too steep, which shows up in the
+T-wave of an ECG. R-E$^+$ keeps that smoothing at a modest extra cost. The
+[wedge activation](../demos/reaction_eikonal_wedge_activation.py) and
+[wedge repolarization](../demos/reaction_eikonal_wedge_repolarization.py) demos reproduce both
+effects from the benchmark of {cite}`neic2017efficient`.
+
+### 8.3 Measuring activation in a simulation
+
+To compare an R-D or R-E simulation with $t_a$, the activation time has to be extracted from $v$.
+`beat.activation.ActivationTracker` records it at every degree of freedom while the simulation runs,
+either as the time of the steepest upstroke (maximum $\partial v/\partial t$, the usual definition
+and the one used by {cite}`neic2017efficient`) or as the first upward crossing of a threshold
+potential. Points that never activate keep the value NaN.
+
+### 8.4 Bath loading and the pseudo-bidomain model
+
+Tissue in contact with a conductive medium (the blood pool, the torso, or the bath of an
+experimental preparation) conducts faster close to the surface: extracellular current can return
+through the bath, which conducts much better than the interstitial space, so in a bidomain model
+the wavefront runs ahead along the surface. This is called *bath loading*. A monodomain model has
+no bath, but Bishop and Plank {cite}`bishop2011representing` showed that it reproduces the effect
+if the conductivity is *augmented* in a thin layer of tissue along the interface. In each
+eigendirection $\zeta$ of the conductivity tensors the monodomain conductivity becomes
+
+$$
+m_\zeta = \frac{g_{i\zeta}\, g_{e\zeta}}{g_{i\zeta} + g_{e\zeta}} \quad \text{in the bulk},
+\qquad
+m_\zeta = \frac{g_{i\zeta}\, \sigma_b}{g_{i\zeta} + \sigma_b} \quad \text{in the layer},
+$$
+
+where $M_i = \sum_\zeta g_{i\zeta}\,\zeta\zeta^\top$ and $M_e = \sum_\zeta g_{e\zeta}\,\zeta\zeta^\top$ before the division by $\chi$, and $M = \frac{1}{\chi}\sum_\zeta m_\zeta\,\zeta\zeta^\top$; that is, the harmonic mean of Section 4 with the bath conductivity $\sigma_b$ in place of the
+extracellular one near the surface (Eqs. 14 and 15 of {cite}`neic2017efficient`).
+`beat.pseudo_bidomain.interface_layer` marks the layer (three element rings by default, as in
+{cite}`bishop2011representing`) and `beat.pseudo_bidomain.define_augmented_conductivity_tensor`
+builds $M$ from it. The result goes straight into `beat.MonodomainModel`, so R-D and R-E$^+$ run
+unchanged (R-E$^-$ has no diffusion and is unaffected).
+
+The **pseudo-bidomain** model then recovers the extracellular potential. Given $v$ from the
+augmented monodomain model, $\phi_e$ on the tissue $\Omega_T$ and the bath $\Omega_B$ solves the
+elliptic part of the bidomain model of Section 3, extended to the bath:
+
+$$
+\nabla \cdot \big((M_i + M_e) \nabla \phi_e\big) = -\nabla \cdot (M_i \nabla v) \ \text{in } \Omega_T,
+\qquad
+\nabla \cdot (\sigma_b \nabla \phi_e) = 0 \ \text{in } \Omega_B,
+$$
+
+with $\phi_e$ and the normal current continuous across the interface, no current through the
+outer boundary, and $\phi_e$ normalized to zero mean. In the tissue $\phi_e$ plays the role of
+$u_e$. Because $v$ is known this is a single linear solve, needed only at the times $\phi_e$ is
+wanted, and its cost is independent of the cell model. `beat.pseudo_bidomain.VolumeConductor`
+assembles it once on a mesh of tissue and bath and returns $\phi_e$ for any $v$; the tissue mesh
+of the simulation can be separate, with $v$ interpolated onto the tissue cells.
+
+Recording $\phi_e$ at a few electrodes in every time step does not even need that solve. For an
+electrode at $P$, the **lead field** $Z_P$ solves the same elliptic problem with a unit point
+source at $P$ (and a uniform sink, so the pure-Neumann problem has a solution); taking $Z_P$ as
+the test function in the problem for $\phi_e$, and $\phi_e$ as the test function in the problem
+for $Z_P$, gives
+
+$$
+\phi_e(P) = -\int_{\Omega_T} M_i \nabla v \cdot \nabla Z_P \, dx,
+$$
+
+which also holds exactly for the discretized problems. `beat.pseudo_bidomain.LeadFieldElectrodes`
+solves one lead field per electrode up front, after which an electrogram sample costs one
+integral over the tissue. The [wedge electrogram demo](../demos/reaction_eikonal_wedge_electrograms.py)
+uses both to reproduce Fig. 7 of {cite}`neic2017efficient`.
+
+## 9. Where to go from here
 
 - The [demos index](../demos/index.md) lists every demo in this repository, grouped by topic.
 - The [FitzHugh–Nagumo demo](../demos/fitzhughnagumo.py) is the best starting
@@ -328,6 +485,12 @@ steps — worth knowing the pattern exists even though it is not (yet) a drop-in
   described in Section 7.2, and the
   [monolithic coupling demo](../demos/monolithic_external_operator.py) shows the fully implicit,
   no-splitting-error prototype described in Section 7.3.
+- The [eikonal demo](../demos/eikonal.py) introduces the activation-time solver of Section 8.1, and
+  the [wedge activation](../demos/reaction_eikonal_wedge_activation.py) and
+  [wedge repolarization](../demos/reaction_eikonal_wedge_repolarization.py) demos compare R-D,
+  R-E$^+$ and R-E$^-$ as described in Section 8.2, and the
+  [wedge electrogram demo](../demos/reaction_eikonal_wedge_electrograms.py) computes extracellular
+  potentials and electrograms with the pseudo-bidomain model of Section 8.4.
 - For the full derivation of the bidomain and monodomain models, the
   physiology of the cell membrane, the Hodgkin–Huxley and Nernst–Planck
   formalisms, and a rigorous treatment of operator splitting and its order

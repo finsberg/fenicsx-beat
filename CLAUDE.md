@@ -46,14 +46,19 @@ Operator-split PDE/ODE solve per timestep:
 - **ODE** (`odesolver.py`): `ODESystemSolver` steps a cell-model RHS (`fun(states, t, parameters, dt)`,
   usually `gotranx`-generated from `odes/*.ode`/CellML). `BaseDolfinODESolver` /
   `DolfinODESolver` / `DolfinMultiODESolver` (per-region) bridge the numpy state array to/from dolfinx
-  `Function`s via `local_project`.
-- **Coupling** (`monodomain_solver.py`): `MonodomainSplittingSolver(pde, ode)` drives Godunov/Strang
+  `Function`s via `local_project`. A backend implements `step` plus `_get_state`/`_set_state` (single region,
+  `BaseDolfinODESolver`) or `_get_region_state`/`_set_region_state` (`BaseDolfinMultiODESolver`); the
+  base classes do all state movement.
+- **Coupling** (`monodomain_solver.py`): `SplittingSolver(pde, ode)` (`MonodomainSplittingSolver` is a
+  deprecated alias that warns) drives Godunov/Strang
   splitting: ODE step → project to PDE → PDE step → project back → optional corrective ODE step if
   `theta != 1.0`.
 - **Irksome backend** (`irksome_model.py`, `irksome_odesolver.py`, `irksome` extra):
   `IrksomeMonodomainModel` / `IrksomeODESolver` / `IrksomeMultiODESolver` are drop-in alternatives that
   advance the PDE/ODE step with a fully implicit Runge–Kutta Butcher tableau instead of theta-rule/
-  explicit; freely mixable with the default classes in `MonodomainSplittingSolver`. See install
+  explicit; freely mixable with the default classes in `SplittingSolver`. `IrksomeMonodomainModel` goes through `BaseModel.__init__`
+  (overrides `_setup_solver`/`_assemble_matrix`), so restart (to round-off), `monitor` and `bcs`
+  (built with `irksome.backends.dolfinx.dirichletbc`) work. See install
   gotcha above.
 - **external-operator ODE backend** (`external_operator_odesolver.py`, `external_operator` extra):
   `ExternalOperatorODESolver` / `ExternalOperatorMultiODESolver` are drop-in alternatives to
@@ -66,8 +71,23 @@ Operator-split PDE/ODE solve per timestep:
   `$BEAT_C_CACHE` or `~/.cache/beat/c_backend`, all ranks load via ctypes) into a drop-in
   `fun(states, t, parameters, dt)` for `DolfinODESolver`; optional OpenMP. Needs a C compiler at
   runtime (dolfinx already requires one). Demo: `demos/c_backend.py`.
+- **Eikonal / reaction-eikonal** (`eikonal.py`, `eikonal_kernel.c`, `reaction_eikonal.py`,
+  `activation.py`): `solve_eikonal`/`EikonalSolver` (Fast Iterative Method, C kernel built via
+  `c_backend.build_library`, optional OpenMP, distributed by ghost min-exchange; any cell type,
+  vertices only → P1). `FootCurrentODESolver` wraps any ODE solver with the Neic 2017 foot current
+  (openCARP window, not the paper's Eq. 27); R-E+ = `SplittingSolver(pde, wrapped)`,
+  R-E− = `SplittingSolver(None, wrapped)` (no PDE). `ActivationTracker` records max-dv/dt or threshold times.
+  Wedge benchmark: `geometry.get_3D_wedge_geometry`, `scripts/reaction_eikonal_*.py`. Bath loading
+  / pseudo-bidomain (`pseudo_bidomain.py`): `interface_layer` + `define_augmented_conductivity_tensor`
+  (Neic Eqs. 14–15) for the monodomain, `VolumeConductor` (tissue+bath elliptic $\phi_e$ on a separate
+  mesh, non-matching interpolation of `v`) and `LeadFieldElectrodes` (electrograms by reciprocity);
+  wedge-in-bath geometry `get_3D_wedge_bath_geometry`; Fig. 7 pipeline
+  `scripts/reaction_eikonal_wedge_leadfield.py` → `scripts/reaction_eikonal_wedge.py` →
+  `scripts/reaction_eikonal_wedge_phie.py`, exchanging fields as grid arrays
+  (`scripts/reaction_eikonal_wedge_grid.py`; bath margin 1 mm because 2 mm does not fit in memory at
+  100 µm on the ~32 GB, ~21 GB free, machine).
 - **Conductivities/units** (`conductivities.py`, `units.py`): `pint` quantities → `M` via
-  `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop").
+  `define_conductivity_tensor`; `default_conductivities` has literature sets ("Niederer", "Bishop", "Neic2017_wedge", "Neic2017_wedge_bath" with the bath `g_b`).
 - **Geometry** (`geometry.py`): `Geometry` NamedTuple + 2D/3D slab helpers; real ventricular geometries
   come from `cardiac-geometriesx`/`ukb-atlas`/`fenicsx-ldrb` (`demos`/`docs` extras).
 - **ECG** (`ecg.py`): `ECGRecovery`; `ElectrodePotentials` (one solve, potentials at named electrodes);
@@ -99,6 +119,13 @@ Version(...)` branch before assuming one API shape.
 - `docs/math_background.md` is the canonical notation reference ($v$, $M$, $\chi$, $C_m$, $I_{ion}$,
   $I_{stim}$, $\theta$, matching `beat` API arg names) — keep new demos/docs consistent with it rather
   than inventing new symbols.
+- `docs/architecture.md` ("Code structure") lists every public class by role;
+  `tests/test_architecture_docs.py` fails if a public class is missing there or a module is missing from
+  `docs/api.rst`, so update both when adding one.
+- Inline code that names a documented `beat` object (`SplittingSolver`, `Class.method`,
+  `beat.module.func`) is linked to `docs/api.rst` automatically by `docs/_ext/autolink_literals.py`;
+  write plain backticks, not `{py:class}` roles. Bare member names (`v`, `step`) and ambiguous names
+  stay plain. Diagrams are ```` ```{mermaid} ```` blocks (`sphinxcontrib-mermaid`).
 - `demos/index.md` is a flat, grouped index of every demo. When adding a demo, add it to both this and
   `_toc.yml`.
 - `odes/` holds third-party CellML/`.ode` cell-model sources (not part of the `beat` package).

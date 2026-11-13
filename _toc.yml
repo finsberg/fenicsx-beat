@@ -5,6 +5,7 @@ parts:
   - caption: Getting started
     chapters:
     - file: docs/math_background.md
+    - file: docs/architecture.md
     - file: demos/fitzhughnagumo.py
     - file: docs/cli.md
     - file: docs/cli_cluster.md
@@ -23,6 +24,10 @@ parts:
     - file: demos/ukb_atlas.py
     - file: demos/spiral_wave.py
     - file: demos/spiral_wave_breakup.py
+    - file: demos/eikonal.py
+    - file: demos/reaction_eikonal_wedge_activation.py
+    - file: demos/reaction_eikonal_wedge_repolarization.py
+    - file: demos/reaction_eikonal_wedge_electrograms.py
   - caption: Verification
     chapters:
     - file: demos/verification.py
