@@ -103,6 +103,7 @@ docs = [
    "pyvista[jupyter]",
    "sphinx-codeautolink",
    "sphinxcontrib-bibtex",
+   "sphinxcontrib-mermaid",
     "sphinx-copybutton",
 ]
 all = [
@@ -137,13 +138,16 @@ markers = [
 ]
 
 [[tool.mypy.overrides]]
-# Third-party packages without type information, and cell models the demos generate at runtime.
+# Third-party packages without type information, docs-only packages that are not installed in the
+# test environment (sphinx, used by docs/_ext), and cell models the demos generate at runtime.
 module = [
     "scipy.*",
     "numba.*",
     "scifem.*",
     "irksome.*",
     "dolfinx_external_operator.*",
+    "docutils.*",
+    "sphinx.*",
     "tentusscher_panfilov_2006_epi_cell",
     "tentusscher_panfilov_2006_epi_cell_tau_f",
     "ToRORd_dynCl_endo",

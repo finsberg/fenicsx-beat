@@ -122,6 +122,10 @@ Version(...)` branch before assuming one API shape.
 - `docs/architecture.md` ("Code structure") lists every public class by role;
   `tests/test_architecture_docs.py` fails if a public class is missing there or a module is missing from
   `docs/api.rst`, so update both when adding one.
+- Inline code that names a documented `beat` object (`SplittingSolver`, `Class.method`,
+  `beat.module.func`) is linked to `docs/api.rst` automatically by `docs/_ext/autolink_literals.py`;
+  write plain backticks, not `{py:class}` roles. Bare member names (`v`, `step`) and ambiguous names
+  stay plain. Diagrams are ```` ```{mermaid} ```` blocks (`sphinxcontrib-mermaid`).
 - `demos/index.md` is a flat, grouped index of every demo. When adding a demo, add it to both this and
   `_toc.yml`.
 - `odes/` holds third-party CellML/`.ode` cell-model sources (not part of the `beat` package).

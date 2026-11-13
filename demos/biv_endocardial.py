@@ -345,31 +345,33 @@ while t < end_time + 1e-12:
 V = dolfinx.fem.functionspace(geo.mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
-# Now let us create a gif of the voltage over time.
+# Now let us create a gif of the voltage over time. The stimulus is applied at the endocardium, so
+# early on the wave is inside the wall and the outer (epicardial) surface is still at rest. We
+# therefore cut the ventricles in half along the long axis and look at the cut surface, where both
+# cavities and the wave moving through the wall are visible. A crinkle clip keeps whole cells, so
+# every point of the cut mesh is a point of the full mesh and we can index `v` with the original
+# point ids.
 
 plotter_voltage = pyvista.Plotter()
 grid = pyvista.UnstructuredGrid(*dolfinx.plot.vtk_mesh(V))
-grid.point_data["V"] = v.x.array
+grid.point_data["ids"] = np.arange(grid.n_points)
+cut = grid.clip(normal="y", origin=grid.center, crinkle=True)
+cut_ids = cut.point_data["ids"]
+cut.point_data["V"] = v.x.array[cut_ids]
+cut.set_active_scalars("V")
 viridis = plt.get_cmap("viridis")
-sargs = dict(
-    title_font_size=25,
-    label_font_size=20,
-    fmt="%.2e",
-    color="black",
-)
+sargs = dict(title="v (mV)", color="black")
 
 # +
-plotter_voltage.view_zy()
-
-plotter_voltage.camera.position = (-25, 0.0, 0.0)
 plotter_voltage.add_mesh(
-    grid,
-    show_edges=True,
-    lighting=False,
+    cut,
+    smooth_shading=True,
     cmap=viridis,
     scalar_bar_args=sargs,
     clim=[-90.0, 40.0],
 )
+plotter_voltage.view_isometric()
+plotter_voltage.reset_camera()
 
 times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
 
@@ -410,7 +412,8 @@ ecg_traces: dict[str, list[float]] = {k: [] for k in electrodes}
 for t in times:
     io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
 
-    grid.point_data["V"] = v.x.array
+    cut.point_data["V"] = v.x.array[cut_ids]
+    plotter_voltage.add_text(f"t = {t:.0f} ms", name="time", color="black", font_size=14)
     plotter_voltage.write_frame()
     for k, value in probe().items():
         ecg_traces[k].append(value)
