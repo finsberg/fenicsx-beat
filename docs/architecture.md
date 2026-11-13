@@ -16,19 +16,26 @@ Everything else plugs in around these: an eikonal solve gives activation times t
 model through a foot current (the reaction-eikonal model), `ActivationTracker` records activation
 times from $v$, and electrode recorders compute extracellular potentials from $v$.
 
-```text
-         solve_eikonal / EikonalSolver ──► t_a (optional: reaction-eikonal)
-                                            │
-  ODE solver (DolfinODESolver, ...) ──► FootCurrentODESolver(ode, t_a)   (still an ODE solver)
-         │ v_ode ◄── pde_to_ode / ode_to_pde ──► v_pde  ══ same Function ══  pde.v
-         │                                                                   │
-         └──────────────── SplittingSolver(pde or None, ode) ────────────────┘
-                                         │ solver.v
-            ┌────────────────────────────┼─────────────────────────────┐
-            ▼                            ▼                             ▼
-     ActivationTracker          ElectrodeRecorder               PointEvaluator /
-     (activation times)   (ElectrodePotentials,          scifem.evaluate_function
-                           LeadFieldElectrodes)               (probes)
+```{mermaid}
+flowchart TD
+    eik["solve_eikonal / EikonalSolver"]
+    ode["ODE solver<br/>(DolfinODESolver, ...)"]
+    foot["FootCurrentODESolver(ode, t_a)<br/>(still an ODE solver)"]
+    pde["PDE model<br/>(MonodomainModel, ...)"]
+    split["SplittingSolver(pde or None, ode)"]
+    act["ActivationTracker<br/>(activation times)"]
+    rec["ElectrodeRecorder<br/>(ElectrodePotentials, LeadFieldElectrodes)"]
+    probe["PointEvaluator / scifem.evaluate_function<br/>(probes)"]
+
+    eik -- "t_a (optional: reaction-eikonal)" --> foot
+    ode --> foot
+    ode -. "v_ode ⇄ v_pde (pde_to_ode / ode_to_pde);<br/>ode.v_pde is pde.v" .- pde
+    foot --> split
+    ode -- "or directly" --> split
+    pde --> split
+    split -- "solver.v" --> act
+    split -- "solver.v" --> rec
+    split -- "solver.v" --> probe
 ```
 
 ## Protocols
