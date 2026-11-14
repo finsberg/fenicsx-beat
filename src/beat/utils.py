@@ -414,9 +414,10 @@ class PointEvaluator:
     """Evaluate a Function at fixed points; the point location is done once
 
     ``points`` has shape ``(N, 3)`` (pad 2D points with a zero) and must be the same on every rank.
-    Calling the evaluator returns the values at all points on every rank, ``-inf`` where a point is
+    Calling the evaluator returns the values at all points on every rank, NaN where a point is
     outside the mesh. Unlike ``scifem.evaluate_function`` the collision search is not repeated on
-    every call. Do not evaluate functions containing NaN (the ranks are combined with a MAX).
+    every call. Each point takes its value from one rank, the lowest one that finds it, so NaN
+    values come back as NaN and every rank gets the same result.
     """
 
     def __init__(self, mesh: dolfinx.mesh.Mesh, points: np.ndarray) -> None:
@@ -426,16 +427,24 @@ class PointEvaluator:
         tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
         candidates = dolfinx.geometry.compute_collisions_points(tree, points)
         cells = dolfinx.geometry.compute_colliding_cells(mesh, candidates, points)
-        self.indices = np.flatnonzero(cells.offsets[1:] - cells.offsets[:-1])
+        found = np.flatnonzero(cells.offsets[1:] - cells.offsets[:-1])
+        # The lowest rank that finds a point owns it; comm.size marks points outside the mesh
+        owner = np.full(self.num_points, self.comm.size, dtype=np.int32)
+        owner[found] = self.comm.rank
+        self.comm.Allreduce(MPI.IN_PLACE, owner, op=MPI.MIN)
+        self.outside = owner == self.comm.size
+        self.indices = found[owner[found] == self.comm.rank]
         self.cells = cells.array[cells.offsets[self.indices]]
         self.points = points[self.indices]
 
     def __call__(self, u: dolfinx.fem.Function) -> np.ndarray:
         u.x.scatter_forward()
-        out = np.full(self.num_points, -np.inf)
+        # Only the owner of a point writes its value, so the sum passes it (and NaN) through
+        out = np.zeros(self.num_points)
         if len(self.indices) > 0:
             out[self.indices] = u.eval(self.points, self.cells).ravel()
-        self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.MAX)
+        self.comm.Allreduce(MPI.IN_PLACE, out, op=MPI.SUM)
+        out[self.outside] = np.nan
         return out
 
 
