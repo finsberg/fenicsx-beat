@@ -76,12 +76,11 @@ def env_overrides(environ: Mapping[str, str]) -> list[tuple[str, Any]]:
             continue
         name = key[len(ENV_PREFIX) :]
         if "__" not in name:
-            section = name.split("_", 1)[0].lower()
-            if section in Config.model_fields and "_" in name:
-                rest = name.split("_", 1)[1]
+            section, _, rest = name.partition("_")
+            if section.lower() in Config.model_fields and rest:
                 warnings.warn(
-                    f"Ignoring {key}: config overrides are BEAT_<SECTION>__<KEY>, "
-                    f"did you mean {ENV_PREFIX}{name.split('_', 1)[0]}__{rest}?",
+                    f"Ignoring {key}: config overrides are {ENV_PREFIX}<SECTION>__<KEY>, "
+                    f"did you mean {ENV_PREFIX}{section}__{rest}?",
                     stacklevel=2,
                 )
             continue
