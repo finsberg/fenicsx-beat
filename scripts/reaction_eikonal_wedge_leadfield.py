@@ -13,7 +13,13 @@ from pathlib import Path
 from mpi4py import MPI
 
 import numpy as np
-from reaction_eikonal_wedge_grid import ELECTRODE, MARGIN, gather_to_grid, volume_conductor
+from reaction_eikonal_wedge_grid import (
+    ELECTRODE,
+    MARGIN,
+    gather_to_grid,
+    refuse_to_overwrite,
+    volume_conductor,
+)
 
 
 def main():
@@ -24,8 +30,10 @@ def main():
     p.add_argument("--dx", type=float, default=0.4)
     p.add_argument("--margin", type=float, default=MARGIN)
     p.add_argument("--outdir", type=Path, default=Path("results-reaction-eikonal-bath"))
+    p.add_argument("--overwrite", action="store_true", help="replace existing results")
     args = p.parse_args()
     comm = MPI.COMM_WORLD
+    refuse_to_overwrite(args.outdir / f"leadfield_dx{args.dx:g}.npy", args.overwrite)
     start = walltime.perf_counter()
     bath, conductor = volume_conductor(comm, args.dx, args.margin)
     Z = conductor.lead_field(ELECTRODE)
