@@ -154,7 +154,9 @@ Config values can come from four places, in order of increasing precedence:
 2. Environment variables: `BEAT_<SECTION>__<KEY>`, e.g. `BEAT_SOLVER__DT="0.02 ms"`. The `BEAT_`
    prefix and `__` (double underscore) nesting delimiter are fixed, but the section/key names
    themselves are matched **case-insensitively** against the config schema, so `BEAT_EP__C_M` and
-   `BEAT_ep__c_m` both resolve to `ep.C_m` (whose field name is mixed-case).
+   `BEAT_ep__c_m` both resolve to `ep.C_m` (whose field name is mixed-case). Variables without
+   `__`, such as `BEAT_C_CACHE` or `BEAT_OPENMP`, configure other parts of `beat` and are not
+   config overrides; one that looks like a mistyped override (`BEAT_SOLVER_DT`) prints a warning.
 3. `--set dotted.key=value` (repeatable). `value` is parsed as a TOML literal, the same way it
    would appear on the right-hand side of a `key = value` line in the file:
    - `--set 'solver.dt="0.02 ms"'` (a quantity is still a quoted string)

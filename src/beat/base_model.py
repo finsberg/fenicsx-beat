@@ -335,9 +335,6 @@ class BaseModel:
             with self.monitor.track_time("pde_scatter_forward"):
                 self._scatter_forward()
 
-        # Trigger logging/end-of-step aggregation
-        self.monitor.advance_step(t0, t1)
-
     def _G_stim(self, w):
         return sum([i.expr * w * i.dz for i in self._I_s])
 
@@ -373,4 +370,7 @@ class BaseModel:
                 self.assign_previous()
             logger.info("Solving on t = (%g, %g)" % (t0, t1))
             self.step((t0, t1))
+            # The loop that drives the steps counts them (SplittingSolver.step does when the PDE
+            # is part of a splitting), so a monitor shared with a SplittingSolver counts each once
+            self.monitor.advance_step(t0, t1)
         return Results(state=self.state, status=Status.OK)

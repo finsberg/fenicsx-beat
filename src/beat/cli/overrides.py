@@ -64,11 +64,27 @@ def apply_override(data: dict, dotted: str, value: Any) -> None:
 
 
 def env_overrides(environ: Mapping[str, str]) -> list[tuple[str, Any]]:
+    """The config overrides in ``environ``: ``BEAT_<SECTION>__<KEY>`` variables only.
+
+    Variables without ``__`` (``BEAT_C_CACHE``, ``BEAT_OPENMP``, ...) configure other parts of
+    beat and are skipped; one that starts with a section name and a single ``_``
+    (``BEAT_SOLVER_DT``) is probably a typo for ``BEAT_SOLVER__DT`` and warns.
+    """
     out = []
     for key, raw in sorted(environ.items()):
         if not key.startswith(ENV_PREFIX) or len(key) == len(ENV_PREFIX):
             continue
-        dotted = ".".join(_canonical(p) for p in key[len(ENV_PREFIX) :].split("__"))
+        name = key[len(ENV_PREFIX) :]
+        if "__" not in name:
+            section, _, rest = name.partition("_")
+            if section.lower() in Config.model_fields and rest:
+                warnings.warn(
+                    f"Ignoring {key}: config overrides are {ENV_PREFIX}<SECTION>__<KEY>, "
+                    f"did you mean {ENV_PREFIX}{section}__{rest}?",
+                    stacklevel=2,
+                )
+            continue
+        dotted = ".".join(_canonical(p) for p in name.split("__"))
         out.append((dotted, parse_value(raw)))
     return out
 

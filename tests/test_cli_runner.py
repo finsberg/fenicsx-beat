@@ -133,7 +133,7 @@ def test_repeated_runs_do_not_accumulate_log_handlers(tmp_path):
 def test_performance_summary_is_saved(tmp_path):
     out = run(load_config(write_cfg(tmp_path, output={"performance": True}), environ={}))
     data = json.loads((out / "performance.json").read_text())
-    assert data["total_steps"] > 0
+    assert data["total_steps"] == 3  # 0.3 ms with dt = 0.1 ms; each step counted once
 
 
 def test_overwrite_only_removes_beat_artifacts(tmp_path):

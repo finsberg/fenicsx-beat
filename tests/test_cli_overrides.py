@@ -255,3 +255,16 @@ def test_physics_hash_ignores_bcl(tmp_path):
     b = load_config(by_beats, environ={})
     c = load_config(by_beats, environ={}, sets=['solver.BCL="0.5 ms"'])
     assert physics_hash(a) == physics_hash(b) == physics_hash(c)
+
+
+def test_env_vars_without_a_section_are_not_config_overrides(cfg_file):
+    # BEAT_C_CACHE, BEAT_OPENMP, ... configure other parts of beat, not the config
+    env = {"BEAT_C_CACHE": "/tmp/cache", "BEAT_OPENMP": "1", "BEAT_SOLVER__DT": "0.05 ms"}
+    assert dict(env_overrides(env)) == {"solver.dt": "0.05 ms"}
+    conf = load_config(cfg_file, environ=env)
+    assert ms(conf.solver.dt) == pytest.approx(0.05)
+
+
+def test_env_var_with_a_single_underscore_after_a_section_warns(cfg_file):
+    with pytest.warns(UserWarning, match="BEAT_SOLVER__DT"):
+        assert env_overrides({"BEAT_SOLVER_DT": "0.05 ms"}) == []

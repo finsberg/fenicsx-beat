@@ -176,9 +176,34 @@ def test_point_evaluator_matches_linear_function():
     expected = 1.0 + points[:2, 0] + 2.0 * points[:2, 1] + 3.0 * points[:2, 2]
     out = evaluate(u)
     assert np.allclose(out[:2], expected)
-    assert out[2] == -np.inf
+    assert np.isnan(out[2])  # outside the mesh
     u.x.array[:] *= 2.0
     assert np.allclose(evaluate(u)[:2], 2.0 * expected)
+
+
+def test_point_evaluator_keeps_nan_on_any_number_of_ranks():
+    # Each point takes the value of one owning rank, so NaN (e.g. "never activated") stays NaN
+    # wherever the point is owned instead of turning into -inf
+    from mpi4py import MPI
+
+    import dolfinx
+    import numpy as np
+
+    from beat.utils import PointEvaluator
+
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8)
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    u = dolfinx.fem.Function(V)
+    u.interpolate(lambda x: np.where(x[0] < 0.49, np.nan, x[0] + 2 * x[1]))
+    x = np.linspace(0.05, 0.95, 7)
+    points = np.array([[xi, yi, 0.0] for xi in x for yi in x])
+
+    out = PointEvaluator(mesh, points)(u)
+
+    left, right = points[:, 0] < 0.37, points[:, 0] > 0.63
+    assert np.isnan(out[left]).all()
+    assert np.allclose(out[right], points[right, 0] + 2 * points[right, 1])
+    np.testing.assert_array_equal(MPI.COMM_WORLD.bcast(out, root=0), out)
 
 
 def test_time_steps_exact_multiple():

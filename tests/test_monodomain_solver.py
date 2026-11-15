@@ -719,3 +719,33 @@ def test_base_model_solve_steps_match_time_steps():
     solver.pde.step = lambda interval: (seen.append(interval), step(interval))[1]
     solver.pde.solve((0.0, 0.05), 0.01)
     assert seen == list(beat.utils.time_steps((0.0, 0.05), 0.01))
+
+
+def _shared_monitor_solver(monitor):
+    mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 4, 4)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    pde = beat.MonodomainModel(time=time, mesh=mesh, M=1.0, monitor=monitor)
+    V_ode = beat.utils.space_from_string("P_1", mesh, dim=1)
+    n = dolfinx.fem.Function(V_ode).x.array.size
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=dolfinx.fem.Function(V_ode),
+        v_pde=pde.state,
+        fun=simple_ode_forward_euler,
+        init_states=np.zeros((2, n)),
+        parameters=None,
+        num_states=2,
+        v_index=0,
+    )
+    return beat.SplittingSolver(pde=pde, ode=ode, monitor=monitor)
+
+
+def test_splitting_solver_and_pde_sharing_a_monitor_count_each_step_once():
+    monitor = RecordingMonitor()
+    _shared_monitor_solver(monitor).solve((0.0, 0.3), dt=0.1)
+    assert len(monitor.steps) == 3
+
+
+def test_pde_solve_counts_each_step_once():
+    monitor = RecordingMonitor()
+    _shared_monitor_solver(monitor).pde.solve((0.0, 0.3), dt=0.1)
+    assert len(monitor.steps) == 3

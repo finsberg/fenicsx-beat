@@ -87,4 +87,3 @@ class IrksomeMonodomainModel(MonodomainModel):
             self.time.value = t0
             self.stepper.advance()
             self.time.value = float(self.time) + dt
-        self.monitor.advance_step(t0, t1)
