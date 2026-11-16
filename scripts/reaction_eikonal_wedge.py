@@ -48,7 +48,6 @@ ROOT = Path(__file__).resolve().parents[1]
 ODE_DIR = ROOT / "odes" / "tentusscher_panfilov_2006"
 CV_FILE = Path(__file__).resolve().parent / "reaction_eikonal_cv.json"
 T_R50 = 305.0  # ms, 50% repolarisation instant of the paper's Fig. 5
-NO_ACTIVATION = 1e9  # sentinel for dofs that never activated
 PROBES = {"P_E": ELECTRODE, "endo": (21.25, 12.5, 2.5), "M": (11.875, 12.5, 2.5)}
 PETSC = {
     "ksp_type": "cg",
@@ -244,12 +243,8 @@ def main():
     if vtx is not None:
         vtx.close()
 
-    # NaN (never activated) must not enter the MPI max reduction in evaluate_function (the result is
-    # then -inf or NaN depending on the rank layout): evaluate with a large sentinel instead.
-    t_a_track = tracker.t_a
-    t_a_track.x.array[np.isnan(t_a_track.x.array)] = NO_ACTIVATION
-    activation = scifem.evaluate_function(t_a_track, grid).ravel()
-    activation[~(activation < 1e3)] = np.nan  # also mixed (interpolated) cells
+    # NaN where never activated, including cells with a never-activated vertex
+    activation = scifem.evaluate_function(tracker.t_a, grid).ravel()
     eikonal = (
         scifem.evaluate_function(t_a, grid).ravel() if t_a is not None else np.full(gx.size, np.nan)
     )
