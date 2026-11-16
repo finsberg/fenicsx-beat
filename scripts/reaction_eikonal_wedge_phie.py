@@ -18,6 +18,7 @@ from reaction_eikonal_wedge_grid import (
     MARGIN,
     SNAPSHOTS,
     midplane_grid,
+    refuse_to_overwrite,
     scatter_from_grid,
     volume_conductor,
 )
@@ -34,9 +35,11 @@ def main():
     p.add_argument("--dx", type=float, default=0.4)
     p.add_argument("--margin", type=float, default=MARGIN)
     p.add_argument("--outdir", type=Path, default=Path("results-reaction-eikonal-bath"))
+    p.add_argument("--overwrite", action="store_true", help="replace existing results")
     args = p.parse_args()
     comm = MPI.COMM_WORLD
     name = f"{args.model}_dx{args.dx:g}"
+    refuse_to_overwrite(args.outdir / f"phie_{name}.npz", args.overwrite)
     snapshots = {t: args.outdir / f"{name}_v_t{t:g}.npy" for t in SNAPSHOTS}
     snapshots = {t: path for t, path in snapshots.items() if path.is_file()}
     if not snapshots:

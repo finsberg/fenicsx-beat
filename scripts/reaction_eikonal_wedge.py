@@ -28,6 +28,7 @@ from reaction_eikonal_wedge_grid import (
     gather_to_grid,
     midplane_grid,
     num_layers,
+    refuse_to_overwrite,
     scatter_from_grid,
     sigma_tensors,
 )
@@ -87,8 +88,12 @@ def cell_solver(V, v_pde, markers):
     )
 
 
-def build(model, dx, cv, comm):
-    """The solver, the potential to record, and the eikonal activation time (or None)"""
+def build(model, dx, cv, comm, source_delay=0.0):
+    """The solver, the potential to record, and the eikonal activation time (or None)
+
+    ``source_delay`` (ms) starts the eikonal sources that long after their stimulus, the time
+    R-D needs from the stimulus to activation (max dv/dt) in the stimulated tissue.
+    """
     wedge = beat.geometry.get_3D_wedge_geometry(comm, dx=dx)
     geo = wedge.geometry
     mesh = geo.mesh
@@ -99,7 +104,9 @@ def build(model, dx, cv, comm):
     time = dolfinx.fem.Constant(mesh, 0.0)
     t_a = None
     if model != "rd":
-        sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
+        sources = [
+            Source((wedge.cell_tags, tag), t0 + source_delay) for tag, t0 in wedge.stimuli.values()
+        ]
         speeds = (cv["longitudinal"], cv["transverse"], cv["transverse"])
         t_a = solve_eikonal(mesh, speeds, (geo.f0, geo.s0, geo.n0), sources)
     if model == "re-":
@@ -160,18 +167,27 @@ def main():
     p.add_argument("--dt", type=float, default=0.02)
     p.add_argument("--end-time", type=float, default=500.0)
     p.add_argument("--cv", choices=["measured", "nominal"], default="measured")
+    p.add_argument(
+        "--source-delay",
+        type=float,
+        default=None,
+        help="start the eikonal sources this long (ms) after their stimulus; default: the "
+        "stimulus delay measured by reaction_eikonal_cv.py; 0 starts them with the stimulus, as "
+        "in the paper",
+    )
+    p.add_argument("--overwrite", action="store_true", help="replace existing results")
     p.add_argument("--outdir", type=Path, default=Path("results-reaction-eikonal-bath"))
     p.add_argument("--vtx", action="store_true", help="also write v every 5 ms to a .bp file")
     args = p.parse_args()
 
     comm = MPI.COMM_WORLD
-    cv = (
-        json.loads(CV_FILE.read_text())
-        if args.cv == "measured"
-        else {"longitudinal": 0.6, "transverse": 0.3}
-    )
+    name = f"{args.model}_dx{args.dx:g}"
+    refuse_to_overwrite(args.outdir / f"{name}.npz", args.overwrite)
+    measured = json.loads(CV_FILE.read_text())
+    cv = measured if args.cv == "measured" else {"longitudinal": 0.6, "transverse": 0.3}
+    source_delay = measured["stimulus_delay"] if args.source_delay is None else args.source_delay
     start = walltime.perf_counter()
-    solver, v, t_a, wedge = build(args.model, args.dx, cv, comm)
+    solver, v, t_a, wedge = build(args.model, args.dx, cv, comm, source_delay)
 
     gx, gy, grid = midplane_grid()
     line_x = np.linspace(0, 25, 501)
@@ -183,7 +199,6 @@ def main():
     if comm.rank == 0:
         out.mkdir(parents=True, exist_ok=True)
     comm.Barrier()
-    name = f"{args.model}_dx{args.dx:g}"
     vtx = None
     if args.vtx:
         vtx = dolfinx.io.VTXWriter(comm, out / f"{name}.bp", [v], engine="BP4")
@@ -256,6 +271,7 @@ def main():
             traces=np.array(traces),
             probe_names=np.array(list(PROBES)),
             cv=np.array([cv["longitudinal"], cv["transverse"]]),
+            source_delay=source_delay,
             dx=args.dx,
             dt=dt,
             wall_time=walltime.perf_counter() - start,

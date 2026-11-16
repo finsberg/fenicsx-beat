@@ -102,7 +102,10 @@ cells = beat.odesolver.DolfinMultiODESolver(
     v_index={k: m["state_index"]("V") for k, m in cell_models.items()},
 )
 cv = (0.594, 0.324, 0.324)  # mm/ms, from scripts/reaction_eikonal_cv.json
-sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
+stimulus_delay = 1.27  # ms from the start of a stimulus to R-D activation, from the same file
+sources = [
+    Source((wedge.cell_tags, tag), t0 + stimulus_delay) for tag, t0 in wedge.stimuli.values()
+]
 t_a = solve_eikonal(mesh, cv, (geo.f0, geo.s0, geo.n0), sources)
 solver = beat.SplittingSolver(pde=None, ode=FootCurrentODESolver(cells, t_a, ExponentialFoot()))
 v = solver.v
@@ -153,20 +156,20 @@ if comm.rank == 0:
 #
 # Left: $\phi_e$ on the mid-plane at 40 and 320 ms for R-D, R-E$^+$ (100 and 400 µm) and R-E$^-$,
 # with histograms of the deviation from R-D at 100 µm; right: the electrogram at $P_E$. At 40 ms,
-# 90% (95%) of the R-E$^+$ potentials are within 2.4 mV (8.9 mV) of R-D and 90% (95%) of the
-# R-E$^-$ potentials within 1.2 mV (1.8 mV); at 320 ms the numbers are 0.22 mV (0.30 mV) for
-# R-E$^+$ and 2.3 mV (3.5 mV) for R-E$^-$. The paper reports 0.25 mV and 0.75 mV for 90% of R-E$^+$
+# 90% (95%) of the R-E$^+$ potentials are within 0.93 mV (1.3 mV) of R-D and 90% (95%) of the
+# R-E$^-$ potentials within 0.77 mV (1.9 mV); at 320 ms the numbers are 0.11 mV (0.16 mV) for
+# R-E$^+$ and 2.2 mV (3.4 mV) for R-E$^-$. The paper reports 0.25 mV and 0.75 mV for 90% of R-E$^+$
 # and 95% of R-E$^-$ at 40 ms, so both of our deviations at 40 ms are larger than the paper's:
-# R-E$^+$ by about a factor 10 (2.4 against 0.25 mV) and R-E$^-$ by about a factor 2.4 (1.8 against
-# 0.75 mV). Our R-E$^+$ tail at 40 ms is dominated by the thin depolarization
-# front: the 2 ms earlier eikonal activation (see the activation demo) probably shifts the steep
-# $\phi_e$ front, which gives large point-wise differences in a narrow band. The median deviation
-# is 0.50 mV, still about twice the paper's 90% bound, so the disagreement is not confined to the tail. The electrograms of R-E$^+$ lie on top of R-D, also at 400 µm
-# (peak-to-peak 4.17 and 4.31 mV against 4.15 mV for R-D); R-E$^-$ has a deeper negative peak
-# ($-2.50$ against $-2.03$ mV) and a late deflection that peaks 1.5 ms later and is slightly
-# larger than R-D (2.19 against 2.13 mV), and it stays higher until the end (1.25 against 0.61 mV
-# at 395 ms), qualitatively as in the paper. As a check, the maps at $P_E$ equal the electrogram samples (for
-# example $-1.395$ mV for R-D at 40 ms).
+# R-E$^+$ by about a factor 4 (0.93 against 0.25 mV) and R-E$^-$ by about a factor 2.5 (1.9
+# against 0.75 mV). The median deviation of R-E$^+$ at 40 ms is 0.22 mV, below the paper's 90%
+# bound, so the excess is in the tail: the R-E$^+$ depolarization front runs about 0.8 ms ahead of
+# R-D (see the activation demo), which shifts the steep $\phi_e$ gradient at the front and gives
+# large point-wise differences in a narrow band. The electrograms of R-E$^+$ lie on top of R-D, also at 400 µm (peak-to-peak 4.17 and 4.29 mV
+# against 4.15 mV for R-D); R-E$^-$ has a deeper negative peak ($-2.50$ against $-2.03$ mV) and a
+# late deflection that peaks 2.8 ms later and is slightly larger than R-D (2.20 against 2.13 mV),
+# and it stays higher until the end (1.29 against 0.61 mV at 395 ms), qualitatively as in the
+# paper. As a check, the maps at $P_E$ equal the electrogram samples (for example $-1.395$ mV for
+# R-D at 40 ms).
 #
 # The amplitudes differ from the paper's Fig. 7C, where the electrogram at $P_E$ ranges from about
 # $-8$ to $+5$ mV during depolarization and reaches about 5 mV near 300 ms; ours peaks at about

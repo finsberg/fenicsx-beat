@@ -35,6 +35,7 @@ comm = MPI.COMM_WORLD
 dx, dt = 0.4, 0.05  # mm, ms: R-E- has no diffusion, so a larger time step is fine
 end_time = 50.0  # ms; 305.0 reproduces t_r50
 CV_L, CV_T = 0.594, 0.324  # mm/ms, from scripts/reaction_eikonal_cv.json
+STIMULUS_DELAY = 1.27  # ms from the start of a stimulus to R-D activation, from the same file
 # -
 
 # +
@@ -63,7 +64,9 @@ cells = beat.odesolver.DolfinMultiODESolver(
     num_states={k: len(v) for k, v in init.items()},
     v_index={k: m["state_index"]("V") for k, m in cell_models.items()},
 )
-sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
+sources = [
+    Source((wedge.cell_tags, tag), t0 + STIMULUS_DELAY) for tag, t0 in wedge.stimuli.values()
+]
 t_a = solve_eikonal(geo.mesh, (CV_L, CV_T, CV_T), (geo.f0, geo.s0, geo.n0), sources)
 solver = beat.SplittingSolver(pde=None, ode=FootCurrentODESolver(cells, t_a, ExponentialFoot()))
 start = walltime.perf_counter()
@@ -95,8 +98,8 @@ if comm.rank == 0:
 # $|v_{R-D} - v_{R-E}|$ at $t_{r50}$ over the mid-plane (paper Eq. 34). Right: action potentials
 # at the centres of the endocardial and M layers. As in the paper, R-E$^+$ matches R-D closely,
 # while R-E$^-$ has steps at the layer boundaries and larger deviations. Quantitatively, over the
-# mid-plane the absolute deviation from R-D at 100 µm has a median of 0.7 mV for R-E$^+$ at 400 µm
-# (90% of the points below 2.2 mV, 95% below 2.4 mV) and 2.0 mV for R-E$^-$ (90% below 11.5 mV,
-# 95% below 16.7 mV, dominated by the layer-boundary steps).
+# mid-plane the absolute deviation from R-D at 100 µm has a median of 0.2 mV for R-E$^+$ at 400 µm
+# (90% of the points below 1.1 mV, 95% below 1.4 mV) and 1.3 mV for R-E$^-$ (90% below 10.0 mV,
+# 95% below 14.9 mV, dominated by the layer-boundary steps).
 #
 # ![Fig. 5](../docs/_static/reaction_eikonal_fig5.png)

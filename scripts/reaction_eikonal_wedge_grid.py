@@ -25,6 +25,16 @@ LAYER_THICKNESS = 0.3  # mm, the 3 element rings of Bishop & Plank (2011) at 100
 MARGIN = 1.0  # mm of bath; 2 mm does not fit in memory at 100 um on this ~32 GB machine
 
 
+def refuse_to_overwrite(path, overwrite):
+    """Stop before a run that would replace the result ``path``, unless ``overwrite``
+
+    The results of these scripts take hours to compute, and a quick test run with the default
+    output folder would otherwise silently replace them.
+    """
+    if path.exists() and not overwrite:
+        raise SystemExit(f"{path} exists; pass --overwrite to replace it, or another --outdir")
+
+
 def num_layers(dx):
     """Element rings of the augmentation layer: a constant thickness of LAYER_THICKNESS"""
     return max(1, int(np.floor(LAYER_THICKNESS / dx + 0.5 + 1e-9)))

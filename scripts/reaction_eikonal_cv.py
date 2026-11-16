@@ -4,6 +4,11 @@ TNNP 2006 (epi), Neic 2017 wedge conductivities (harmonic mean), on a 10 x 1.5 x
 stimulated at x <= 1 mm; CV from the threshold activation times at x = 4 and x = 8 mm on the
 centre line, with the fibres along x (longitudinal) or y (transverse).
 
+Also the stimulus delay: the time from the start of the stimulus to activation (max dv/dt, as in
+the wedge benchmark) at the centre of the stimulated region, averaged over the two directions.
+reaction_eikonal_wedge.py starts the eikonal sources that long after their stimulus, so that the
+eikonal activation times match those of the R-D model they are compared with.
+
     mpirun -n 8 python scripts/reaction_eikonal_cv.py --dx 0.1 \
         --output scripts/reaction_eikonal_cv.json
 """
@@ -84,15 +89,18 @@ def conduction_velocity(comm, dx, dt, direction):
     )
     solver = beat.SplittingSolver(pde=pde, ode=ode)
     tracker = ActivationTracker(pde.state, method="threshold")
+    upstroke = ActivationTracker(pde.state, method="max_dvdt", threshold=-30.0, t0=0.0)
     t = 0.0
     end = 25.0 if direction == "longitudinal" else 40.0
     while t < end - 1e-9:
         solver.step((t, t + dt))
         t += dt
         tracker.update(t)
+        upstroke.update(t)
     probes = np.array([[4.0, 0.75, 0.75], [8.0, 0.75, 0.75]])
     t4, t8 = scifem.evaluate_function(tracker.t_a, probes).ravel()
-    return 4.0 / (t8 - t4)
+    (delay,) = scifem.evaluate_function(upstroke.t_a, np.array([[0.5, 0.75, 0.75]])).ravel()
+    return 4.0 / (t8 - t4), delay
 
 
 if __name__ == "__main__":
@@ -103,8 +111,11 @@ if __name__ == "__main__":
     args = p.parse_args()
     comm = MPI.COMM_WORLD
     result = {"dx": args.dx, "dt": args.dt}
+    delays = []
     for direction in ("longitudinal", "transverse"):
-        result[direction] = conduction_velocity(comm, args.dx, args.dt, direction)
+        result[direction], delay = conduction_velocity(comm, args.dx, args.dt, direction)
+        delays.append(delay)
+    result["stimulus_delay"] = float(np.mean(delays))
     if comm.rank == 0:
         print(json.dumps(result, indent=2))
         args.output.write_text(json.dumps(result, indent=2) + "\n")
