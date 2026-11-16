@@ -24,7 +24,11 @@
 # mathematical background); the paper's gold-standard full bidomain run is not repeated. The
 # eikonal uses the conduction velocities measured for this R-D model at 100 µm
 # (`scripts/reaction_eikonal_cv.py`) instead of the paper's nominal 0.6/0.3 m/s. The stimulus
-# positions are read off the paper's figures.
+# positions are read off the paper's figures. The paper starts the eikonal sources at the stimulus
+# times; here they start 1.27 ms later. That is how long the R-D model takes from the start of its
+# stimulus to activation (max $dv/dt$) in the stimulated tissue, measured by the same script.
+# Started with the stimulus, every eikonal activation time, and so every R-E upstroke, would be
+# 1.27 ms early compared with R-D.
 #
 # To keep the documentation build short, this demo runs the three models on the 400 µm wedge
 # for 70 ms; the results at 100/200/400 µm, computed with `scripts/reaction_eikonal_wedge.py`,
@@ -52,6 +56,7 @@ dx = 0.4  # mm
 dt = 0.02  # ms
 end_time = 70.0  # ms
 CV_L, CV_T = 0.594, 0.324  # mm/ms, from scripts/reaction_eikonal_cv.json
+STIMULUS_DELAY = 1.27  # ms from the start of a stimulus to R-D activation, from the same file
 # -
 
 # ## Geometry, cell models and conductivities
@@ -98,10 +103,13 @@ def cell_solver(v_pde):
 
 # ## The activation time from the eikonal equation
 #
-# The three stimuli become eikonal sources (S1 and S3 at $t = 0$, S2 at $t = 5$ ms).
+# The three stimuli become eikonal sources (S1 and S3 stimulated at $t = 0$, S2 at $t = 5$ ms),
+# each starting `STIMULUS_DELAY` after its stimulus, when R-D activates the stimulated tissue.
 
 # +
-sources = [Source((wedge.cell_tags, tag), t0) for tag, t0 in wedge.stimuli.values()]
+sources = [
+    Source((wedge.cell_tags, tag), t0 + STIMULUS_DELAY) for tag, t0 in wedge.stimuli.values()
+]
 t_a = solve_eikonal(mesh, (CV_L, CV_T, CV_T), (geo.f0, geo.s0, geo.n0), sources)
 # -
 
@@ -245,19 +253,36 @@ if comm.rank == 0:
 # ![Fig. 2](../docs/_static/reaction_eikonal_fig2.png)
 #
 # Against R-D at 100 µm, the median relative deviation of the activation time is 13% (90% of the
-# points below 25%) for R-D at 400 µm, 2.7% (90% below 5.2%) for R-E$^+$ at 400 µm and 0.8% (90%
-# below 2.5%) for R-E$^-$ at 400 µm; at 200 µm it is 1.5% for R-D. R-E$^+$ at 200 µm has a median
-# of 7.4%, larger than at 400 µm, because its activation is systematically early: with the bath
-# layer the 100 µm R-D wave is slower than the eikonal wave at the measured velocities, which are
-# unchanged. The size of the augmentation layer matters little: with three rings at every
-# resolution (instead of a constant 0.3 mm) the 400 µm R-D median would be 10.9% and R-E$^+$
-# 3.0%. In the 100 µm panels R-E$^+$ shows a small kink in the contours at the left edge.
+# points below 25%) for R-D at 400 µm and 1.5% for R-D at 200 µm. For R-E$^+$ it is 2.7% (90%
+# below 4.7%) at 100 µm, 3.6% at 200 µm and 2.0% (90% below 5.3%) at 400 µm; for R-E$^-$ it is
+# 1.3% (90% below 4.1%) at 100 µm and 4.7% (90% below 9.1%) at 400 µm. The R-D error grows with
+# the distance from the sources, while the R-E errors are mostly a constant shift (the median
+# signed deviations are $-0.8$ ms for R-E$^+$ and $+0.1$ ms for R-E$^-$ at 100 µm, and $+0.6$ and
+# $+1.3$ ms at 400 µm). Three effects add up to this shift:
 #
-# The upstrokes at $P_E$ (cf. the paper's Fig. 4): R-D at 200 and 400 µm activates late, the R-E
-# models do not; R-E$^-$ has a faster upstroke and a larger overshoot because it ignores
-# diffusion. The upstroke at $P_E$ occurs at 31.3 ms (R-D), 29.1 ms (R-E$^+$) and 30.5 ms
-# (R-E$^-$) at 100 µm, and at 33.0, 30.0 and 31.2 ms at 400 µm: the R-E times hardly depend on the
-# mesh, whereas R-D is delayed by 1.7 ms. The R-E$^+$ and R-E$^-$ times differ from R-D by about
-# 2 ms and 0.8 ms (100 µm).
+# - The eikonal wave is faster than the R-D wave in the wedge: at 100 µm its travel times are
+#   3.4% shorter (median), about 1 ms at the median activation time. The velocities come from a
+#   slab with straight fibers, so we suspect the fiber rotation through the wedge wall, which the
+#   eikonal does not feel, slows R-D down.
+# - The eikonal map depends on the mesh: at 400 µm its travel times are 4% longer than at 100 µm,
+#   presumably the first-order discretization error of the eikonal solver.
+# - The upstroke (max $dv/dt$) lags the eikonal activation time by 1.1 ms in R-E$^-$, but by only
+#   0.2 ms (median) in R-E$^+$, where diffusion from the activated tissue adds to the foot current
+#   and depolarizes the tissue ahead of the eikonal front.
+#
+# At 100 µm the first and the last cancel for R-E$^-$, while R-E$^+$ is early; at 400 µm the
+# slower eikonal map makes both late. With the sources started at the stimulus times, as in the
+# paper, every R-E time is 1.27 ms earlier, and R-E$^+$ at 100 µm was early by 2.0 ms (median
+# relative deviation 6.7%). The bath is not the cause: without it, and with that source timing,
+# R-E$^+$ is early by about the same amount. The size of the augmentation layer matters little:
+# with three rings at every resolution (instead of a constant 0.3 mm) the 400 µm R-D median would
+# be 10.9%.
+#
+# The upstrokes at $P_E$ (cf. the paper's Fig. 4): R-D at 400 µm activates late; R-E$^-$ has a
+# faster upstroke and a larger overshoot because it ignores diffusion. The upstroke at $P_E$
+# occurs at 31.3 ms (R-D), 30.3 ms (R-E$^+$) and 31.8 ms (R-E$^-$) at 100 µm, and at 33.0, 31.3
+# and 32.5 ms at 400 µm: from 100 to 400 µm R-D is delayed by 1.7 ms and the R-E models by 0.7 to
+# 1.0 ms, the latter from the coarser eikonal map. R-D at 200 µm activates at 30.3 ms, 1 ms
+# before R-D at 100 µm.
 #
 # ![Fig. 4](../docs/_static/reaction_eikonal_fig4.png)
