@@ -29,9 +29,9 @@ class ActivationTracker:
 
     Notes
     -----
-    * NaN marks dofs that have never activated. ``scifem.evaluate_function`` combines ranks
-      with a MAX over a ``-inf`` fill and mishandles NaN under MPI, so replace NaN by a
-      sentinel value before point evaluation.
+    * NaN marks dofs that have never activated, and point evaluation (``PointEvaluator``, or
+      ``scifem.evaluate_function`` from scifem 0.27.1) returns NaN in any cell that has such a
+      dof.
     * With ``max_dvdt`` the time is that of the steepest upstroke over the whole run. For
       multi-beat runs use one tracker per beat, or use ``threshold``.
     * Dofs already at or above ``threshold`` at ``t0`` never get a ``threshold`` crossing

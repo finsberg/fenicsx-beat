@@ -124,7 +124,6 @@ t_a = solve_eikonal(mesh, (CV_L, CV_T, CV_T), (geo.f0, geo.s0, geo.n0), sources)
 gx, gy = np.meshgrid(np.linspace(0, 25, 101), np.linspace(0, 25, 101))
 grid = np.column_stack([gx.ravel(), gy.ravel(), np.full(gx.size, 2.5)])
 results: dict[str, dict] = {}
-NO_ACTIVATION = 1e9  # sentinel for dofs that never activated
 
 
 probe = beat.utils.PointEvaluator(mesh, wedge.electrode[None, :])
@@ -141,11 +140,8 @@ def run(name, solver, v):
         tracker.update(t)
         trace_t.append(t)
         trace.append(probe(v).item())
-    # NaN (never activated) would corrupt the MPI max reduction in evaluate_function: use a sentinel
-    t_a_track = tracker.t_a  # modified in place, no ghost update needed: this is its last use
-    t_a_track.x.array[np.isnan(t_a_track.x.array)] = NO_ACTIVATION
-    activation = scifem.evaluate_function(t_a_track, grid).reshape(gx.shape)
-    activation[~(activation < 1e3)] = np.nan  # also mixed (interpolated) cells
+    # NaN where never activated, including cells with a never-activated vertex
+    activation = scifem.evaluate_function(tracker.t_a, grid).reshape(gx.shape)
     results[name] = {
         "t_a": activation,
         "trace_t": np.array(trace_t),
