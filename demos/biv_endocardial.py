@@ -291,12 +291,12 @@ solver = beat.SplittingSolver(pde=pde, ode=ode)
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://github.com/scientificcomputing/io4dolfinx) package.
 
 vtxfname = results_folder / "biv.bp"
-checkpointfname = results_folder / "biv_checkpoint.bp"
+checkpointfname = results_folder / "biv_checkpoint.h5"
 
 # Make sure to remove the files if they already exist
 
 shutil.rmtree(vtxfname, ignore_errors=True)
-shutil.rmtree(checkpointfname, ignore_errors=True)
+checkpointfname.unlink(missing_ok=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
@@ -317,6 +317,7 @@ def save(t):
         solver.v,
         time=t,
         name="v",
+        backend="h5py",
     )
 
 
@@ -373,7 +374,7 @@ plotter_voltage.add_mesh(
 plotter_voltage.view_isometric()
 plotter_voltage.reset_camera()
 
-times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
+times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v", backend="h5py")
 
 gif_file = Path("voltage_biv_ellipsoid_time.gif")
 gif_file.unlink(missing_ok=True)
@@ -410,7 +411,7 @@ probe = beat.ecg.ElectrodePotentials(ecg, system.points(electrodes))
 ecg_traces: dict[str, list[float]] = {k: [] for k in electrodes}
 
 for t in times:
-    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v", backend="h5py")
 
     cut.point_data["V"] = v.x.array[cut_ids]
     plotter_voltage.add_text(f"t = {t:.0f} ms", name="time", color="black", font_size=14)

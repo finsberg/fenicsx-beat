@@ -100,7 +100,7 @@ by every subcommand, either before or after the subcommand name: `beat -v run co
 | `beat validate-config config.toml` | Parse + validate + print the resolved config. Builds nothing (no mesh, no MPI-collective work). |
 | `beat geometry config.toml` | Generate (or load) the geometry and stop. For a generated type the mesh is cached in `geometry.folder/<hash>/` and reused across the other commands and reruns. |
 | `beat run config.toml [--restart] [--overwrite] [--output-folder P] [--petsc-options "..."]` | Run the simulation. |
-| `beat post config.toml [--output-folder P]` | Activation times, the pseudo-ECG (with `[postprocess.ecg]`, see [Pseudo-ECG](#pseudo-ecg)), VTX conversion and visualizations from `results.bp`. |
+| `beat post config.toml [--output-folder P]` | Activation times, the pseudo-ECG (with `[postprocess.ecg]`, see [Pseudo-ECG](#pseudo-ecg)), VTX conversion and visualizations from `results.h5`. |
 | `beat version` | Versions of beat, dolfinx, mpi4py, petsc4py. |
 
 `beat --dry-run <command> ...` (e.g. `beat --dry-run run config.toml --set 'solver.dt="0.02 ms"'`)
@@ -201,17 +201,18 @@ output/
   output.log               # log file (output_all_cpus.log too when running on >1 rank)
   cell_model_<hash>.py      # gotranx-generated code for cell.ode_file (hash: file contents + scheme); kept by --overwrite
   init_states/<region>_<hash>.npy   # cached single-cell steady state (only if cell.steady_state is set); kept by --overwrite
-  results.bp               # io4dolfinx: v (+ output.fields), every output.save_every
-  restart.bp                # io4dolfinx: v and every ODE state, every output.checkpoint_every and at the end
+  results.h5               # io4dolfinx: v (+ output.fields), every output.save_every
+  restart.h5                # io4dolfinx: v and every ODE state, every output.checkpoint_every and at the end
   restart.json              # {"ep": {t, step, physics_hash, functions, state_names, solver}}: the latest complete checkpoint and a hash of the run's physics (beat <= 0.7.2 wrote these keys at the top level; still read)
   performance.json          # timing summary (only with output.performance = true)
   post/                     # written by `beat post`, see below
 ```
 
-`beat run` never writes VTX itself -- only the io4dolfinx files above. `beat post config.toml`
-reads `results.bp` (which can happen later, on any number of ranks, independent of how many ranks
+`beat run` never writes VTX itself -- only the io4dolfinx files above, which are HDF5, written
+with io4dolfinx's h5py backend whatever its default (`beat.cli.runner.IO_BACKEND`). `beat post config.toml`
+reads `results.h5` (which can happen later, on any number of ranks, independent of how many ranks
 the run itself used) and writes into `post/`. The config given to `beat post` must describe the
-same physics as the run that wrote `results.bp` -- the same check as for `--restart` (below),
+same physics as the run that wrote `results.h5` -- the same check as for `--restart` (below),
 against the hash in `restart.json`, or, if the run stopped before writing its first checkpoint,
 against `config.resolved.toml` (whose `[postprocess]` is not read). Only `[output]`,
 `[postprocess]` and the run length may differ; anything else (e.g. an edited `geometry.dx`) is
@@ -220,7 +221,7 @@ or silently producing wrong results.
 
 ```text
 output/post/
-  v.bp                       # results.bp converted to VTX (ParaView), if postprocess.vtx (default true)
+  v.bp                       # results.h5 converted to VTX (ParaView), if postprocess.vtx (default true)
   activation_time.bp          # full-mesh local activation-time map (VTX)
   activation_times.json       # activation times at postprocess.points (null if a point is outside the mesh)
   voltage_final.png            # snapshot of v at the last saved time (needs pyvista)
@@ -240,7 +241,7 @@ warning); the VTX files are always complete. Run `beat post` on a single rank fo
 
 With a `[postprocess.ecg]` section, `beat post` also recovers the pseudo-ECG: the extracellular
 potential at each electrode, in an infinite homogeneous conductor (`beat.ECGRecovery`), at every
-saved time. It is computed in the same pass over `results.bp` as the activation map, so the ECG
+saved time. It is computed in the same pass over `results.h5` as the activation map, so the ECG
 adds no extra pass over the saved times. Without the section, `beat post` writes no ECG. The
 electrodes are a table of name to position:
 
@@ -314,7 +315,7 @@ by hand) is refused by default -- `beat` never silently deletes anything:
   validated (the simulation is built first), so a mistake in the config never costs the previous
   results. Anything else in that folder -- notably your own `config.toml`/`.ode` files, if the
   output folder happens to be the config's own directory -- is left untouched.
-- `--restart` continues from `restart.json`/`restart.bp` instead. It refuses if the run's
+- `--restart` continues from `restart.json`/`restart.h5` instead. It refuses if the run's
   **physics** has changed since the checkpoint was written: the check is a hash of the whole
   resolved config *excluding* the run length `solver.end_time`/`solver.num_beats`/`solver.BCL` (so
   extending the simulated time, or switching from `end_time` to `num_beats`/`BCL`, is fine;
@@ -327,9 +328,10 @@ by hand) is refused by default -- `beat` never silently deletes anything:
   Restarting on a **different number of MPI ranks** than the original run is allowed. If the run
   stopped before its first checkpoint there is no `restart.json` yet, and both `--restart` and a
   plain rerun are refused with a message saying so -- use `--overwrite` to start over.
-- A restart never rewrites a `results.bp` timestamp that's already there: io4dolfinx *appends* a
-  duplicate write at an existing timestamp, and its reader returns the *first* match, so
-  re-writing the same time would be silently ignored on read anyway -- the runner simply skips it.
+- A restart never rewrites a `results.h5` timestamp that's already there: io4dolfinx's h5py
+  backend refuses a second write at a stored timestamp, so the runner skips it. Likewise, a
+  checkpoint skips the functions `restart.h5` already holds at its time, which a run killed
+  partway through writing that checkpoint leaves behind.
 
 ## Units
 

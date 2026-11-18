@@ -275,10 +275,10 @@ t = 0.0
 solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 vtxfname = results_folder / "slab.bp"
-checkpointfname = results_folder / "slab_checkpoint.bp"
+checkpointfname = results_folder / "slab_checkpoint.h5"
 
 shutil.rmtree(vtxfname, ignore_errors=True)
-shutil.rmtree(checkpointfname, ignore_errors=True)
+checkpointfname.unlink(missing_ok=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
@@ -287,14 +287,14 @@ vtx = dolfinx.io.VTXWriter(
     mesh_policy=VTXMeshPolicy.reuse,
 )
 
-io4dolfinx.write_mesh(checkpointfname, mesh)
+io4dolfinx.write_mesh(checkpointfname, mesh, backend="h5py")
 
 
 def save(t):
     v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v", backend="h5py")
 
 
 i = 0
@@ -326,7 +326,7 @@ else:
 
 # Need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://scientificcomputing.github.io/io4dolfinx/docs/original_checkpoint.html
 
-mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname, backend="h5py")
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
@@ -358,6 +358,7 @@ plotter_voltage.add_mesh(
 
 times = io4dolfinx.read_timestamps(
     comm=comm, filename=checkpointfname, function_name="v",
+    backend="h5py",
 )
 t1 = np.inf
 t2 = np.inf
@@ -373,7 +374,7 @@ gif_file = Path("voltage_slab_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
-    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v", backend="h5py")
     ecg.solve()
     phie.append(
         mesh.comm.allreduce(dolfinx.fem.assemble_scalar(p_ecg_form), op=MPI.SUM),

@@ -303,19 +303,19 @@ solver = beat.SplittingSolver(pde=pde, ode=ode)
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://github.com/scientificcomputing/io4dolfinx) package.
 
 vtxfname = results_folder / "lv.bp"
-checkpointfname = results_folder / "lv_checkpoint.bp"
+checkpointfname = results_folder / "lv_checkpoint.h5"
 
 # Make sure to remove the files if they already exist
 
 shutil.rmtree(vtxfname, ignore_errors=True)
-shutil.rmtree(checkpointfname, ignore_errors=True)
+checkpointfname.unlink(missing_ok=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
     [solver.v],
     engine="BP4",
 )
-io4dolfinx.write_mesh(checkpointfname, geo.mesh)
+io4dolfinx.write_mesh(checkpointfname, geo.mesh, backend="h5py")
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -324,7 +324,7 @@ def save(t):
     v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v", backend="h5py")
 
 
 # We will save results every 1 ms
@@ -350,7 +350,7 @@ while t < end_time + 1e-12:
 
 # Now we will retrieve the results that we just saved. You need to either save the functions on the input mesh using io4dolfinx.write_function_on_input_mesh or read the mesh again see https://jsdokken.com/io4dolfinx/docs/original_checkpoint.html for more info
 
-mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname, backend="h5py")
 V = dolfinx.fem.functionspace(mesh, ("P", 1))
 v = dolfinx.fem.Function(V)
 
@@ -382,13 +382,13 @@ plotter_voltage.add_mesh(
     clim=[-90.0, 40.0],
 )
 
-times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
+times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v", backend="h5py")
 
 gif_file = Path("voltage_lv_ellipsoid_time.gif")
 gif_file.unlink(missing_ok=True)
 plotter_voltage.open_gif(gif_file.as_posix())
 for t in times:
-    io4dolfinx.read_function(checkpointfname, v, time=t, name="v")
+    io4dolfinx.read_function(checkpointfname, v, time=t, name="v", backend="h5py")
 
     grid.point_data["V"] = v.x.array
     plotter_voltage.write_frame()

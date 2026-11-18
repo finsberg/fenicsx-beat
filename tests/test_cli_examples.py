@@ -84,7 +84,7 @@ def test_template_runs(name, tmp_path):
     conf = load_config(tmp_path / name / "config.toml", sets=sets, environ={})
     conf.cell.steady_state = None  # never pre-pace in CI
     out = run(conf)
-    assert (out / "results.bp").exists()
+    assert (out / "results.h5").exists()
 
 
 def _short_run(folder) -> list[str]:

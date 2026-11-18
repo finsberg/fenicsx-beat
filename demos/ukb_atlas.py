@@ -378,12 +378,12 @@ solver = beat.SplittingSolver(pde=pde, ode=ode)
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://scientificcomputing.github.io/io4dolfinx) package.
 
 vtxfname = results_folder / "v.bp"
-checkpointfname = results_folder / "v_checkpoint.bp"
+checkpointfname = results_folder / "v_checkpoint.h5"
 
 # Make sure to remove the files if they already exist
 
 shutil.rmtree(vtxfname, ignore_errors=True)
-shutil.rmtree(checkpointfname, ignore_errors=True)
+checkpointfname.unlink(missing_ok=True)
 vtx = dolfinx.io.VTXWriter(
     comm,
     vtxfname,
@@ -391,7 +391,7 @@ vtx = dolfinx.io.VTXWriter(
     engine="BP4",
     mesh_policy=VTXMeshPolicy.reuse,
 )
-io4dolfinx.write_mesh(checkpointfname, geo.mesh)
+io4dolfinx.write_mesh(checkpointfname, geo.mesh, backend="h5py")
 
 # Let's create a function to be used to save the results. This will save the results to the VTX file and the checkpoint file.
 
@@ -435,7 +435,7 @@ def save(t):
     v = solver.v.x.array
     print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
     vtx.write(t)
-    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v", backend="h5py")
     grid.point_data["V"] = solver.v.x.array
     plotter_voltage.add_text(f"t = {t:.0f} ms", name="time", color="black", font_size=14)
     plotter_voltage.write_frame()
