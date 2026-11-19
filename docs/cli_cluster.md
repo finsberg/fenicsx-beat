@@ -80,8 +80,8 @@ Resubmit the same script (e.g. from a scheduler dependency chain, `sbatch --depe
 or cron) until `run.json: status == "finished"`. Each resubmission picks up `--restart`
 automatically once `output/restart.json` exists (written after the first successful checkpoint).
 Before that -- the first submission, or a job killed before its first checkpoint, which leaves a
-`results.bp` but no `restart.json` -- there is nothing to continue from, so the script starts over
-with `--overwrite` (without it, `beat` refuses to touch the existing `results.bp`, saying that no
+`results.h5` but no `restart.json` -- there is nothing to continue from, so the script starts over
+with `--overwrite` (without it, `beat` refuses to touch the existing `results.h5`, saying that no
 restart checkpoint exists yet). `--overwrite` is safe here: it only deletes `beat`'s own
 artifacts, and only after the config has been validated.
 

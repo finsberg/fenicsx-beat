@@ -74,7 +74,7 @@ def test_missing_config_exit_1(tmp_path, caplog):
 
 def test_run_and_restart(cfg, tmp_path):
     assert main(["run", str(cfg)]) == 0
-    assert (tmp_path / "output" / "results.bp").exists()
+    assert (tmp_path / "output" / "results.h5").exists()
     assert main(["run", str(cfg)]) == 1  # refuses without --overwrite
     assert main(["run", str(cfg), "--overwrite"]) == 0
     assert main(["run", str(cfg), "--restart", "--set", 'solver.end_time="0.5 ms"']) == 0
@@ -83,13 +83,13 @@ def test_run_and_restart(cfg, tmp_path):
 def test_output_folder_flag(cfg, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert main(["run", str(cfg), "--output-folder", "run_07"]) == 0
-    assert (tmp_path / "run_07" / "results.bp").exists()
+    assert (tmp_path / "run_07" / "results.h5").exists()
 
 
 def test_env_override(cfg, tmp_path, monkeypatch):
     monkeypatch.setenv("BEAT_OUTPUT__FOLDER", str(tmp_path / "from_env"))
     assert main(["run", str(cfg)]) == 0
-    assert (tmp_path / "from_env" / "results.bp").exists()
+    assert (tmp_path / "from_env" / "results.h5").exists()
 
 
 def test_solver_failure_exit_2(cfg, monkeypatch):

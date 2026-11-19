@@ -13,7 +13,7 @@ from cli_helpers import minimal_config_dict
 from beat.cli.config import ConfigError, ECGConfig
 from beat.cli.overrides import load_config
 from beat.cli.postprocess import run_post
-from beat.cli.runner import run
+from beat.cli.runner import IO_BACKEND, run
 from beat.ecg import twelve_lead
 from beat.units import ureg
 
@@ -132,7 +132,7 @@ def _expected_potentials(conf, electrodes) -> list[list[float]]:
     path = conf.output.folder / RESULTS
     rows = []
     for t in read_result_times(path, MPI.COMM_WORLD):
-        io4dolfinx.read_function(path, v, time=t, name="v")
+        io4dolfinx.read_function(path, v, time=t, name="v", backend=IO_BACKEND)
         rows.append([float(t), *probe().values()])
     return rows
 
@@ -394,7 +394,7 @@ def test_post_requires_prior_run(tmp_path):
 @pytest.mark.parametrize("fn", [run_post])
 def test_post_rejects_config_changed_since_run(finished, fn):
     """beat post must refuse a config whose physics differ from the run that wrote
-    results.bp (e.g. an edited geometry), instead of crashing or silently mixing them."""
+    results.h5 (e.g. an edited geometry), instead of crashing or silently mixing them."""
     from beat.cli.config import ConfigError
 
     changed = load_config(

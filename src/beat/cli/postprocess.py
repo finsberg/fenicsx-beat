@@ -1,6 +1,6 @@
 """Postprocess a `beat run` output folder: pseudo-ECG, activation times, VTX conversion.
 
-Reads ``<output.folder>/results.bp`` (the io4dolfinx checkpoint written by `beat run`) and
+Reads ``<output.folder>/results.h5`` (the io4dolfinx checkpoint written by `beat run`) and
 writes everything this module produces into ``<output.folder>/post/``, so that a plain
 ``beat run --overwrite`` (which deletes ``post/`` along with its own artifacts, see
 ``beat.cli.runner._ARTIFACT_NAMES``) never touches the user's config/geometry/ode files.
@@ -25,16 +25,23 @@ from ..units import ureg
 from .config import Config, ConfigError
 from .geometry import CLIGeometry, build_conductivity, build_geometry
 from .overrides import load_config, physics_hash
-from .runner import RESTART_META, RESULTS, _on_rank0, read_restart_meta, read_result_times
+from .runner import (
+    IO_BACKEND,
+    RESTART_META,
+    RESULTS,
+    _on_rank0,
+    read_restart_meta,
+    read_result_times,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _check_matches_run(conf: Config, comm) -> None:
-    """Refuse a config whose physics differ from the run that wrote ``results.bp``.
+    """Refuse a config whose physics differ from the run that wrote ``results.h5``.
 
     ``beat post`` rebuilds the geometry (and, for the ECG, the conductivity) from the
-    config, so e.g. an edited ``geometry.dx`` would otherwise crash reading ``results.bp``
+    config, so e.g. an edited ``geometry.dx`` would otherwise crash reading ``results.h5``
     or, on a same-topology mesh, silently produce wrong results. Only what ``physics_hash``
     excludes (``[output]``, ``[postprocess]``, the run length) may differ. The recorded hash is
     taken from ``restart.json`` or, if the run was killed before its first checkpoint, recomputed
@@ -67,9 +74,9 @@ def _check_matches_run(conf: Config, comm) -> None:
 
 def _open_results(conf: Config, comm):
     """Load the geometry (via ``build_geometry``) and a ``v`` Function on *that same mesh
-    object*, ready to be filled from the ``results.bp`` written by `beat run`.
+    object*, ready to be filled from the ``results.h5`` written by `beat run`.
 
-    ``results.bp`` is written with ``io4dolfinx.write_function_on_input_mesh``, which pairs with
+    ``results.h5`` is written with ``io4dolfinx.write_function_on_input_mesh``, which pairs with
     a Function built directly on the mesh from ``build_geometry`` (rather than a freshly
     ``read_mesh``'d one) - required so that ``v`` can be combined in one UFL form with M (built
     from that same geometry's fiber field) for the ECG recovery.
@@ -286,7 +293,7 @@ def run_post(conf: Config, comm=MPI.COMM_WORLD) -> Path:
     tact.x.array[:] = -1.0
     potentials: list[dict[str, float]] = []
     for t in times:
-        io4dolfinx.read_function(path, v, time=t, name="v")
+        io4dolfinx.read_function(path, v, time=t, name="v", backend=IO_BACKEND)
         pending = tact.x.array < 0.0
         tact.x.array[pending & (v.x.array >= threshold)] = t
         if ecg is not None:
@@ -337,7 +344,7 @@ def _convert_to_vtx(path: Path, v: dolfinx.fem.Function, times, post: Path, comm
     out = post / "v.bp"
     with dolfinx.io.VTXWriter(comm, out, [v], engine="BP4") as vtx:
         for t in times:
-            io4dolfinx.read_function(path, v, time=t, name="v")
+            io4dolfinx.read_function(path, v, time=t, name="v", backend=IO_BACKEND)
             vtx.write(float(t))
     logger.info(f"VTX output for ParaView written to {out}")
 
@@ -411,7 +418,7 @@ def _visualize(
 
     pyvista.OFF_SCREEN = True
 
-    io4dolfinx.read_function(path, v, time=times[-1], name="v")
+    io4dolfinx.read_function(path, v, time=times[-1], name="v", backend=IO_BACKEND)
 
     # Rank-0-only pyvista state (grid/plotter), threaded between the guarded steps below via
     # this dict rather than plain local variables/asserts - `ok` becoming False mid-way means
@@ -454,7 +461,7 @@ def _visualize(
     if not ok or not conf.postprocess.make_gif:
         return
 
-    io4dolfinx.read_function(path, v, time=times[0], name="v")
+    io4dolfinx.read_function(path, v, time=times[0], name="v", backend=IO_BACKEND)
     gif_path = post / "voltage.gif"
 
     def start_gif() -> None:
@@ -477,7 +484,7 @@ def _visualize(
     for t in times:
         if not ok:
             break
-        io4dolfinx.read_function(path, v, time=t, name="v")
+        io4dolfinx.read_function(path, v, time=t, name="v", backend=IO_BACKEND)
 
         def write_frame(t=t) -> None:
             state["grid"].point_data["v"] = v.x.array

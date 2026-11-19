@@ -80,14 +80,14 @@ cli = [
     "toml",
     "cardiac-geometriesx>=0.17.0",
     "gotranx",
-    "io4dolfinx",
+    "io4dolfinx[h5py]",
 ]
 demos = [
    "cardiac-geometriesx>=0.17.0",
    "fenicsx-ldrb>=0.2.0",
    "gotranx",
    "ukb-atlas>=2.0",
-   "io4dolfinx",
+   "io4dolfinx[h5py]",
    "jax[cpu]",
 ]
 docs = [

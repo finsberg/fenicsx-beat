@@ -18,7 +18,6 @@
 from mpi4py import MPI
 import matplotlib.pyplot as plt
 from pathlib import Path
-import shutil
 import io4dolfinx
 import scifem
 import numpy as np
@@ -171,17 +170,17 @@ ode = beat.odesolver.DolfinODESolver(
 )
 solver = beat.SplittingSolver(pde=pde, ode=ode)
 
-checkpointfname = outdir / "pvc_checkpoint.bp"
+checkpointfname = outdir / "pvc_checkpoint.h5"
 
-shutil.rmtree(checkpointfname, ignore_errors=True)
-io4dolfinx.write_mesh(checkpointfname, mesh)
+checkpointfname.unlink(missing_ok=True)
+io4dolfinx.write_mesh(checkpointfname, mesh, backend="h5py")
 
 
 def save(t):
     v = solver.v.x.array
     if t % 100.0 == 0:
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
-    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v")
+    io4dolfinx.write_function(checkpointfname, solver.v, time=t, name="v", backend="h5py")
 
 
 # -
@@ -202,10 +201,10 @@ while t < end_time + 1e-12:
 
 
 def post_process(dx, outdir):
-    mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname)
+    mesh = io4dolfinx.read_mesh(comm=comm, filename=checkpointfname, backend="h5py")
     V = dolfinx.fem.functionspace(mesh, ("P", 1))
     v = dolfinx.fem.Function(V)
-    times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v")
+    times = io4dolfinx.read_timestamps(comm=comm, filename=checkpointfname, function_name="v", backend="h5py")
 
     cellnr = [0, 25, 50, 75, 100, 125, 150, 175, 200]
     cellnr = np.arange(0, 200, 10)
@@ -223,7 +222,7 @@ def post_process(dx, outdir):
         traces = np.zeros((len(times), len(cellnr)))
 
         for i, ti in enumerate(times):
-            io4dolfinx.read_function(checkpointfname, v, time=ti, name="v")
+            io4dolfinx.read_function(checkpointfname, v, time=ti, name="v", backend="h5py")
 
             traces[i, :] = scifem.evaluate_function(
                 v,

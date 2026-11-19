@@ -4,15 +4,17 @@ Output folder layout (``conf.output.folder``)::
 
     config.resolved.toml   the fully resolved configuration of the (latest) run
     run.json               run metadata (versions, ranks, status: running/finished/failed)
-    results.bp             io4dolfinx: ``v`` (+ ``output.fields``) every ``output.save_every``
-    restart.bp             io4dolfinx: ``v`` and every ODE state (``state_<name>``)
+    results.h5             io4dolfinx: ``v`` (+ ``output.fields``) every ``output.save_every``
+    restart.h5             io4dolfinx: ``v`` and every ODE state (``state_<name>``)
     restart.json           the latest checkpoint, under the key ``"ep"``: t, step, physics hash, ...
     output.log             log file (``output_all_cpus.log`` too when running on >1 rank)
     performance.json       timing summary (only with ``output.performance = true``)
 
-io4dolfinx *appends* a function written at an already existing timestamp, and ``read_function``
-returns the *first* match. So a restarted run never writes a ``results.bp`` timestamp ``<=`` the
-last one already there, and readers deduplicate with ``np.unique`` (:func:`read_result_times`).
+Both files are HDF5, written and read with io4dolfinx's h5py backend (:data:`IO_BACKEND`),
+named in every call: io4dolfinx 2.0 changed its default from adios2 to h5py, and neither
+reads the other's files. The h5py backend refuses a function written at a timestamp it already
+holds. So a restarted run never writes a ``results.h5`` timestamp ``<=`` the last one already
+there, and a checkpoint skips the functions ``restart.h5`` already holds at its time.
 """
 
 import datetime
@@ -43,8 +45,10 @@ from .stimulus import StimulusSet, build_stimuli
 
 logger = logging.getLogger(__name__)
 
-RESULTS = "results.bp"
-RESTART = "restart.bp"
+#: The io4dolfinx backend of results.h5 and restart.h5.
+IO_BACKEND = "h5py"
+RESULTS = "results.h5"
+RESTART = "restart.h5"
 RESTART_META = "restart.json"
 #: Key of beat's entry in restart.json, as pulse's is ``"mechanics"``, so that one driver can
 #: keep every library's checkpoint metadata side by side.
@@ -147,7 +151,25 @@ def read_restart_meta(folder: Path) -> dict[str, Any]:
 
 def read_result_times(path: Path, comm, name: str = "v") -> np.ndarray:
     """Sorted, unique timestamps of ``name`` in the io4dolfinx file ``path``."""
-    return np.unique(io4dolfinx.read_timestamps(filename=path, comm=comm, function_name=name))
+    return np.unique(_stored_times(path, comm, name))
+
+
+def _stored_times(path: Path, comm, name: str) -> np.ndarray:
+    """Every timestamp of ``name`` in the io4dolfinx file ``path``, as stored.
+
+    None if the file does not hold ``name``: the h5py backend raises ``KeyError`` for a name it
+    never wrote, where adios2 returned no timestamps. Any other failure propagates.
+    """
+    try:
+        times = io4dolfinx.read_timestamps(
+            filename=path,
+            comm=comm,
+            function_name=name,
+            backend=IO_BACKEND,
+        )
+    except KeyError:
+        return np.zeros(0)
+    return np.asarray(times, dtype=float)
 
 
 def _output_decision(conf: Config, restart: bool, overwrite: bool) -> tuple[str, str]:
@@ -264,29 +286,41 @@ def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulat
 
 def _save_results(sim: Simulation, t: float) -> None:
     path = sim.conf.output.folder / RESULTS
-    io4dolfinx.write_function_on_input_mesh(path, sim.pde.state, time=t, name="v")
+    io4dolfinx.write_function_on_input_mesh(
+        path,
+        sim.pde.state,
+        time=t,
+        name="v",
+        backend=IO_BACKEND,
+    )
     if sim.conf.output.fields:
         funcs = sim.ode.states_to_dolfin(sim.cell.state_names)
         for name in sim.conf.output.fields:
             f = funcs[sim.cell.state_names.index(name)]
-            io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=name)
+            io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=name, backend=IO_BACKEND)
 
 
 def _write_restart(sim: Simulation, t: float, step: int, write_data: bool = True) -> None:
     """Write a checkpoint at ``t`` and point restart.json at it.
 
-    ``write_data=False`` only updates restart.json: used when restart.bp already holds a
-    checkpoint at ``t`` (a run killed between writing restart.bp and restart.json, then
-    restarted from the earlier checkpoint). io4dolfinx would append a duplicate timestamp and
-    ``read_function`` returns the *first* one, i.e. the existing data -- which is the same state,
-    recomputed from the same checkpoint with the same physics.
+    ``write_data=False`` only updates restart.json: used when restart.h5 already holds a
+    complete checkpoint at ``t`` (a run killed between writing restart.h5 and restart.json, then
+    restarted from the earlier checkpoint). A run killed partway through writing restart.h5 left
+    some of the functions at ``t``: those are skipped, since io4dolfinx's h5py backend refuses a
+    second write at a stored timestamp. Either way the stored data is the same state, recomputed
+    from the same checkpoint with the same physics.
     """
     folder = sim.conf.output.folder
     functions = sim.solver.restart_functions(sim.cell.state_names)
     if write_data:
         path = folder / RESTART
+        comm = sim.geo.mesh.comm
+        tol = 1e-9 * ms(sim.conf.solver.dt)
         for name, f in functions:
-            io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=name)
+            stored = _stored_times(path, comm, name) if path.exists() else np.zeros(0)
+            if np.any(np.abs(stored - t) < tol):
+                continue
+            io4dolfinx.write_function_on_input_mesh(path, f, time=t, name=name, backend=IO_BACKEND)
     # restart.json is written last (atomically): it only ever points at a complete checkpoint.
     _write_json(
         folder / RESTART_META,
@@ -322,14 +356,11 @@ def _load_restart(sim: Simulation) -> tuple[int, float, np.ndarray]:
             f"model's {sim.cell.state_names}",
         )
     t = float(meta["t"])
-    # restart.bp may hold several checkpoints (checkpoint_every); pick the one restart.json
+    # restart.h5 may hold several checkpoints (checkpoint_every); pick the one restart.json
     # names by its exact stored timestamp (avoids float-equality surprises), but refuse to
     # silently fall back to a *different* checkpoint. Every rank reads the same file, so every
     # rank raises together.
-    stored = np.asarray(
-        io4dolfinx.read_timestamps(filename=folder / RESTART, comm=comm, function_name="v"),
-        dtype=float,
-    )
+    stored = _stored_times(folder / RESTART, comm, "v")
     tol = 1e-9 * ms(sim.conf.solver.dt)
     if stored.size == 0 or np.min(np.abs(stored - t)) >= tol:
         raise ConfigError(
@@ -339,20 +370,15 @@ def _load_restart(sim: Simulation) -> tuple[int, float, np.ndarray]:
     t_file = float(stored[np.argmin(np.abs(stored - t))])
     functions = sim.solver.restart_functions(sim.cell.state_names)
     for name, f in functions:
-        io4dolfinx.read_function(folder / RESTART, f, time=t_file, name=name)
+        io4dolfinx.read_function(folder / RESTART, f, time=t_file, name=name, backend=IO_BACKEND)
         f.x.scatter_forward()
     sim.solver.load_restart(functions, meta.get("solver"))
     logger.info(f"Restarting from t={t} ms (step {meta['step']})")
-    # Checkpoint times whose data is *complete* in restart.bp (a kill mid-checkpoint can leave
+    # Checkpoint times whose data is *complete* in restart.h5 (a kill mid-checkpoint can leave
     # ``v`` written but not every state): only these may be reused instead of rewritten.
     complete = stored
     for name in sim.cell.state_names:
-        times = io4dolfinx.read_timestamps(
-            filename=folder / RESTART,
-            comm=comm,
-            function_name=f"state_{name}",
-        )
-        times = np.asarray(times, dtype=float)
+        times = _stored_times(folder / RESTART, comm, f"state_{name}")
         complete = complete[[bool(np.any(np.abs(times - c) < tol)) for c in complete]]
     return int(meta["step"]), t, complete
 
@@ -453,8 +479,7 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
     def maybe_save(step: int) -> None:
         nonlocal last_saved
         t = step * dt
-        # Never write a timestamp already in results.bp: io4dolfinx would append a duplicate
-        # and read_function returns the *first* (stale) one.
+        # Never write a timestamp already in results.h5: io4dolfinx's h5py backend refuses it.
         if t > last_saved + 1e-9 * dt:
             _save_results(sim, t)
             last_saved = t
@@ -462,9 +487,9 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
     def checkpoint(step: int) -> None:
         nonlocal checkpoints
         t = step * dt
-        # Never append a timestamp restart.bp already holds (see _write_restart). Membership,
+        # Never rewrite a checkpoint restart.h5 already holds (see _write_restart). Membership,
         # not "<= last": checkpoint_every may differ from the original run's, and restart.json
-        # must only ever name a timestamp that is actually in restart.bp.
+        # must only ever name a timestamp that is actually in restart.h5.
         exists = bool(np.any(np.abs(checkpoints - t) < 1e-9 * dt))
         _write_restart(sim, t, step, write_data=not exists)
         checkpoints = np.append(checkpoints, t)
