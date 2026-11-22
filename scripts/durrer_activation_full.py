@@ -63,7 +63,10 @@ def parse_args(argv=None):
     parser.add_argument("--outdir", type=Path, default=Path("results-durrer-activation-full"))
     parser.add_argument("--static", type=Path, default=ROOT / "docs" / "_static")
     parser.add_argument(
-        "--char-length", type=float, default=0.1, help="mesh size (cm); the demo uses 0.3"
+        "--char-length",
+        type=float,
+        default=0.1,
+        help="mesh size (cm); the demo uses 0.3",
     )
     parser.add_argument(
         "--cv",
@@ -85,7 +88,10 @@ def parse_args(argv=None):
         help="the movie has every saved frame until then (ms), and every --movie-every ms after",
     )
     parser.add_argument(
-        "--movie-every", type=float, default=6.0, help="ms, after --movie-fast-after"
+        "--movie-every",
+        type=float,
+        default=6.0,
+        help="ms, after --movie-fast-after",
     )
     parser.add_argument("--movie-end", type=float, default=360.0, help="ms")
     parser.add_argument(
@@ -153,7 +159,11 @@ def make_movie(path, grid, frames, times, frame_obj):
         for column in range(2):
             plotter.subplot(0, column)
             plotter.add_text(
-                f"t = {t:3.0f} ms", name="time", position="lower_left", color="black", font_size=10
+                f"t = {t:3.0f} ms",
+                name="time",
+                position="lower_left",
+                color="black",
+                font_size=10,
             )
         plotter.write_frame()
     plotter.close()
@@ -303,7 +313,7 @@ def simulate(args, geo, activation, mesh_unit):
         **{f"lead_{k}": np.asarray(v) for k, v in leads.items()},
     )
     logger.info(
-        f"Simulated {args.T} ms in {elapsed:.0f} s; last activation at {t_activation:.1f} ms"
+        f"Simulated {args.T} ms in {elapsed:.0f} s; last activation at {t_activation:.1f} ms",
     )
     return dict(
         ecg_times=np.asarray(ecg_times),

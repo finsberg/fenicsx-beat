@@ -40,10 +40,14 @@ def test_measured_velocity_converges_to_exact(bishop, direction):
     errors = [
         abs(
             measure_conduction_velocity(
-                conductivities=bishop, dx=dx, dt=0.01, direction=direction, **CELL
+                conductivities=bishop,
+                dx=dx,
+                dt=0.01,
+                direction=direction,
+                **CELL,
             )
             / exact
-            - 1.0
+            - 1.0,
         )
         for dx in (0.25, 0.1)
     ]
@@ -90,7 +94,13 @@ def test_block_gives_zero(bishop):
 def test_calibrate_warns_when_not_converged(bishop):
     with pytest.warns(RuntimeWarning, match="did not reach"):
         result = calibrate_conductivities(
-            0.15, 0.05, conductivities=bishop, dx=0.25, dt=0.01, max_iterations=1, **CELL
+            0.15,
+            0.05,
+            conductivities=bishop,
+            dx=0.25,
+            dt=0.01,
+            max_iterations=1,
+            **CELL,
         )
     assert result.scales == {"longitudinal": 1.0, "transverse": 1.0}
 

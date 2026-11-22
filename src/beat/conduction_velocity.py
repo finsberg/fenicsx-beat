@@ -186,7 +186,8 @@ def measure_conduction_velocity(
                 done = True
                 break
             activated = comm.allreduce(
-                int(np.isfinite(tracker.t_a.x.array[:n_owned]).sum()), op=MPI.SUM
+                int(np.isfinite(tracker.t_a.x.array[:n_owned]).sum()),
+                op=MPI.SUM,
             )
             if activated > num_activated:
                 num_activated, last_change = activated, t
@@ -201,7 +202,9 @@ def measure_conduction_velocity(
 
 
 def scale_conductivities(
-    conductivities: dict[str, Any], longitudinal: float = 1.0, transverse: float = 1.0
+    conductivities: dict[str, Any],
+    longitudinal: float = 1.0,
+    transverse: float = 1.0,
 ) -> dict[str, Any]:
     """A copy of ``conductivities`` with the intra- and extracellular conductivities along the
     fibres multiplied by ``longitudinal`` and those across them by ``transverse``
@@ -297,7 +300,9 @@ def calibrate_conductivities(
         scaled = scale_conductivities(conductivities, **scales)
         velocities = {
             d: measure_conduction_velocity(
-                conductivities=scaled, direction=cast(Direction, d), **kwargs
+                conductivities=scaled,
+                direction=cast(Direction, d),
+                **kwargs,
             )
             for d in targets
         }
@@ -306,7 +311,7 @@ def calibrate_conductivities(
             "scales "
             + ", ".join(f"{d} {scales[d]:.4g}" for d in targets)
             + " give "
-            + ", ".join(f"{d} {velocities[d]:.4g} mm/ms" for d in targets)
+            + ", ".join(f"{d} {velocities[d]:.4g} mm/ms" for d in targets),
         )
         if error(velocities) <= rtol:
             break

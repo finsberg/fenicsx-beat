@@ -99,7 +99,7 @@ summary = activation.summary()
 if comm.rank == 0:
     print(
         f"{summary['num_stimulated_cells']} cells are stimulated between "
-        f"{summary['first_stimulus']:.1f} and {summary['last_stimulus']:.1f} ms"
+        f"{summary['first_stimulus']:.1f} and {summary['last_stimulus']:.1f} ms",
     )
     for name, root in summary["roots"].items():
         print(f"{name:25s} at {np.round(root['x'], 2)} after {root['delay']} ms")
@@ -184,7 +184,8 @@ model_path = Path("ToRORd_dynCl_endo.py")
 if not model_path.is_file():
     cell_ode = gotranx.load_ode(Path.cwd() / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
-        cell_ode, scheme=[gotranx.schemes.Scheme.generalized_rush_larsen]
+        cell_ode,
+        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
     )
     model_path.write_text(code)
 
@@ -249,7 +250,7 @@ if comm.rank == 0:
         print(
             f"k_l = {scales['longitudinal']:5.2f}, k_t = {scales['transverse']:5.2f}: "
             f"{velocities['longitudinal']:.3f} mm/ms along, "
-            f"{velocities['transverse']:.3f} mm/ms across the fibres"
+            f"{velocities['transverse']:.3f} mm/ms across the fibres",
         )
 conductivities = calibration.conductivities
 
@@ -339,7 +340,7 @@ delay = t_tissue[:n_owned][endo] - activation.activation_times.x.array[:n_owned]
 if comm.rank == 0:
     print(
         f"tissue minus endocardial time on the stimulated endocardium: "
-        f"median {np.nanmedian(delay):.2f} ms, max {np.nanmax(delay):.2f} ms"
+        f"median {np.nanmedian(delay):.2f} ms, max {np.nanmax(delay):.2f} ms",
     )
 
 grid.point_data["t_a"] = t_tissue

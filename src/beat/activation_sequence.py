@@ -81,7 +81,7 @@ class RootSite:
             raise ValueError(f"surface must be 'LV' or 'RV', got {self.surface!r}")
         if isinstance(self.position, str) and self.position not in ("septal", "free"):
             raise ValueError(
-                f"position must be an angle, 'septal' or 'free', got {self.position!r}"
+                f"position must be an angle, 'septal' or 'free', got {self.position!r}",
             )
         if not 0.0 <= self.height <= 1.0:
             raise ValueError(f"height must be between 0 and 1, got {self.height}")
@@ -139,7 +139,9 @@ def _global_mean(comm: MPI.Comm, x: npt.NDArray[np.float64]) -> npt.NDArray[np.f
 
 
 def _global_plane_normal(
-    comm: MPI.Comm, x: npt.NDArray[np.float64], center: npt.NDArray[np.float64]
+    comm: MPI.Comm,
+    x: npt.NDArray[np.float64],
+    center: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
     """Unit normal of the least-squares plane through the points ``x`` (on all ranks) and
     ``center``, their global mean"""
@@ -431,7 +433,7 @@ class EndocardialActivation:
             raise ValueError("Give at least one root site")
         if self.stimulated_cells not in ("facet", "vertex"):
             raise ValueError(
-                f"stimulated_cells must be 'facet' or 'vertex', got {self.stimulated_cells!r}"
+                f"stimulated_cells must be 'facet' or 'vertex', got {self.stimulated_cells!r}",
             )
         self.frame = HeartFrame.from_facet_tags(
             self.mesh,
@@ -528,7 +530,9 @@ class EndocardialActivation:
         t = dolfinx.fem.Function(self._V, name="endocardial_activation_time")
         t.x.array[:] = FAR
         t.x.array[_vertex_to_dof(self._V)[parent_vertex]] = np.where(
-            np.isfinite(t_values), t_values, FAR
+            np.isfinite(t_values),
+            t_values,
+            FAR,
         )
         # A vertex that is ghosted on a rank where its endocardial facets are not local gets its
         # value from the ranks where they are: the minimum over all copies
@@ -614,7 +618,8 @@ class EndocardialActivation:
         )
         t_on = self.cell_activation_times + start
         overlap = ufl.min_value(time + dt_c / 2, t_on + duration) - ufl.max_value(
-            time - dt_c / 2, t_on
+            time - dt_c / 2,
+            t_on,
         )
         expr = amp * ufl.max_value(overlap, 0.0) / dt_c
         return Stimulus(expr=expr, dZ=ufl.Measure("dx", domain=self.mesh))
@@ -631,10 +636,10 @@ class EndocardialActivation:
             },
             "num_stimulated_cells": int(comm.allreduce(len(finite), op=MPI.SUM)),
             "first_stimulus": float(
-                comm.allreduce(finite.min() if len(finite) else np.inf, op=MPI.MIN)
+                comm.allreduce(finite.min() if len(finite) else np.inf, op=MPI.MIN),
             ),
             "last_stimulus": float(
-                comm.allreduce(finite.max() if len(finite) else -np.inf, op=MPI.MAX)
+                comm.allreduce(finite.max() if len(finite) else -np.inf, op=MPI.MAX),
             ),
             "frame": {
                 "apex": self.frame.apex.tolist(),

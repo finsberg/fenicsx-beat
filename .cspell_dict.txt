@@ -336,3 +336,5 @@ hoetzl
 prassl
 mendonca
 discretised
+eigh
+polyfit

@@ -36,6 +36,16 @@ def owned(u):
     return u.x.array[: u.function_space.dofmap.index_map.size_local]
 
 
+def longest_endocardial_edge(geo):
+    mesh = geo.mesh
+    mesh.topology.create_connectivity(mesh.topology.dim - 1, 0)
+    facets = np.concatenate([geo.ffun.find(geo.markers[k][0]) for k in ("LV", "RV")])
+    nodes = dolfinx.mesh.entities_to_geometry(mesh, mesh.topology.dim - 1, facets.astype(np.int32))
+    p = mesh.geometry.x[nodes]  # (facet, vertex, xyz)
+    edges = np.linalg.norm(p - np.roll(p, 1, axis=1), axis=2)
+    return MPI.COMM_WORLD.allreduce(float(edges.max(initial=0.0)), op=MPI.MAX)
+
+
 def total(form):
     return MPI.COMM_WORLD.allreduce(dolfinx.fem.assemble_scalar(dolfinx.fem.form(form)), op=MPI.SUM)
 
@@ -70,7 +80,10 @@ def test_heart_frame(geo):
     # anterior_point fixes the sign of the anterior direction
     for sign in (1, -1):
         f = HeartFrame.from_facet_tags(
-            geo.mesh, geo.ffun, anterior_point=[0, 5 * sign, 0], **kwargs
+            geo.mesh,
+            geo.ffun,
+            anterior_point=[0, 5 * sign, 0],
+            **kwargs,
         )
         assert f.anterior @ [0, sign, 0] > 0.9
 
@@ -110,16 +123,38 @@ def test_activation_times(act, geo):
         [geo.markers["LV"][0], geo.markers["RV"][0]],
     )
     assert np.isin(np.flatnonzero(finite), endo).all()
-    # A geodesic is at least as long as the straight line, so no vertex is activated earlier
-    # than the straight-line bound from the root sites, and the root sites at their delays
+    # No vertex is activated much earlier than the straight-line bound from the root sites. The
+    # bound is the minimum of one cone per root site, which is not convex: on an edge across the
+    # line where two fronts meet, the linear interpolation of the eikonal update dips below it
+    # by a fraction of h / SPEED (the bound is exact for one root site, see below)
     roots = list(act.roots.values())
     bound = np.min([r["delay"] + np.linalg.norm(x - r["x"], axis=1) / SPEED for r in roots], axis=0)
-    assert (owned(t)[finite] >= bound[finite] - 1e-8).all()
+    h_max = longest_endocardial_edge(geo)
+    assert (owned(t)[finite] >= bound[finite] - 0.25 * h_max / SPEED).all()
     for r in roots:
         at_root = np.linalg.norm(x - r["x"], axis=1) < 1e-10
         assert np.allclose(owned(t)[at_root], r["delay"])
     assert sorted(act.roots) == sorted(DURRER_ROOT_SITES)
     assert {r["delay"] for r in roots} == {0.0, 5.0}
+
+
+@pytest.mark.parametrize("name", ["LV mid-septal", "RV free wall"])
+def test_activation_times_single_root(geo, name):
+    # From one root site the distance is convex and a geodesic is at least as long as the
+    # straight line, so no vertex is activated earlier than the straight-line bound
+    act = EndocardialActivation.from_geometry(
+        geo,
+        mesh_unit="cm",
+        conduction_velocity=SPEED,
+        root_sites={name: DURRER_ROOT_SITES[name]},
+    )
+    t = act.activation_times
+    x = t.function_space.tabulate_dof_coordinates()[: len(owned(t))]
+    finite = np.isfinite(owned(t))
+    assert MPI.COMM_WORLD.allreduce(int(finite.sum()), op=MPI.SUM) > 0
+    r = act.roots[name]
+    bound = r["delay"] + np.linalg.norm(x - r["x"], axis=1) / SPEED
+    assert (owned(t)[finite] >= bound[finite] - 1e-8).all()
 
 
 def test_cell_times_are_the_earliest_endocardial_vertex(act):
@@ -152,10 +187,14 @@ def test_unreached_surface_is_not_stimulated(geo):
             root_sites=lv_only,
         )
     rv = beat.activation_sequence._surface_dofs(
-        a.activation_times.function_space, geo.ffun, [geo.markers["RV"][0]]
+        a.activation_times.function_space,
+        geo.ffun,
+        [geo.markers["RV"][0]],
     )
     lv = beat.activation_sequence._surface_dofs(
-        a.activation_times.function_space, geo.ffun, [geo.markers["LV"][0]]
+        a.activation_times.function_space,
+        geo.ffun,
+        [geo.markers["LV"][0]],
     )
     rv_only = np.setdiff1d(rv, lv)
     assert not np.isfinite(a.activation_times.x.array[rv_only]).any()
@@ -200,7 +239,8 @@ def test_stimulus_amplitude_units(act, geo):
         s = act.stimulus(time, 0.1, **kwargs)
         time.value = 0.5
         values = dolfinx.fem.Expression(s.expr, np.zeros((1, 3))).eval(
-            geo.mesh, first[:1].astype(np.int32)
+            geo.mesh,
+            first[:1].astype(np.int32),
         )
         return MPI.COMM_WORLD.allreduce(float(np.max(values)) if len(values) else 0.0, op=MPI.MAX)
 
