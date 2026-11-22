@@ -22,6 +22,7 @@ parts:
     - file: demos/pace_train.py
     - file: demos/biv_endocardial.py
     - file: demos/ukb_atlas.py
+    - file: demos/durrer_activation.py
     - file: demos/spiral_wave.py
     - file: demos/spiral_wave_breakup.py
     - file: demos/eikonal.py

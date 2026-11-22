@@ -164,7 +164,11 @@ phi_e = record()["P_E"]
 | `WedgeGeometry` | the Neic 2017 transmural wedge: a `Geometry`, cell tags, stimulus sites, electrode | wraps `Geometry` | the wedge demos, [eikonal](../demos/eikonal.py) |
 | `WedgeBathGeometry` | the wedge inside a bath box: a `Geometry`, tissue/bath cell tags, margins | wraps `Geometry` | [electrograms](../demos/reaction_eikonal_wedge_electrograms.py) |
 | `Stimulus` | a stimulus current with its measure (`define_stimulus` builds one) | `NamedTuple` | most demos |
+| `EndocardialActivation` | a Purkinje-like endocardial activation sequence on a BiV mesh: root sites (Durrer by default) spreading over the endocardium (surface eikonal), and the `Stimulus` that fires each endocardial cell when the wave arrives | uses `EikonalSolver`; returns a `Stimulus` | [Durrer activation](../demos/durrer_activation.py) |
+| `HeartFrame` | apex, long axis, septal and anterior directions of a BiV mesh; height/angle/radius coordinates | dataclass | [Durrer activation](../demos/durrer_activation.py) |
+| `RootSite` | an early activation site: surface, height, angle (or septal/free wall), delay | dataclass | [Durrer activation](../demos/durrer_activation.py) |
 | `Conductivities` | longitudinal and transverse conductivity (`get_harmonic_mean_conductivity`) | `NamedTuple` | — |
+| `CalibrationResult` | conductivities scaled so that a plane wave on a slab of the simulation's mesh size and time step travels at target velocities (`calibrate_conductivities`; `measure_conduction_velocity` measures one) | dataclass; runs `MonodomainModel` + `SplittingSolver` on a slab | [Durrer activation](../demos/durrer_activation.py) |
 
 ### Telemetry and single cell
 

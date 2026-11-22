@@ -46,6 +46,9 @@ FEniCSx-Beat
 .. automodule:: beat.activation
     :members:
 
+.. automodule:: beat.activation_sequence
+    :members:
+
 .. automodule:: beat.geometry
     :members:
 
@@ -59,6 +62,9 @@ FEniCSx-Beat
     :members:
 
 .. automodule:: beat.conductivities
+    :members:
+
+.. automodule:: beat.conduction_velocity
     :members:
 
 .. automodule:: beat.telemetry
