@@ -371,6 +371,12 @@ has taken over. The time window follows the openCARP implementation, which start
 $t_a$; Eq. 27 of {cite}`neic2017efficient` states the window $[t_a - T_{foot}, t_a]$ instead,
 which contradicts the paper's own appendix.
 
+For several beats, `FootCurrentODESolver(..., period=P)` fires the foot again at
+$t_a + kP$, $k = 0, 1, \dots$, i.e. it evaluates the window at $(t - t_a) \bmod P$ once
+$t \ge t_a$. The eikonal problem is solved once and its trigger re-fired each beat, with the ionic
+states continuous across beats, as in reaction-eikonal electromechanics studies. $P$ must exceed
+$T_{foot}$.
+
 The foot current enters the model in one of two ways:
 
 - **R-E$^+$** keeps diffusion. Each step solves the monodomain model of Section 4, without

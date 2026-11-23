@@ -221,3 +221,105 @@ def test_wrapper_exposes_the_wrapped_solver_but_forwards_nothing_else(V):
     assert ode.v_pde is inner.v_pde
     with pytest.raises(AttributeError):
         ode.full_values
+
+
+def test_period_none_is_unchanged(V):
+    a = FootCurrentODESolver(make_ode(V), constant(V, 0.5))
+    b = FootCurrentODESolver(make_ode(V), constant(V, 0.5), period=None)
+    t, dt = 0.0, 0.01
+    for _ in range(300):
+        a.step(t, dt)
+        b.step(t, dt)
+        t += dt
+    assert np.array_equal(a.v_ode.x.array, b.v_ode.x.array)
+
+
+def test_foot_fires_every_period(V):
+    t_a, P = 0.5, 10.0
+    ode = FootCurrentODESolver(make_ode(V), constant(V, t_a), period=P)
+    n = V.dofmap.index_map.size_local + V.dofmap.index_map.num_ghosts
+    v = np.full(n, -85.0)
+    dt = 0.01
+    seen = {}
+    for i in range(2500):
+        t = i * dt
+        if i in (800, 1800):
+            ode.v_ode.x.array[:] = -85.0
+            ode.from_dolfin()
+            v[:] = -85.0
+        ode.step(t, dt)
+        v = v + dt * ExponentialFoot().rate(np.mod(t + dt - t_a, P), v)
+        np.testing.assert_allclose(ode.v_ode.x.array, v, rtol=0, atol=1e-12)
+        for probe in (600, 1600, 2499):
+            if i == probe:
+                seen[probe] = ode.v_ode.x.array.copy()
+    for probe in (600, 1600, 2499):
+        assert (seen[probe] >= -30.0).all()
+
+
+def test_never_fires_before_t_a(V):
+    ode = FootCurrentODESolver(
+        make_ode(V),
+        constant(V, 5.0),
+        ExponentialFoot(duration=1.0),
+        period=2.0,
+    )
+    t, dt = 0.0, 0.01
+    while t + dt < 5.0 - 1e-9:
+        ode.step(t, dt)
+        t += dt
+        assert (ode.v_ode.x.array == -85.0).all()
+    for _ in range(200):
+        ode.step(t, dt)
+        t += dt
+    assert (ode.v_ode.x.array > -85.0).all()
+
+
+def test_unreached_never_fires_with_period(V):
+    t_a = constant(V, 0.0)
+    x = V.tabulate_dof_coordinates()
+    t_a.x.array[x[:, 0] > 0.5] = np.inf
+    ode = FootCurrentODESolver(make_ode(V), t_a, allow_unreached=True, period=10.0)
+    t, dt = 0.0, 0.01
+    for _ in range(1500):
+        ode.step(t, dt)
+        t += dt
+    assert (ode.v_ode.x.array[x[:, 0] > 0.5] == -85.0).all()
+    assert (ode.v_ode.x.array[x[:, 0] < 0.4] > -85.0).all()
+
+
+def test_period_must_exceed_duration(V):
+    with pytest.raises(ValueError, match="period"):
+        FootCurrentODESolver(make_ode(V), constant(V, 0.0), period=5.0)
+    with pytest.raises(ValueError, match="period"):
+        FootCurrentODESolver(make_ode(V), constant(V, 0.0), period=0.0)
+    markers = constant(V, 1.0)
+    with pytest.raises(ValueError, match="period"):
+        FootCurrentODESolver(
+            make_ode(V),
+            constant(V, 0.0),
+            {1: ExponentialFoot(duration=1.0), 2: ExponentialFoot(duration=4.0)},
+            markers,
+            period=3.0,
+        )
+
+
+def test_re_minus_restart_with_period_is_bit_for_bit(V):
+    def build():
+        return beat.SplittingSolver(
+            pde=None,
+            ode=FootCurrentODESolver(make_ode(V), constant(V, 0.0), period=10.0),
+        )
+
+    a = build()
+    a.solve((0.0, 0.5), dt=0.125)
+    saved = [f.x.array.copy() for _, f in a.restart_functions(["v"])]
+    b = build()
+    functions = b.restart_functions(["v"])
+    for (_, f), arr in zip(functions, saved):
+        f.x.array[:] = arr
+    b.load_restart(functions, a.restart_metadata())
+    a.solve((0.5, 1.0), dt=0.125)
+    b.solve((0.5, 1.0), dt=0.125)
+    assert np.array_equal(a.v.x.array, b.v.x.array)
+    assert not np.array_equal(a.v.x.array, constant(V, -85.0).x.array)

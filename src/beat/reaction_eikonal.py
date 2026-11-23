@@ -102,6 +102,13 @@ class FootCurrentODESolver:
         Region markers on ``v_ode``'s space (required with a mapping ``foot``)
     allow_unreached : bool, optional
         Allow non-finite ``t_a`` (no foot there) instead of raising, by default False
+    period : float | None, optional
+        If given, the foot fires again every ``period`` (ms): from ``t_a`` on, the foot sees
+        ``(t1 - t_a) mod period`` instead of ``t1 - t_a``, i.e. it fires at ``t_a + k * period``.
+        This is how reaction-eikonal electromechanics studies run several beats (the eikonal
+        problem is solved once and its trigger is re-fired each beat, the ionic states being
+        continuous). Nothing fires before ``t_a`` and nothing where ``t_a`` is not finite.
+        Must be positive and exceed every foot's ``duration``. By default None (fires once)
     """
 
     def __init__(
@@ -111,6 +118,7 @@ class FootCurrentODESolver:
         foot: ExponentialFoot | Mapping[int, ExponentialFoot] = ExponentialFoot(),
         markers: dolfinx.fem.Function | None = None,
         allow_unreached: bool = False,
+        period: float | None = None,
     ) -> None:
         self.ode = ode
         v_ode: dolfinx.fem.Function = ode.v_ode
@@ -152,6 +160,20 @@ class FootCurrentODESolver:
                     "Some marker values do not match an integer key of the foot mapping exactly",
                 )
         self._A, self._tau_F, self._V_th, self._duration = params
+        if period is not None:
+            longest = float(comm.allreduce(float(np.max(self._duration, initial=0.0)), op=MPI.MAX))
+            if not period > 0.0:
+                raise ValueError(f"period must be positive, got {period}")
+            if isinstance(foot, ExponentialFoot):
+                durations = [foot.duration]
+            else:
+                durations = [f.duration for f in foot.values()]
+            if max(durations + [longest]) >= period:
+                raise ValueError(
+                    f"period ({period}) must exceed every foot's duration "
+                    f"(longest is {max(durations + [longest])})",
+                )
+        self._period = period
 
     @property
     def v_ode(self) -> dolfinx.fem.Function:
@@ -183,8 +205,14 @@ class FootCurrentODESolver:
         self.ode.step(t0, dt)
         self.ode.to_dolfin()
         v = self.v_ode.x.array
+        dT = t0 + dt - self._t_a
+        if self._period is not None:
+            # Only where the foot has started and t_a is finite (inf, nan: no foot)
+            fired = np.isfinite(self._t_a) & (dT >= 0.0)
+            dT = dT.copy()
+            dT[fired] = np.mod(dT[fired], self._period)
         v += dt * exponential_foot_rate(
-            t0 + dt - self._t_a,
+            dT,
             v,
             self._A,
             self._tau_F,
