@@ -33,6 +33,10 @@ model and notation used throughout, then work through the
 - [Purkinje like stimulation of a realistic BiV geometry](ukb_atlas.py) — a realistic bi-ventricular
   geometry from a UK Biobank atlas, stimulated at many random endocardial points to mimic activation
   via the Purkinje network.
+- [A Durrer-like activation sequence on a Bi-ventricular ellipsoid](durrer_activation.py) —
+  `beat.activation_sequence.EndocardialActivation`: the early activation sites of
+  {cite}`durrer1970total` spreading over the endocardium at a Purkinje-like speed, used as the
+  stimulus of a monodomain simulation.
 - [Spiral wave in a 2D sheet of human ventricular tissue](spiral_wave.py) — a single re-entrant
   spiral wave in the ten Tusscher–Panfilov 2006 model {cite}`tentusscher2006alternans`, initiated with
   a cross-field S1–S2 protocol, with tracking of the meandering spiral tip.

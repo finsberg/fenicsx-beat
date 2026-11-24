@@ -2,9 +2,11 @@ from importlib.metadata import metadata
 
 from . import (
     activation,
+    activation_sequence,
     base_model,
     bidomain_model,
     c_backend,
+    conduction_velocity,
     conductivities,
     ecg,
     eikonal,
@@ -41,6 +43,8 @@ __program_name__ = meta["Name"]
 
 __all__ = [
     "activation",
+    "activation_sequence",
+    "conduction_velocity",
     "monodomain_model",
     "odesolver",
     "reaction_eikonal",
