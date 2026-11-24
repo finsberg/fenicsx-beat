@@ -257,6 +257,104 @@ def test_monodomain_splitting_temporal_convergence(splitting, odespace):
     assert cvg_rate > 1.0
 
 
+STRANG_MMS_ODE = """
+states(v=0, s=-0.5)
+dv_dt = -v - s
+ds_dt = v - s
+"""
+STRANG_MMS_SCHEMES = ["explicit_euler", "generalized_rush_larsen", "generalized_rush_larsen_2"]
+
+
+@pytest.fixture(scope="module")
+def strang_mms_module():
+    gotranx = pytest.importorskip("gotranx")
+    ode = gotranx.load.ode_from_string(STRANG_MMS_ODE, name="strang_mms")
+    code = gotranx.cli.gotran2py.get_code(
+        ode,
+        scheme=[gotranx.schemes.Scheme[s] for s in STRANG_MMS_SCHEMES],
+    )
+    module: dict = {}
+    exec(code, module)
+    return module
+
+
+def _strang_mms_final_v(module, scheme, splitting, dt, N=16, M=0.01, T=1.0):
+    """v at T for the manufactured solution v = phi sin t, s = phi (sin t - cos t) / 2.
+
+    s solves ds/dt = v - s exactly; the stimulus closes the v equation
+    dv/dt = M lap v + I_s - v - s.
+    """
+    comm = MPI.COMM_WORLD
+    mesh = dolfinx.mesh.create_unit_square(comm, N, N, dolfinx.cpp.mesh.CellType.triangle)
+    time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
+    x = ufl.SpatialCoordinate(mesh)
+    phi = ufl.cos(2 * ufl.pi * x[0]) * ufl.cos(2 * ufl.pi * x[1])
+    s_t = (ufl.sin(time) - ufl.cos(time)) / 2
+    I_s = phi * (ufl.cos(time) + ufl.sin(time) + s_t + 8 * ufl.pi**2 * M * ufl.sin(time))
+    pde = beat.MonodomainModel(time=time, mesh=mesh, M=M, I_s=I_s, params={"theta": 0.5})
+
+    V_ode = beat.utils.space_from_string("P_1", mesh, dim=1)
+    s0 = dolfinx.fem.Function(V_ode)
+    s0.interpolate(dolfinx.fem.Expression(phi * s_t, beat.utils.interpolation_points(V_ode)))
+    # gotranx orders the states alphabetically (s before v)
+    init_states = np.zeros((2, s0.x.array.size))
+    init_states[module["state_index"]("s")] = s0.x.array
+    ode = beat.odesolver.DolfinODESolver(
+        v_ode=dolfinx.fem.Function(V_ode),
+        v_pde=pde.state,
+        fun=module[scheme],
+        init_states=init_states,
+        parameters=module["init_parameter_values"](),
+        num_states=2,
+        v_index=module["state_index"]("v"),
+    )
+    beat.SplittingSolver(pde=pde, ode=ode, splitting=splitting).solve((0.0, T), dt=dt)
+    return pde.state
+
+
+def _rms_difference(a, b):
+    """Root-mean-square nodal difference over the owned dofs of all ranks."""
+    n = a.function_space.dofmap.index_map.size_local * a.function_space.dofmap.index_map_bs
+    d = a.x.array[:n] - b.x.array[:n]
+    comm = a.function_space.mesh.comm
+    return np.sqrt(comm.allreduce(np.sum(d**2), MPI.SUM) / comm.allreduce(n, MPI.SUM))
+
+
+@pytest.mark.parametrize(
+    ("scheme", "splitting", "second_order"),
+    [
+        ("generalized_rush_larsen_2", "strang", True),
+        ("generalized_rush_larsen", "strang", False),
+        ("explicit_euler", "strang", False),
+        ("generalized_rush_larsen_2", "godunov", False),
+    ],
+)
+def test_strang_splitting_second_order_with_gotranx_schemes(
+    strang_mms_module,
+    scheme,
+    splitting,
+    second_order,
+):
+    """Strang splitting is second order only with a second-order cell scheme.
+
+    The diffusion is weak (M = 0.01) on purpose: with M = 1 the PDE dominates the error and even
+    first-order cell schemes look second order. Errors are measured against a fine-dt reference
+    on the same mesh, so the spatial error cancels and a coarse mesh suffices.
+    """
+    ref = _strang_mms_final_v(strang_mms_module, scheme, splitting, dt=2.0**-10)
+    dts = [2.0**-k for k in range(2, 7)]
+    errors = [
+        _rms_difference(_strang_mms_final_v(strang_mms_module, scheme, splitting, dt), ref)
+        for dt in dts
+    ]
+    rate = np.mean(np.log2(np.array(errors[:-1]) / np.array(errors[1:])))
+    print(scheme, splitting, errors, rate)
+    if second_order:
+        assert rate >= 1.9
+    else:
+        assert rate < 1.5
+
+
 @pytest.mark.parametrize(
     "odespace",
     [
