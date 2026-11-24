@@ -173,7 +173,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
             num_states=2,
             v_index=0,
         )
-        solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
+        solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="godunov")
         solver.solve((t0, T), dt=dt)
 
         v_exact = v_exact_func(x, time)
@@ -187,7 +187,10 @@ def test_monodomain_splitting_spatial_convergence(odespace):
     assert cvg_rate > 1.85
 
 
-@pytest.mark.parametrize("theta", [1.0])  # Should also be implemented fro theta=0.5
+@pytest.mark.parametrize(
+    "splitting",
+    ["godunov"],
+)  # Strang: test_strang_splitting_second_order_with_gotranx_schemes
 @pytest.mark.parametrize(
     "odespace",
     [
@@ -196,7 +199,7 @@ def test_monodomain_splitting_spatial_convergence(odespace):
         "DG_1",
     ],
 )
-def test_monodomain_splitting_temporal_convergence(theta, odespace):
+def test_monodomain_splitting_temporal_convergence(splitting, odespace):
     M = 1.0
     T = 1.0
     t0 = 0.0
@@ -237,7 +240,7 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
             num_states=2,
             v_index=0,
         )
-        solver = beat.SplittingSolver(pde=pde, ode=ode, theta=theta)
+        solver = beat.SplittingSolver(pde=pde, ode=ode, splitting=splitting)
         solver.solve((t0, T), dt=dt)
         v_exact = v_exact_func(x, time)
 
@@ -248,7 +251,7 @@ def test_monodomain_splitting_temporal_convergence(theta, odespace):
     rates = [np.log2(e1 / e2) for e1, e2 in zip(errors[:-1], errors[1:])]
     cvg_rate = sum(rates) / len(rates)
 
-    print(rates, odespace, theta)
+    print(rates, odespace, splitting)
 
     # Should be 1
     assert cvg_rate > 1.0
@@ -414,7 +417,7 @@ def test_external_operator_monodomain_splitting_analytic(odespace):
 RESTART_DT = 0.01
 
 
-def build_restart_solver(theta):
+def build_restart_solver(splitting):
     mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8, dolfinx.cpp.mesh.CellType.triangle)
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
     x = ufl.SpatialCoordinate(mesh)
@@ -437,7 +440,7 @@ def build_restart_solver(theta):
         num_states=2,
         v_index=0,
     )
-    return beat.SplittingSolver(pde=pde, ode=ode, theta=theta)
+    return beat.SplittingSolver(pde=pde, ode=ode, splitting=splitting)
 
 
 def run_steps(solver, first, last):
@@ -445,14 +448,14 @@ def run_steps(solver, first, last):
         solver.step((i * RESTART_DT, (i + 1) * RESTART_DT))
 
 
-@pytest.mark.parametrize("theta", [1.0, 0.5])
-def test_restart_functions_restore_the_solver_bit_for_bit(theta):
-    a = build_restart_solver(theta)
+@pytest.mark.parametrize("splitting", ["godunov", "strang"])
+def test_restart_functions_restore_the_solver_bit_for_bit(splitting):
+    a = build_restart_solver(splitting)
     run_steps(a, 0, 3)
     saved = [(n, f.x.array.copy()) for n, f in a.restart_functions(["v", "s"])]
     assert np.any(saved[0][1] != 0.0)
 
-    b = build_restart_solver(theta)
+    b = build_restart_solver(splitting)
     functions = b.restart_functions(["v", "s"])
     for (_, f), (_, arr) in zip(functions, saved):
         f.x.array[:] = arr
@@ -466,18 +469,18 @@ def test_restart_functions_restore_the_solver_bit_for_bit(theta):
 
 
 def test_restart_function_names():
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     names = [n for n, _ in solver.restart_functions(["v", "s"])]
     assert names == ["v", "state_v", "state_s"]
 
 
 def test_restart_functions_hand_out_the_pde_potential_itself():
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     assert solver.restart_functions(["v", "s"])[0][1] is solver.pde.v
 
 
 def test_load_restart_refuses_other_names():
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     functions = solver.restart_functions(["v", "s"])
     with pytest.raises(ValueError, match="v"):
         solver.load_restart([("u", functions[0][1]), *functions[1:]])
@@ -486,12 +489,12 @@ def test_load_restart_refuses_other_names():
 
 
 def test_restart_metadata_round_trips_the_pde_timestep():
-    a = build_restart_solver(1.0)
+    a = build_restart_solver("godunov")
     run_steps(a, 3, 5)  # starts at 0.03: its dt is not the float 0.01
     metadata = a.restart_metadata()
     assert metadata["pde"]["timestep"] == float(a.pde._timestep.value)
 
-    b = build_restart_solver(1.0)
+    b = build_restart_solver("godunov")
     assert float(b.pde._timestep.value) != metadata["pde"]["timestep"]
     b.load_restart(b.restart_functions(["v", "s"]), metadata)
     assert float(b.pde._timestep.value) == metadata["pde"]["timestep"]
@@ -530,6 +533,60 @@ def test_new_name_does_not_warn():
         beat.SplittingSolver(pde=pde, ode=NullODESolver())
 
 
+def test_splitting_defaults_to_godunov_without_warning():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        solver = beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver())
+    assert solver.splitting == "godunov"
+    assert solver.theta == 1.0
+
+
+def test_strang_splitting_takes_half_an_ode_step_first():
+    solver = beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver(), splitting="strang")
+    assert solver.splitting == "strang"
+    assert solver.theta == 0.5
+
+
+def test_unknown_splitting_name_is_rejected():
+    with pytest.raises(ValueError, match="'godunov' or 'strang'"):
+        beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver(), splitting="lie")
+
+
+@pytest.mark.parametrize(("theta", "name"), [(1.0, "godunov"), (0.5, "strang")])
+def test_deprecated_theta_maps_to_a_splitting_name(theta, name):
+    with pytest.warns(DeprecationWarning, match=f"splitting={name!r}") as record:
+        solver = beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver(), theta=theta)
+    assert len(record) == 1
+    assert record[0].filename == __file__
+    assert solver.splitting == name
+    assert solver.theta == theta
+
+
+def test_deprecated_positional_theta_still_works():
+    with pytest.warns(DeprecationWarning, match="splitting='strang'"):
+        solver = beat.SplittingSolver(_small_pde(), NullODESolver(), 0.5)
+    assert solver.splitting == "strang"
+
+
+def test_deprecated_custom_theta_runs_and_warns_it_is_first_order():
+    with pytest.warns(DeprecationWarning, match="first order"):
+        solver = beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver(), theta=0.3)
+    assert solver.splitting is None
+    assert solver.theta == 0.3
+    solver.solve((0.0, 1.0), dt=0.5)
+
+
+def test_theta_and_splitting_together_is_an_error():
+    with pytest.raises(TypeError, match="not the deprecated theta"):
+        beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver(), theta=0.5, splitting="strang")
+
+
+@pytest.mark.parametrize("theta", [-0.1, 1.5])
+def test_theta_outside_unit_interval_is_rejected(theta):
+    with pytest.raises(ValueError, match=r"\[0, 1\]"):
+        beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver(), theta=theta)
+
+
 class RecordingMonitor(beat.BaseMonitor):
     def __init__(self):
         self.names, self.steps = [], []
@@ -549,7 +606,7 @@ class RecordingMonitor(beat.BaseMonitor):
 ODE_ONLY_DT = 0.125  # a power of two, so t1 - t0 == dt exactly
 
 
-def build_ode_only(theta=1.0, monitor=None):
+def build_ode_only(splitting="godunov", monitor=None):
     """A pde=None solver over a 2-state forward-Euler ODE on P1, and its initial states"""
     mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8, dolfinx.cpp.mesh.CellType.triangle)
     V = dolfinx.fem.functionspace(mesh, ("P", 1))
@@ -567,11 +624,11 @@ def build_ode_only(theta=1.0, monitor=None):
         v_index=0,
     )
     kwargs = {} if monitor is None else {"monitor": monitor}
-    return beat.SplittingSolver(pde=None, ode=ode, theta=theta, **kwargs), init_states
+    return beat.SplittingSolver(pde=None, ode=ode, splitting=splitting, **kwargs), init_states
 
 
 def test_splitting_solver_v_is_the_pde_potential():
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     assert solver.v is solver.pde.v
 
 
@@ -597,9 +654,9 @@ def test_ode_only_solve_matches_stepping_the_ode_alone():
     assert not np.array_equal(solver.v.x.array, init[0])
 
 
-def test_ode_only_ignores_theta():
-    a, _ = build_ode_only(theta=1.0)
-    b, _ = build_ode_only(theta=0.5)
+def test_ode_only_ignores_splitting():
+    a, _ = build_ode_only(splitting="godunov")
+    b, _ = build_ode_only(splitting="strang")
     a.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
     b.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
     assert np.array_equal(a.ode.values, b.ode.values)
@@ -653,7 +710,7 @@ def test_ode_only_refuses_pde_metadata_without_touching_anything():
 def test_restart_refuses_a_checkpoint_saved_without_a_pde_without_touching_anything():
     saved_by, _ = build_ode_only()
     metadata = saved_by.restart_metadata()
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     v_before = solver.v.x.array.copy()
     values_before = solver.ode.values.copy()
     # Same mesh and P1 spaces, so every Function fits: only the metadata can tell them apart
@@ -674,14 +731,14 @@ def test_ode_only_refuses_a_checkpoint_saved_with_a_pde():
 
 def test_load_restart_accepts_metadata_without_has_pde():
     """Checkpoints written before ``has_pde`` existed only carry the PDE's metadata"""
-    a = build_restart_solver(1.0)
+    a = build_restart_solver("godunov")
     run_steps(a, 0, 2)
-    b = build_restart_solver(1.0)
+    b = build_restart_solver("godunov")
     b.load_restart(b.restart_functions(["v", "s"]), {"pde": a.restart_metadata()["pde"]})
 
 
 def test_load_restart_refuses_a_v_of_another_size_on_every_rank():
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     functions = solver.restart_functions(["v", "s"])
     coarse = dolfinx.mesh.create_unit_square(
         MPI.COMM_WORLD,
@@ -705,7 +762,7 @@ def test_monitor_none_means_no_monitoring():
 
 
 def test_solve_with_a_dt_longer_than_the_interval_raises():
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     with pytest.raises(ValueError, match="longer than"):
         solver.solve((0.0, 0.01), 0.02)
     with pytest.raises(ValueError, match="longer than"):
@@ -713,7 +770,7 @@ def test_solve_with_a_dt_longer_than_the_interval_raises():
 
 
 def test_base_model_solve_steps_match_time_steps():
-    solver = build_restart_solver(1.0)
+    solver = build_restart_solver("godunov")
     seen = []
     step = solver.pde.step
     solver.pde.step = lambda interval: (seen.append(interval), step(interval))[1]

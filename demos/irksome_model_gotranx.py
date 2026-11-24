@@ -200,7 +200,7 @@ pde = IrksomeMonodomainModel(
 # plain-numpy `fun` expected by `DolfinODESolver`), so we wrap the gotranx-generated `ms_ufl.rhs` to
 # match the `fun(states, t, parameters)` signature Irksome expects. We build `pde` first so that its
 # state can be passed directly as `v_pde` here, combining the two into the usual splitting solver —
-# `theta=1.0` selects Godunov splitting, matching the first-order `BackwardEuler` tableau used for both
+# `splitting="godunov"` selects Godunov splitting, matching the first-order `BackwardEuler` tableau used for both
 # sub-steps.
 
 ode_tableau = irksome.BackwardEuler()
@@ -222,7 +222,7 @@ ode = IrksomeODESolver(
     parameters=default_params,
 )
 
-solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
+solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="godunov")
 
 # ## Time stepping
 #

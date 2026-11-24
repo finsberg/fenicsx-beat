@@ -117,7 +117,7 @@ def main():
                         num_states=2,
                         v_index=0,
                     )
-                    solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
+                    solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="godunov")
                     solver.solve((t0, T), dt=dt)
 
                     v_exact = v_exact_func(x, T)
