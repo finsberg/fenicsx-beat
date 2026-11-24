@@ -1,5 +1,6 @@
 # Niederer et al. (2011) benchmark: cuboid slab, corner stimulus, ten Tusscher-Panfilov 2006.
-# Equivalent to demos/niederer_benchmark.py.
+# Matches demos/niederer_benchmark.py except that it uses second-order Strang splitting with
+# generalized_rush_larsen_2 (the demo: Godunov with generalized_rush_larsen).
 
 [geometry]
 type = "box_slab"          # structured tetrahedral box, no gmsh needed

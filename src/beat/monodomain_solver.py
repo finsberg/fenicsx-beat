@@ -2,7 +2,7 @@ import logging
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, ClassVar, Literal, Protocol
 
 from mpi4py import MPI
 
@@ -102,6 +102,9 @@ class SplittingSolver:
     monitor: BaseMonitor = field(default_factory=NullMonitor)
     splitting: Literal["godunov", "strang"] | None = None
 
+    # frames up to the caller; subclasses with an extra __post_init__ frame add one
+    _theta_warning_stacklevel: ClassVar[int] = 4
+
     def __post_init__(self) -> None:
         self._resolve_splitting()
         if self.monitor is None:
@@ -135,7 +138,8 @@ class SplittingSolver:
         warnings.warn(
             f"SplittingSolver(theta=...) is deprecated; {hint}",
             DeprecationWarning,
-            stacklevel=4,  # _resolve_splitting -> __post_init__ -> dataclass __init__ -> caller
+            # default 4: _resolve_splitting -> __post_init__ -> dataclass __init__ -> caller
+            stacklevel=self._theta_warning_stacklevel,
         )
         self.splitting = name  # type: ignore[assignment]
         self.theta = theta
@@ -310,6 +314,8 @@ class SplittingSolver:
 
 class MonodomainSplittingSolver(SplittingSolver):
     """Deprecated name of :class:`SplittingSolver` (same arguments and behaviour)."""
+
+    _theta_warning_stacklevel: ClassVar[int] = 5
 
     def __post_init__(self) -> None:
         warnings.warn(

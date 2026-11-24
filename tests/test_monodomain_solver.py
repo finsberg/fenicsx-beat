@@ -624,6 +624,13 @@ def test_old_name_warns_at_the_call_site_and_still_works():
     solver.solve((0.0, 1.0), dt=0.5)
 
 
+def test_old_name_theta_warning_points_at_the_call_site():
+    with pytest.warns(DeprecationWarning) as record:
+        beat.MonodomainSplittingSolver(pde=_small_pde(), ode=NullODESolver(), theta=0.5)
+    assert len(record) == 2
+    assert all(w.filename == __file__ for w in record)
+
+
 def test_new_name_does_not_warn():
     pde = _small_pde()
     with warnings.catch_warnings():

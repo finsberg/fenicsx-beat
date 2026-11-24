@@ -307,7 +307,7 @@ def test_deprecated_solver_theta_maps_to_splitting(tmp_path, caplog, theta, name
     conf = Config.model_validate(data)
     assert conf.solver.splitting == name
     assert "solver.theta is deprecated" in caplog.text
-    assert "theta" not in conf.solver.model_dump()
+    assert "theta" not in conf.solver.model_dump(mode="json")
 
 
 def test_deprecated_solver_theta_other_value_is_rejected(tmp_path):

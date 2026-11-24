@@ -48,7 +48,7 @@ API:
 | $C_m$ | Membrane capacitance (per unit area) | `C_m` argument to `beat.MonodomainModel` |
 | $I_{ion}(v, s)$ | Total ionic current density through the membrane | Right-hand side of the cell model (`fun`) |
 | $I_{stim}$ | Externally applied stimulus current | `beat.Stimulus` / `I_s` |
-| $\theta$ | Time-stepping parameter of the PDE $\theta$-rule, $\theta \in [0, 1]$ | `parameters["theta"]` of the PDE model |
+| $\theta$ | Time-stepping parameter of the PDE $\theta$-rule, $\theta \in [0, 1]$ | `params["theta"]` of the PDE model |
 | $t_a$ | Local activation time | Output of `beat.eikonal.solve_eikonal`, `t_a` argument to `beat.reaction_eikonal.FootCurrentODESolver` |
 | $c_f$, $c_s$, $c_n$ | Conduction velocities along the fiber, sheet and sheet-normal directions | `velocities` argument to `beat.eikonal.EikonalSolver` |
 | $\mathcal{V}$ | Velocity tensor of the eikonal equation | Built from `velocities` and `fibers` |
