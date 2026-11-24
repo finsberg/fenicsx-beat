@@ -41,7 +41,7 @@ start = "0 ms"
 
 [solver]
 dt = "0.1 ms"
-theta = 1.0                  # Godunov splitting, matching the first-order tableau
+splitting = "godunov"         # first order, matching the first-order tableau
 end_time = "2 ms"
 pde = { type = "irksome", tableau = "RadauIIA", stages = 1 }
 ode = { type = "irksome", tableau = "RadauIIA", stages = 1 }

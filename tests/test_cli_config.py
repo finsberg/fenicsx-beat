@@ -287,3 +287,36 @@ def test_postprocess_ecg_potential_reference_without_leads(tmp_path):
 
 def test_postprocess_ecg_default_none(tmp_path):
     assert _load_with_postprocess(tmp_path, {}).postprocess.ecg is None
+
+
+def test_splitting_defaults_to_godunov(tmp_path):
+    assert Config.model_validate(base(tmp_path)).solver.splitting == "godunov"
+
+
+def test_splitting_strang(tmp_path):
+    data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "splitting": "strang"})
+    assert Config.model_validate(data).solver.splitting == "strang"
+
+
+@pytest.mark.parametrize(("theta", "name"), [(1.0, "godunov"), (0.5, "strang"), (1, "godunov")])
+def test_deprecated_solver_theta_maps_to_splitting(tmp_path, caplog, theta, name):
+    data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "theta": theta})
+    conf = Config.model_validate(data)
+    assert conf.solver.splitting == name
+    assert "solver.theta is deprecated" in caplog.text
+    assert "theta" not in conf.solver.model_dump()
+
+
+def test_deprecated_solver_theta_other_value_is_rejected(tmp_path):
+    data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "theta": 0.3})
+    with pytest.raises(ValidationError, match="only 1.0 \\(godunov\\) and 0.5 \\(strang\\)"):
+        Config.model_validate(data)
+
+
+def test_solver_theta_and_splitting_together_is_rejected(tmp_path):
+    data = base(
+        tmp_path,
+        solver={"dt": "0.1 ms", "end_time": "1 ms", "theta": 0.5, "splitting": "strang"},
+    )
+    with pytest.raises(ValidationError, match="not the deprecated `theta`"):
+        Config.model_validate(data)

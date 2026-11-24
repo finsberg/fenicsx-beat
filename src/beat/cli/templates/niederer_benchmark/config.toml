@@ -30,7 +30,7 @@ start = "0 ms"
 
 [solver]
 dt = "0.05 ms"
-theta = 0.5
+splitting = "strang"
 end_time = "150 ms"
 
 [output]

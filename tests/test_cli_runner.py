@@ -79,15 +79,21 @@ def _final_v(conf):
     return v
 
 
-@pytest.mark.parametrize("theta", [1.0, 0.5])
-def test_restart_matches_continuous_run(tmp_path, theta):
+@pytest.mark.parametrize("splitting", ["godunov", "strang"])
+def test_restart_matches_continuous_run(tmp_path, splitting):
     full = load_config(
-        write_cfg(tmp_path / "a", solver={"dt": "0.1 ms", "end_time": "0.6 ms", "theta": theta}),
+        write_cfg(
+            tmp_path / "a",
+            solver={"dt": "0.1 ms", "end_time": "0.6 ms", "splitting": splitting},
+        ),
         environ={},
     )
     run(full)
     part = load_config(
-        write_cfg(tmp_path / "b", solver={"dt": "0.1 ms", "end_time": "0.3 ms", "theta": theta}),
+        write_cfg(
+            tmp_path / "b",
+            solver={"dt": "0.1 ms", "end_time": "0.3 ms", "splitting": splitting},
+        ),
         environ={},
     )
     run(part)

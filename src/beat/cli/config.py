@@ -4,6 +4,7 @@ This module must not import dolfinx: it is used by ``beat validate-config`` and 
 tests. Everything with a physical unit is a pint quantity (``"<value> <unit>"`` in TOML).
 """
 
+import logging
 import math
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Union
@@ -14,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic_pint import PydanticPintQuantity, set_registry
 
 from ..units import ureg
+
+logger = logging.getLogger(__name__)
 
 # Share beat's registry so config quantities combine with quantities created elsewhere in beat.
 set_registry(ureg)
@@ -463,7 +466,11 @@ ODEBackendConfig = Annotated[
 
 class SolverConfig(_Base):
     dt: Time = Field(default_factory=lambda: _q("0.05 ms"))
-    theta: float = Field(default=1.0, ge=0, le=1, description="Splitting: 1.0 Godunov, 0.5 Strang")
+    splitting: Literal["godunov", "strang"] = Field(
+        default="godunov",
+        description="Operator splitting: 'godunov' (first order) or 'strang' (second order with "
+        "a second-order cell.scheme and solver.pde.theta = 0.5)",
+    )
     end_time: Time | None = Field(
         default=None,
         description="Simulated end time. Give either this or num_beats and BCL",
@@ -481,6 +488,28 @@ class SolverConfig(_Base):
     pde: PDEConfig = Field(default_factory=ThetaPDE)
     ode: ODEBackendConfig = Field(default_factory=DolfinODE)
     petsc_options: dict[str, str | int | float | bool] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _deprecated_theta(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or "theta" not in data:
+            return data
+        data = dict(data)
+        theta = data.pop("theta")
+        if "splitting" in data:
+            raise ValueError("solver: give `splitting`, not the deprecated `theta` as well")
+        names = {1.0: "godunov", 0.5: "strang"}
+        try:
+            data["splitting"] = names[float(theta)]
+        except (KeyError, TypeError, ValueError):
+            raise ValueError(
+                "solver.theta is deprecated; only 1.0 (godunov) and 0.5 (strang) are supported; "
+                "use solver.splitting",
+            ) from None
+        logger.warning(
+            f"solver.theta is deprecated; use solver.splitting = {data['splitting']!r}",
+        )
+        return data
 
     @model_validator(mode="after")
     def _check_end(self) -> "SolverConfig":

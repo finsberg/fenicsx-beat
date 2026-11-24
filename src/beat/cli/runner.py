@@ -278,7 +278,7 @@ def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulat
     solver = SplittingSolver(
         pde=pde,
         ode=ode,
-        theta=conf.solver.theta,
+        splitting=conf.solver.splitting,
         monitor=monitor or NullMonitor(),
     )
     return Simulation(conf, geo, time, pde, ode, solver, cell, stimuli, V_ode)

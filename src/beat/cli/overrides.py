@@ -249,6 +249,9 @@ def physics_hash(conf: Config) -> str:
         exclude={"output": True, "postprocess": True, "solver": {"end_time", "num_beats", "BCL"}},
     )
     data["cell"]["ode_file"] = file_hash(conf.cell.ode_file)
+    # beat <= 0.12 stored the splitting as solver.theta; hash it the old way so a checkpoint
+    # written before solver.splitting existed still restarts.
+    data["solver"]["theta"] = {"godunov": 1.0, "strang": 0.5}[data["solver"].pop("splitting")]
     if data["geometry"].get("type") != "folder":
         data["geometry"].pop("folder", None)
     blob = json.dumps(data, sort_keys=True).encode()
