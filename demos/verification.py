@@ -19,7 +19,7 @@
 #
 # To solve this efficiently, `fenicsx-beat` employs an **operator splitting scheme**. To achieve second-order accuracy in time, two conditions must be met:
 #
-# 1. **Strang Splitting:** The temporal integration must follow a half-step ODE, full-step PDE, half-step ODE sequence ($\theta = 0.5$).
+# 1. **Strang Splitting:** The temporal integration must follow a half-step ODE, full-step PDE, half-step ODE sequence (`splitting="strang"`).
 #
 # 2. **Crank-Nicolson:** The PDE step must use a $\theta$-rule with $\theta = 0.5$ for the diffusion operator.
 #
@@ -137,7 +137,7 @@ comm = MPI.COMM_WORLD
 M = 1.0
 T = 1.0
 t0 = 0.0
-theta = 0.5  # Strang Splitting & Crank-Nicolson
+theta = 0.5  # Crank-Nicolson PDE step (the splitting is chosen below)
 odespace = "CG_2"  # P2 elements to drop the spatial error floor
 
 N = 150

@@ -14,7 +14,7 @@
 # exact solution, we can measure the $L^2$ error of the numerical solution produced by
 # `beat.SplittingSolver` for decreasing mesh size $h = 1/N$ and time step $\Delta t$, and
 # check that it decreases at the expected rate — second order in space (from the finite element
-# discretization) and first order in time for Godunov splitting ($\theta = 1$, the solver's default).
+# discretization) and first order in time for Godunov splitting (`splitting="godunov"`, the solver's default).
 # See the [verification demo](verification.py) for the corresponding second-order-in-time check using
 # Strang splitting, and the [mathematical background](../docs/math_background.md) page for where the
 # operator splitting scheme comes from.

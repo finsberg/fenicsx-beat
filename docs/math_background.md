@@ -48,16 +48,16 @@ API:
 | $C_m$ | Membrane capacitance (per unit area) | `C_m` argument to `beat.MonodomainModel` |
 | $I_{ion}(v, s)$ | Total ionic current density through the membrane | Right-hand side of the cell model (`fun`) |
 | $I_{stim}$ | Externally applied stimulus current | `beat.Stimulus` / `I_s` |
-| $\theta$ | Splitting / time-stepping parameter, $\theta \in [0, 1]$ | `theta` argument to `beat.SplittingSolver` and `parameters["theta"]` |
+| $\theta$ | Time-stepping parameter of the PDE $\theta$-rule, $\theta \in [0, 1]$ | `parameters["theta"]` of the PDE model |
 | $t_a$ | Local activation time | Output of `beat.eikonal.solve_eikonal`, `t_a` argument to `beat.reaction_eikonal.FootCurrentODESolver` |
 | $c_f$, $c_s$, $c_n$ | Conduction velocities along the fiber, sheet and sheet-normal directions | `velocities` argument to `beat.eikonal.EikonalSolver` |
 | $\mathcal{V}$ | Velocity tensor of the eikonal equation | Built from `velocities` and `fibers` |
 | $\phi_e$ | Extracellular potential in tissue and bath (equals $u_e$ in the tissue) | Output of `beat.pseudo_bidomain.VolumeConductor.solve` |
 | $\sigma_b$ | Bath conductivity | `sigma_b` argument to `beat.pseudo_bidomain.VolumeConductor`, `g_b` to `define_augmented_conductivity_tensor` |
 
-$\theta = 1$ gives (first-order) Godunov splitting and a backward Euler PDE
-step, while $\theta = 0.5$ gives (second-order) Strang splitting and a
-Crank–Nicolson PDE step; see Section 5 below.
+$\theta = 1$ gives a (first-order) backward Euler PDE step, while $\theta = 0.5$ gives a
+(second-order) Crank–Nicolson PDE step. The operator splitting is chosen separately
+(`splitting="godunov"` or `"strang"`); see Section 6 below.
 
 ## 3. The bidomain model
 
@@ -209,30 +209,34 @@ L_1 v = -I_{ion}(v, s), \qquad
 L_2 v = \frac{1}{C_m}\nabla \cdot (M \nabla v) + \frac{1}{C_m} I_{stim},
 $$
 
-one time step $[t_n, t_n + \Delta t]$ of the general $\theta$-splitting
-scheme consists of three stages:
+`fenicsx-beat` offers two splitting schemes for one time step $[t_n, t_n + \Delta t]$:
 
-1. **ODE step.** Solve $\partial v/\partial t = -I_{ion}(v, s)$ together
-   with $\partial s/\partial t = f(v, s)$ from $t_n$ to $t_n + \theta \Delta t$.
-2. **PDE step.** Solve the linear diffusion equation
-   $C_m \partial v/\partial t = \nabla \cdot (M \nabla v) + I_{stim}$ from
-   $t_n$ to $t_n + \Delta t$, using a $\theta$-rule (a weighted average of
-   the diffusion operator at the old and new time levels) for the time
-   discretization and a standard finite element method in space.
-3. **Corrective ODE step.** If $\theta \ne 1$, solve the same ODE system as
-   in step 1 again, from $t_n + \theta \Delta t$ to $t_n + \Delta t$, to
-   bring $v$ and $s$ to the same point in time.
+- **Godunov splitting** (`splitting="godunov"`, the default): solve the ODE system
+  $\partial v/\partial t = -I_{ion}(v, s)$, $\partial s/\partial t = f(v, s)$ over the whole
+  step, then the linear diffusion equation
+  $C_m \partial v/\partial t = \nabla \cdot (M \nabla v) + I_{stim}$ over the whole step. It is
+  first-order accurate in time.
+- **Strang splitting** (`splitting="strang"`): solve the ODE system over the first half of the
+  step, the diffusion equation over the whole step, and the ODE system again over the second
+  half. It is second-order accurate in time, provided both sub-steps are at least second order.
 
-Choosing $\theta = 1$ collapses step 3 and gives **Godunov splitting**
-(first-order accurate in time, and consistent with a first-order backward
-Euler PDE step); choosing $\theta = 1/2$ gives **Strang splitting** combined
-with a **Crank–Nicolson** PDE step, which is second-order accurate overall.
-This is exactly what `beat.SplittingSolver`
-implements: its `theta` argument selects between the two, and the `pde` and
-`ode` objects it is constructed from correspond to steps 2 and 1/3 above,
-respectively. The [convergence](../demos/monodomain_convergence.py) and
-[verification](../demos/verification.py) demos check this second-order behaviour
-numerically using the method of manufactured solutions.
+The diffusion step uses a $\theta$-rule in time (a weighted average of the diffusion operator at
+the old and new time levels, set by the PDE model's `params["theta"]`) and a standard finite
+element method in space: $\theta = 1/2$ (Crank–Nicolson, the default) is second order, $\theta = 1$
+(backward Euler) first order. The ODE step is only as accurate as the cell model's time-stepping
+scheme: gotranx's `explicit_euler`, `rush_larsen`, `generalized_rush_larsen` and
+`hybrid_rush_larsen` are first order, while `rush_larsen_2`, `generalized_rush_larsen_2` and
+`hybrid_rush_larsen_2` are second order. Strang splitting is therefore second order with
+$\theta = 1/2$ and one of the `*_2` schemes, and first order otherwise. A convergence study can
+hide this: with strong diffusion the PDE dominates the error, and a first-order cell scheme can
+look second order.
+
+This is exactly what `beat.SplittingSolver` implements: its `splitting` argument selects the
+scheme, and the `pde` and `ode` objects it is constructed from carry out the diffusion and ODE
+steps. The [convergence](../demos/monodomain_convergence.py) demo measures the first-order
+Godunov scheme; the [verification](../demos/verification.py) demo shows second-order Strang
+splitting with a manufactured solution, with gotranx's cell schemes, and with the ten
+Tusscher–Panfilov 2006 cell model.
 
 ## 7. Alternative backends for the ODE/PDE steps
 

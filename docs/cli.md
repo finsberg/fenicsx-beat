@@ -146,6 +146,22 @@ later command) before submitting a long or queued job, so that if a marker/fiber
 regenerating it inside the timed job.
 
 (overrides)=
+### Cell schemes and splitting
+
+`cell.scheme` names the gotranx scheme that steps the cell model (`beat` lists the valid names if
+you give a wrong one). `rush_larsen_2`, `generalized_rush_larsen_2` and `hybrid_rush_larsen_2`
+are second order in time; the others (`explicit_euler`, `rush_larsen`, `generalized_rush_larsen`,
+the default, and `hybrid_rush_larsen`) are first order. The `hybrid_*` schemes apply the
+exponential update only to the states listed in `cell.stiff_states`; setting `cell.stiff_states`
+with any other scheme is an error, as is naming a state the model does not have.
+
+`solver.splitting` chooses the operator splitting: `"godunov"` (default, first order) or
+`"strang"` (second order). Strang splitting is only second order when both sub-steps are: a
+second-order `cell.scheme` and `solver.pde.theta = 0.5` (the default). `beat validate-config` and
+`beat run` warn when `splitting = "strang"` is combined with a first-order sub-step (the Irksome
+backends are not checked: their order depends on the tableau). `solver.theta` is the deprecated
+name: `1.0` means `"godunov"`, `0.5` means `"strang"`.
+
 ## Overrides
 
 Config values can come from four places, in order of increasing precedence:
@@ -199,7 +215,7 @@ output/
   config.resolved.toml     # the fully resolved configuration of the (latest) run
   run.json                 # versions, n_ranks, start/end wall time, status: running/finished/failed
   output.log               # log file (output_all_cpus.log too when running on >1 rank)
-  cell_model_<hash>.py      # gotranx-generated code for cell.ode_file (hash: file contents + scheme); kept by --overwrite
+  cell_model_<hash>.py      # gotranx-generated code for cell.ode_file (hash: file contents + scheme + stiff_states); kept by --overwrite
   init_states/<region>_<hash>.npy   # cached single-cell steady state (only if cell.steady_state is set); kept by --overwrite
   results.h5               # io4dolfinx: v (+ output.fields), every output.save_every
   restart.h5                # io4dolfinx: v and every ODE state, every output.checkpoint_every and at the end

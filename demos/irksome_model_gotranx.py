@@ -26,7 +26,7 @@
 #
 # This demo combines both: a [`gotranx`](https://finsberg.github.io/gotranx)-generated UFL cell model
 # (the two-variable Mitchell–Schaeffer model) is solved with `IrksomeODESolver`, coupled through
-# `beat.SplittingSolver` (Godunov splitting, $\theta = 1$) to an `IrksomeMonodomainModel` PDE
+# `beat.SplittingSolver` (Godunov splitting, `splitting="godunov"`) to an `IrksomeMonodomainModel` PDE
 # step, on a domain with a banded, strongly heterogeneous conductivity $M$. We track when each point
 # first crosses a voltage threshold to build an activation-time map, which should show fast activation
 # in the high-conductivity band and progressively slower activation as $M$ decreases.

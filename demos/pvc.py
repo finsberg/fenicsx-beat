@@ -148,8 +148,8 @@ g_Ks.interpolate(
 )
 parameters_ode[g_Ks_index, :] = g_Ks.x.array
 
-# Finally we set up the PDE and ODE models and combine them with the (default $\theta = 1$,
-# Godunov-split) splitting solver.
+# Finally we set up the PDE and ODE models and combine them with the (default `splitting="godunov"`,
+# first-order) splitting solver.
 
 # +
 pde = beat.MonodomainModel(

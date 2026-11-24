@@ -213,7 +213,7 @@ ode = beat.odesolver.DolfinODESolver(
     monitor=monitor,
 )
 
-# Combine the PDE and ODE solver, using the default $\theta = 1$ (Godunov splitting).
+# Combine the PDE and ODE solver, using the default `splitting="godunov"` (Godunov splitting).
 
 # +
 solver = beat.SplittingSolver(pde=pde, ode=ode, monitor=monitor)

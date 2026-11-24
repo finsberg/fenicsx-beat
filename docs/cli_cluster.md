@@ -100,7 +100,7 @@ except the run length (`solver.end_time`/`solver.num_beats`/`solver.BCL`) and ev
 
 But not, without `beat` refusing with an error naming the mismatch:
 
-- `solver.dt`, `solver.theta`, `solver.pde`/`solver.ode` settings, `[ep]`, `[cell]` (including
+- `solver.dt`, `solver.splitting`, `solver.pde`/`solver.ode` settings, `[ep]`, `[cell]` (including
   `cell.ode_file`'s *contents*, not just its path -- editing the `.ode` file itself also counts as
   a physics change), `[[stimulus]]`, or `[geometry]` (except `geometry.folder` for a *generated*
   geometry type, which is just a cache location there, not the physics itself -- it does count for

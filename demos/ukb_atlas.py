@@ -369,7 +369,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 
-# We will solve the ODE and PDE using a Godunov splitting scheme (the default $\theta = 1$ in
+# We will solve the ODE and PDE using a Godunov splitting scheme (the default `splitting="godunov"` in
 # `beat.SplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 
 

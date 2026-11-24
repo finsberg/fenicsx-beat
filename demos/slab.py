@@ -269,7 +269,7 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 # Combine the PDE and (multi-region) ODE solver with a splitting solver. We use the default
-# $\theta = 1$, i.e. (first-order) Godunov splitting.
+# `splitting="godunov"`, i.e. (first-order) Godunov splitting.
 
 t = 0.0
 solver = beat.SplittingSolver(pde=pde, ode=ode)
