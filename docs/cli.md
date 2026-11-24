@@ -145,7 +145,6 @@ later command) before submitting a long or queued job, so that if a marker/fiber
 *is* still there, `beat run` fails within seconds against the already-cached mesh, rather than after
 regenerating it inside the timed job.
 
-(overrides)=
 ### Cell schemes and splitting
 
 `cell.scheme` names the gotranx scheme that steps the cell model (`beat` lists the valid names if
@@ -162,6 +161,7 @@ second-order `cell.scheme` and `solver.pde.theta = 0.5` (the default). `beat val
 backends are not checked: their order depends on the tableau). `solver.theta` is the deprecated
 name: `1.0` means `"godunov"`, `0.5` means `"strang"`.
 
+(overrides)=
 ## Overrides
 
 Config values can come from four places, in order of increasing precedence:
