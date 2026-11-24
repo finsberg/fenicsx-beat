@@ -230,3 +230,9 @@ def test_missing_cli_extra_module_at_runtime_prints_install_hint(cfg, monkeypatc
 def test_validate_config_missing_ode_file_exit_1(cfg, tmp_path, caplog):
     assert main(["validate-config", str(cfg), "--set", 'cell.ode_file="missing.ode"']) == 1
     assert "missing.ode" in caplog.text
+
+
+def test_validate_config_warns_on_strang_with_first_order_scheme(cfg, caplog):
+    caplog.set_level(logging.WARNING)
+    assert main(["validate-config", str(cfg), "--set", 'solver.splitting="strang"']) == 0
+    assert "generalized_rush_larsen_2" in caplog.text

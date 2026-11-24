@@ -398,3 +398,13 @@ def test_restart_may_switch_end_time_to_num_beats_and_bcl(tmp_path, caplog):
     # BCL paces nothing: without a stimulus period, warn that only the run length is set.
     if MPI.COMM_WORLD.rank == 0:
         assert "does not pace" in caplog.text
+
+
+def test_run_warns_on_strang_with_first_order_scheme(tmp_path, caplog):
+    caplog.set_level(logging.WARNING)
+    conf = load_config(
+        write_cfg(tmp_path, solver={"dt": "0.1 ms", "end_time": "0.1 ms", "splitting": "strang"}),
+        environ={},
+    )
+    run(conf)
+    assert "generalized_rush_larsen_2" in caplog.text

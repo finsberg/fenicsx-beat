@@ -646,6 +646,39 @@ class Config(_Base):
         return self
 
 
+# gotranx schemes that are second order in time (gotranx does not record a scheme's order).
+SECOND_ORDER_SCHEMES: frozenset[str] = frozenset(
+    {"rush_larsen_2", "generalized_rush_larsen_2", "hybrid_rush_larsen_2"},
+)
+
+
+def splitting_order_warnings(conf: Config) -> list[str]:
+    """Why a Strang-split run would only be first order in time (empty if it is not).
+
+    Strang splitting is second order only when both sub-steps are: a second-order cell scheme and
+    a Crank-Nicolson (theta = 0.5) PDE step. Irksome backends are not checked (their order
+    depends on the tableau and its number of stages).
+    """
+    solver = conf.solver
+    if solver.splitting != "strang":
+        return []
+    warnings: list[str] = []
+    scheme = conf.cell.scheme
+    if solver.ode.type in ("dolfin", "external_operator") and scheme not in SECOND_ORDER_SCHEMES:
+        warnings.append(
+            f"solver.splitting = 'strang' with cell.scheme = {scheme!r}: the cell scheme is "
+            "first order, so the run is only first order in time. Use a second-order scheme "
+            "such as 'generalized_rush_larsen_2'.",
+        )
+    if solver.pde.type == "theta" and not math.isclose(solver.pde.theta, 0.5):
+        warnings.append(
+            f"solver.splitting = 'strang' with solver.pde.theta = {solver.pde.theta}: only "
+            "theta = 0.5 (Crank-Nicolson) is second order, so the run is only first order in "
+            "time.",
+        )
+    return warnings
+
+
 ALL_MODELS: tuple[type[BaseModel], ...] = tuple(
     obj
     for obj in list(globals().values())

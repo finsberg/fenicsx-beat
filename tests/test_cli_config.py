@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pytest
+import toml
 from pydantic import ValidationError
 
-from beat.cli.config import Config, SolverConfig, ms
+from beat.cli.config import SECOND_ORDER_SCHEMES, Config, SolverConfig, ms, splitting_order_warnings
 
 
 def base(tmp_path, **kw):
@@ -339,3 +342,59 @@ def test_stiff_states_with_hybrid_scheme(tmp_path):
         "stiff_states": ["v"],
     }
     assert Config.model_validate(base(tmp_path, cell=cell)).cell.stiff_states == ["v"]
+
+
+def _order_conf(tmp_path, splitting, scheme="generalized_rush_larsen", pde=None, ode=None):
+    solver = {"dt": "0.1 ms", "end_time": "1 ms", "splitting": splitting}
+    if pde is not None:
+        solver["pde"] = pde
+    if ode is not None:
+        solver["ode"] = ode
+    cell = {"ode_file": str(tmp_path / "m.ode"), "scheme": scheme}
+    return Config.model_validate(base(tmp_path, cell=cell, solver=solver))
+
+
+def test_no_order_warning_for_godunov(tmp_path):
+    assert splitting_order_warnings(_order_conf(tmp_path, "godunov")) == []
+
+
+def test_no_order_warning_for_strang_with_second_order_scheme(tmp_path):
+    conf = _order_conf(tmp_path, "strang", scheme="generalized_rush_larsen_2")
+    assert splitting_order_warnings(conf) == []
+
+
+def test_order_warning_for_strang_with_first_order_scheme(tmp_path):
+    (msg,) = splitting_order_warnings(_order_conf(tmp_path, "strang"))
+    assert "'generalized_rush_larsen'" in msg
+    assert "generalized_rush_larsen_2" in msg
+    assert "first order" in msg
+
+
+def test_order_warning_for_strang_with_backward_euler_pde(tmp_path):
+    conf = _order_conf(
+        tmp_path,
+        "strang",
+        scheme="generalized_rush_larsen_2",
+        pde={"type": "theta", "theta": 1.0},
+    )
+    (msg,) = splitting_order_warnings(conf)
+    assert "solver.pde.theta = 1.0" in msg
+
+
+def test_order_warning_skips_irksome_backends(tmp_path):
+    conf = _order_conf(tmp_path, "strang", pde={"type": "irksome"}, ode={"type": "irksome"})
+    assert splitting_order_warnings(conf) == []
+
+
+def test_second_order_schemes_exist_in_gotranx():
+    gotranx = pytest.importorskip("gotranx")
+    assert SECOND_ORDER_SCHEMES <= {s.name for s in gotranx.schemes.Scheme}
+
+
+def test_niederer_template_has_no_order_warning(tmp_path):
+    import beat.cli
+
+    path = Path(beat.cli.__file__).parent / "templates" / "niederer_benchmark" / "config.toml"
+    conf = Config.model_validate(toml.loads(path.read_text()))
+    assert conf.solver.splitting == "strang"
+    assert splitting_order_warnings(conf) == []
