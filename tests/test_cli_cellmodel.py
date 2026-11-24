@@ -1,4 +1,5 @@
 import hashlib
+import json
 
 from mpi4py import MPI
 
@@ -125,6 +126,32 @@ def test_steady_state_cache_key_includes_scheme(tmp_path):
 
     assert files_after != files_default
     assert len(files_after) == 2
+
+
+def test_steady_state_cache_name_without_stiff_states_is_unchanged(tmp_path):
+    """Steady states cached before cell.stiff_states existed must still be found."""
+    ss = {"num_beats": 1, "BCL": "2 ms", "dt": "0.1 ms"}
+    conf = conf_with(tmp_path, steady_state=ss)
+    model = build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    legacy_key = json.dumps(
+        {
+            "ode": hashlib.sha256(conf.cell.ode_file.read_bytes()).hexdigest(),
+            "scheme": conf.cell.scheme,
+            "params": model.parameters[0].tolist(),
+            "ss": conf.cell.steady_state.model_dump(mode="json"),
+        },
+        sort_keys=True,
+    )
+    h = hashlib.sha256(legacy_key.encode()).hexdigest()[:16]
+    assert (tmp_path / "c" / "init_states" / f"tissue_{h}.npy").is_file()
+
+
+def test_steady_state_cache_key_includes_stiff_states(tmp_path):
+    ss = {"num_beats": 1, "BCL": "2 ms", "dt": "0.1 ms"}
+    for stiff in (["h"], ["v"]):
+        conf = conf_with(tmp_path, scheme="hybrid_rush_larsen", stiff_states=stiff, steady_state=ss)
+        build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    assert len(list((tmp_path / "c" / "init_states").glob("tissue_*.npy"))) == 2
 
 
 def test_malformed_ode_file_raises_config_error(tmp_path):
