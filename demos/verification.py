@@ -324,8 +324,10 @@ for scheme in ["generalized_rush_larsen", "generalized_rush_larsen_2"]:
 # $\Delta t = 0.0015625$ ms. The model has piecewise rate functions (for example, the time
 # constants of the sodium gates $h$ and $j$ jump at $V = -40$ mV). A jump like that can pull any
 # fixed-step method back to first order, but it does not show at these step sizes: Strang
-# splitting with `generalized_rush_larsen_2` reaches second order (we also checked down to
-# $\Delta t = 0.003125$ ms, rates 1.79, 1.91, 1.96, 2.01).
+# splitting with `generalized_rush_larsen_2` approaches second order (rates 1.36, 1.79, 1.93
+# below). A separate run with time steps down to $\Delta t = 0.003125$ ms (against a
+# $\Delta t = 0.000390625$ ms reference, too slow to include here) gave rates 1.79, 1.91, 1.96,
+# 2.01, so the rate keeps approaching 2.
 
 # %%
 from pathlib import Path
