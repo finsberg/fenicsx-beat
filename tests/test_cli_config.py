@@ -320,3 +320,22 @@ def test_solver_theta_and_splitting_together_is_rejected(tmp_path):
     )
     with pytest.raises(ValidationError, match="not the deprecated `theta`"):
         Config.model_validate(data)
+
+
+def test_stiff_states_need_a_hybrid_scheme(tmp_path):
+    cell = {
+        "ode_file": str(tmp_path / "m.ode"),
+        "scheme": "generalized_rush_larsen_2",
+        "stiff_states": ["v"],
+    }
+    with pytest.raises(ValidationError, match="hybrid_"):
+        Config.model_validate(base(tmp_path, cell=cell))
+
+
+def test_stiff_states_with_hybrid_scheme(tmp_path):
+    cell = {
+        "ode_file": str(tmp_path / "m.ode"),
+        "scheme": "hybrid_rush_larsen_2",
+        "stiff_states": ["v"],
+    }
+    assert Config.model_validate(base(tmp_path, cell=cell)).cell.stiff_states == ["v"]

@@ -288,6 +288,11 @@ class RegionConfig(_Base):
 class CellConfig(_Base):
     ode_file: Path = Field(description="Path to the gotranx .ode cell model")
     scheme: str = "generalized_rush_larsen"
+    stiff_states: list[str] = Field(
+        default_factory=list,
+        description="States given the exponential (Rush-Larsen) update; only for the hybrid_* "
+        "schemes",
+    )
     v_name: str = Field(default="v", description="Name of the transmembrane potential state")
     parameters: dict[str, float] = Field(default_factory=dict)
     steady_state: SteadyStateConfig | None = Field(
@@ -303,6 +308,15 @@ class CellConfig(_Base):
         if self.layers.method == "transmural":
             return list(TRANSMURAL_REGIONS)
         return list(self.layers.map)
+
+    @model_validator(mode="after")
+    def _check_stiff_states(self) -> "CellConfig":
+        if self.stiff_states and not self.scheme.startswith("hybrid_"):
+            raise ValueError(
+                f"cell.stiff_states is only used by the hybrid_* schemes, not cell.scheme = "
+                f"{self.scheme!r}",
+            )
+        return self
 
     @model_validator(mode="after")
     def _check_regions(self) -> "CellConfig":

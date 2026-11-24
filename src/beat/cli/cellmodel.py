@@ -62,7 +62,9 @@ def load_module(cell: CellConfig, cache_dir: Path, comm: MPI.Intracomm = MPI.COM
         options = ", ".join(s.name for s in gotranx.schemes.Scheme)
         raise ConfigError(f"Unknown cell.scheme {cell.scheme!r}; options: {options}") from e
 
-    h = hashlib.sha256(cell.ode_file.read_bytes() + cell.scheme.encode()).hexdigest()[:16]
+    # Appended only when set, so caches written before cell.stiff_states existed keep their name.
+    stiff = json.dumps(cell.stiff_states).encode() if cell.stiff_states else b""
+    h = hashlib.sha256(cell.ode_file.read_bytes() + cell.scheme.encode() + stiff).hexdigest()[:16]
     module_path = Path(cache_dir) / f"cell_model_{h}.py"
 
     error: str | None = None
@@ -71,7 +73,15 @@ def load_module(cell: CellConfig, cache_dir: Path, comm: MPI.Intracomm = MPI.COM
             logger.info(f"Generating cell model code from {cell.ode_file}")
             module_path.parent.mkdir(parents=True, exist_ok=True)
             ode = gotranx.load_ode(cell.ode_file)
-            code = gotranx.cli.gotran2py.get_code(ode, scheme=[scheme])
+            names = [s.name for s in ode.states]
+            unknown = sorted(set(cell.stiff_states) - set(names))
+            if unknown:
+                raise ValueError(f"cell.stiff_states {unknown} are not states; states: {names}")
+            code = gotranx.cli.gotran2py.get_code(
+                ode,
+                scheme=[scheme],
+                stiff_states=cell.stiff_states or None,
+            )
             _atomic_write(module_path, code)
         except Exception as e:  # noqa: BLE001 - reported as ConfigError on every rank below
             error = f"Failed to generate cell model code from {cell.ode_file}: {e}"
@@ -121,6 +131,7 @@ def _steady_state(
         {
             "ode": hashlib.sha256(cell.ode_file.read_bytes()).hexdigest(),
             "scheme": cell.scheme,
+            **({"stiff_states": cell.stiff_states} if cell.stiff_states else {}),
             "params": params.tolist(),
             "ss": ss.model_dump(mode="json"),
         },

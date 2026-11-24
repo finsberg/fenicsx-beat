@@ -169,6 +169,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 |---|---|---|---|
 | `ode_file` | path | **required** | Path to the gotranx .ode cell model |
 | `scheme` | str | `'generalized_rush_larsen'` |  |
+| `stiff_states` | list[str] | `[]` | States given the exponential (Rush-Larsen) update; only for the hybrid_* schemes |
 | `v_name` | str | `'v'` | Name of the transmembrane potential state |
 | `parameters` | dict[str, float] | `{}` |  |
 | `steady_state` | SteadyStateConfig (optional) | – | If set, pre-pace a single cell to steady state before the tissue run |
