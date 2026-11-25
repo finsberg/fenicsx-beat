@@ -300,8 +300,11 @@ ax.legend()
 fig.savefig("verification_gotranx_schemes.png")
 
 # %% [markdown]
-# Only Strang splitting with `generalized_rush_larsen_2` converges at second order; Godunov
-# splitting is first order whatever the cell scheme. With strong diffusion the picture changes:
+# Only Strang splitting with `generalized_rush_larsen_2` converges at second order. Godunov
+# splitting stays first order even with `generalized_rush_larsen_2`: the splitting error dominates.
+# The rates of the first-order schemes settle towards 1 from both sides: those of `explicit_euler`
+# fall towards it and those of `generalized_rush_larsen` rise towards it. With strong diffusion
+# the picture changes:
 
 # %%
 for scheme in ["generalized_rush_larsen", "generalized_rush_larsen_2"]:
@@ -327,7 +330,7 @@ for scheme in ["generalized_rush_larsen", "generalized_rush_larsen_2"]:
 # splitting with `generalized_rush_larsen_2` approaches second order (rates 1.36, 1.79, 1.93
 # below). A separate run with time steps down to $\Delta t = 0.003125$ ms (against a
 # $\Delta t = 0.000390625$ ms reference, too slow to include here) gave rates 1.79, 1.91, 1.96,
-# 2.01, so the rate keeps approaching 2.
+# 2.01, so the rate reaches 2.
 
 # %%
 from pathlib import Path
@@ -393,9 +396,9 @@ fig.savefig("verification_tp06.png")
 
 # %% [markdown]
 # Godunov splitting and Strang splitting with the first-order `generalized_rush_larsen` stay at
-# (or below) first order; Strang splitting with `generalized_rush_larsen_2` approaches second
-# order. In the [CLI](../docs/cli.md) this is `solver.splitting = "strang"` with
-# `cell.scheme = "generalized_rush_larsen_2"`.
+# (or below) first order; the last Strang rate even drops to 0.8. Strang splitting with
+# `generalized_rush_larsen_2` approaches second order. In the [CLI](../docs/cli.md) this is
+# `solver.splitting = "strang"` with `cell.scheme = "generalized_rush_larsen_2"`.
 
 # %% [markdown]
 # ## 7. Merging Strang half-steps
