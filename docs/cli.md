@@ -164,10 +164,10 @@ name: `1.0` means `"godunov"`, `0.5` means `"strang"`.
 With `splitting = "strang"`, `solver.merge_half_steps = true` merges each step's closing ODE half-step
 with the next step's opening one: still second order, at Godunov's cost of one ODE step per time step,
 but with a larger error than plain Strang splitting at the same `solver.dt` (and a smaller one at the
-same cost). `beat run` synchronizes the state before every save and checkpoint, so saving every step
-gives plain Strang splitting. Because the state is synchronized at every save and checkpoint, results
-with merging depend (at truncation-error level) on `output.save_every` and
-`output.checkpoint_every`. Changing `merge_half_steps` between a run and its restart is refused.
+same cost). `beat run` synchronizes the state before every save and checkpoint, so saving every
+step gives plain Strang splitting, and with merging the results depend (at truncation-error level)
+on `output.save_every` and `output.checkpoint_every`. Changing `merge_half_steps` between a run and
+its restart is refused.
 
 (overrides)=
 ## Overrides

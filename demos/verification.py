@@ -422,6 +422,12 @@ for name, splitting, merge in [
         v = tp06_final_v("generalized_rush_larsen_2", splitting, dt, merge_half_steps=merge)
         seconds = perf_counter() - tic
         print(f"{name:16s} {dt:8.4f} {rms_difference(v, tp06_ref):11.3f} {seconds:9.2f}")
+errors, rates = self_convergence(
+    lambda dt: tp06_final_v("generalized_rush_larsen_2", "strang", dt, merge_half_steps=True),
+    tp06_dts,
+    0.0015625,
+)
+print(f"strang, merged rates {np.round(rates, 2)}")
 
 # %% [markdown]
 # Merged Strang splitting at $\Delta t = 0.0125$ ms takes about as long as Godunov splitting at
@@ -430,3 +436,4 @@ for name, splitting, merge in [
 # splitting is about three times more accurate, at twice the cost. When you drive the time loop
 # yourself, call `SplittingSolver.synchronize` before saving or post-processing $V$: between
 # merged steps it still lacks its closing half-step.
+# Merged Strang's rates approach 2 as well, more slowly than plain Strang's (section 6).

@@ -648,6 +648,36 @@ def test_merged_strang_handles_varying_time_steps():
     assert np.allclose(merged.ode.values, plain.ode.values, rtol=0, atol=1e-12)
 
 
+def test_turning_merging_off_synchronizes_the_stale_half_step():
+    plain = build_restart_solver("strang", fun=simple_ode_rotation)
+    merged = build_restart_solver("strang", merge_half_steps=True, fun=simple_ode_rotation)
+    run_steps(plain, 0, 2)
+    run_steps(merged, 0, 2)
+    assert not merged.synchronized
+    merged.merge_half_steps = False
+    run_steps(plain, 2, 4)
+    run_steps(merged, 2, 4)
+    assert merged.synchronized
+    assert np.allclose(merged.pde.v.x.array, plain.pde.v.x.array, rtol=0, atol=1e-12)
+    assert np.allclose(merged.ode.values, plain.ode.values, rtol=0, atol=1e-12)
+
+
+def test_merged_strang_passes_the_right_times_to_the_cell_model():
+    calls = []
+
+    def recording_rotation(states, t, dt, parameters):
+        calls.append((t, dt))
+        return simple_ode_rotation(states, t, dt, parameters)
+
+    merged = build_restart_solver("strang", merge_half_steps=True, fun=recording_rotation)
+    for interval in [(0.0, 0.01), (0.01, 0.03), (0.03, 0.04)]:
+        merged.step(interval)
+    merged.synchronize()
+    expected = [(0.0, 0.005), (0.005, 0.015), (0.02, 0.015), (0.035, 0.005)]
+    assert len(calls) == len(expected)
+    assert np.allclose(calls, expected, rtol=0, atol=1e-12)
+
+
 def test_synchronize_runs_the_pending_half_step_once():
     solver = build_restart_solver("strang", merge_half_steps=True)
     assert solver.synchronized

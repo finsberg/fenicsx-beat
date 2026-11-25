@@ -61,8 +61,8 @@ model and notation used throughout, then work through the
 - [Verifying Second-Order Temporal Convergence](verification.py) — checks the second-order-in-time
   convergence of Strang splitting combined with a Crank–Nicolson PDE step, using the method of
   manufactured solutions, then with gotranx's cell schemes (only `generalized_rush_larsen_2`
-  keeps it second order) and with the ten Tusscher–Panfilov 2006 cell model, and the cost and accuracy of merging Strang
-  half-steps.
+  keeps it second order) and with the ten Tusscher–Panfilov 2006 cell model; a last section compares the cost
+  and accuracy of merged Strang half-steps.
 - [Monodomain convergence test](monodomain_convergence.py) — the companion check of the (first-order)
   spatial and Godunov-splitting convergence rates (first order in time with Godunov splitting; see the
   verification demo above for second order with Strang).

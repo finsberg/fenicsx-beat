@@ -247,7 +247,10 @@ $\Delta t$ (and smaller at the same cost). Between merged steps the solution is 
 still lacks its closing half-step and is only first-order accurate until `SplittingSolver.synchronize`
 runs it. `SplittingSolver.solve` and `SplittingSolver.restart_functions` synchronize automatically
 and the CLI does so before every save and checkpoint; a time loop of your own must call
-`synchronize()` before saving or post-processing $v$.
+`synchronize()` before saving or post-processing $v$. Anything that reads $v$ after every step
+(probes, `ActivationTracker`, conduction-velocity estimates) sees it lagging its closing half-step,
+so threshold activation times come out late by up to about half a time step; synchronizing every
+step to avoid this costs as much as plain Strang splitting.
 
 ## 7. Alternative backends for the ODE/PDE steps
 
