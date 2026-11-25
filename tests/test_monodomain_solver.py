@@ -33,6 +33,13 @@ def simple_ode_forward_euler(states, t, dt, parameters):
     return values
 
 
+def simple_ode_rotation(states, t, dt, parameters):
+    """Exact flow of dv/dt = -s, ds/dt = v: two half-steps compose to exactly one full step."""
+    v, s = states
+    c, sn = np.cos(dt), np.sin(dt)
+    return np.array([v * c - s * sn, v * sn + s * c])
+
+
 class NullODESolver:
     """An ODE solver that does nothing, for exercising the splitting driver on its own."""
 
@@ -515,7 +522,12 @@ def test_external_operator_monodomain_splitting_analytic(odespace):
 RESTART_DT = 0.01
 
 
-def build_restart_solver(splitting):
+def build_restart_solver(
+    splitting,
+    merge_half_steps=False,
+    fun=simple_ode_forward_euler,
+    monitor=None,
+):
     mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8, dolfinx.cpp.mesh.CellType.triangle)
     time = dolfinx.fem.Constant(mesh, dolfinx.default_scalar_type(0.0))
     x = ufl.SpatialCoordinate(mesh)
@@ -532,13 +544,20 @@ def build_restart_solver(splitting):
     ode = beat.odesolver.DolfinODESolver(
         v_ode=dolfinx.fem.Function(V_ode),
         v_pde=pde.state,
-        fun=simple_ode_forward_euler,
+        fun=fun,
         init_states=init_states,
         parameters=None,
         num_states=2,
         v_index=0,
     )
-    return beat.SplittingSolver(pde=pde, ode=ode, splitting=splitting)
+    kwargs = {} if monitor is None else {"monitor": monitor}
+    return beat.SplittingSolver(
+        pde=pde,
+        ode=ode,
+        splitting=splitting,
+        merge_half_steps=merge_half_steps,
+        **kwargs,
+    )
 
 
 def run_steps(solver, first, last):
@@ -570,6 +589,124 @@ def test_restart_function_names():
     solver = build_restart_solver("godunov")
     names = [n for n, _ in solver.restart_functions(["v", "s"])]
     assert names == ["v", "state_v", "state_s"]
+
+
+def test_merged_strang_matches_plain_strang_for_an_exact_ode_flow():
+    plain_monitor, merged_monitor = RecordingMonitor(), RecordingMonitor()
+    plain = build_restart_solver("strang", fun=simple_ode_rotation, monitor=plain_monitor)
+    merged = build_restart_solver(
+        "strang",
+        merge_half_steps=True,
+        fun=simple_ode_rotation,
+        monitor=merged_monitor,
+    )
+    plain.solve((0.0, 10 * RESTART_DT), RESTART_DT)
+    merged.solve((0.0, 10 * RESTART_DT), RESTART_DT)
+    assert np.allclose(merged.pde.v.x.array, plain.pde.v.x.array, rtol=0, atol=1e-12)
+    assert np.allclose(merged.ode.values, plain.ode.values, rtol=0, atol=1e-12)
+    # merging really happened: one closing half-step (from solve's final synchronize) instead of 10
+    assert plain_monitor.names.count("corrective_ode_step") == 10
+    assert merged_monitor.names.count("corrective_ode_step") == 1
+    assert merged_monitor.names.count("ode_step") == 10
+    assert len(merged_monitor.steps) == 10
+
+
+def test_merged_strang_handles_varying_time_steps():
+    plain = build_restart_solver("strang", fun=simple_ode_rotation)
+    merged = build_restart_solver("strang", merge_half_steps=True, fun=simple_ode_rotation)
+    for interval in [(0.0, 0.01), (0.01, 0.015), (0.015, 0.035), (0.035, 0.045)]:
+        plain.step(interval)
+        merged.step(interval)
+    merged.synchronize()
+    assert np.allclose(merged.pde.v.x.array, plain.pde.v.x.array, rtol=0, atol=1e-12)
+    assert np.allclose(merged.ode.values, plain.ode.values, rtol=0, atol=1e-12)
+
+
+def test_synchronize_runs_the_pending_half_step_once():
+    solver = build_restart_solver("strang", merge_half_steps=True)
+    assert solver.synchronized
+    solver.synchronize()  # nothing pending: no-op
+    solver.step((0.0, RESTART_DT))
+    assert not solver.synchronized
+    before = solver.ode.values.copy()
+    solver.synchronize()
+    assert solver.synchronized
+    assert not np.array_equal(solver.ode.values, before)
+    after = solver.ode.values.copy()
+    solver.synchronize()  # again: no-op
+    assert np.array_equal(solver.ode.values, after)
+
+
+@pytest.mark.parametrize("splitting", ["godunov", "strang"])
+def test_synchronize_is_a_no_op_without_merging(splitting):
+    solver = build_restart_solver(splitting)
+    solver.step((0.0, RESTART_DT))
+    assert solver.synchronized
+    before = solver.ode.values.copy()
+    solver.synchronize()
+    assert np.array_equal(solver.ode.values, before)
+
+
+def test_solve_ends_synchronized():
+    solver = build_restart_solver("strang", merge_half_steps=True)
+    solver.solve((0.0, 3 * RESTART_DT), RESTART_DT)
+    assert solver.synchronized
+
+
+def test_merge_half_steps_needs_strang():
+    with pytest.raises(ValueError, match="splitting='strang'"):
+        build_restart_solver("godunov", merge_half_steps=True)
+
+
+def test_merge_half_steps_with_deprecated_theta():
+    pde = _small_pde()
+    with pytest.warns(DeprecationWarning):
+        solver = beat.SplittingSolver(
+            pde=pde,
+            ode=NullODESolver(),
+            theta=0.5,
+            merge_half_steps=True,
+        )
+    assert solver.splitting == "strang"
+    with pytest.warns(DeprecationWarning), pytest.raises(ValueError, match="splitting='strang'"):
+        beat.SplittingSolver(
+            pde=_small_pde(),
+            ode=NullODESolver(),
+            theta=0.3,
+            merge_half_steps=True,
+        )
+
+
+def test_ode_only_ignores_merge_half_steps():
+    a, _ = build_ode_only(splitting="strang")
+    b, _ = build_ode_only(splitting="strang", merge_half_steps=True)
+    a.solve((0.0, 3 * ODE_ONLY_DT), ODE_ONLY_DT)
+    for i in range(3):
+        b.step((i * ODE_ONLY_DT, (i + 1) * ODE_ONLY_DT))
+        assert b.synchronized
+    assert np.array_equal(a.ode.values, b.ode.values)
+
+
+def test_merged_restart_is_bit_for_bit():
+    a = build_restart_solver("strang", merge_half_steps=True)
+    run_steps(a, 0, 3)
+    assert not a.synchronized
+    saved = [(n, f.x.array.copy()) for n, f in a.restart_functions(["v", "s"])]
+    assert a.synchronized  # restart_functions synchronized first
+
+    b = build_restart_solver("strang", merge_half_steps=True)
+    functions = b.restart_functions(["v", "s"])
+    for (_, f), (_, arr) in zip(functions, saved):
+        f.x.array[:] = arr
+    b.load_restart(functions, a.restart_metadata())
+    assert b.synchronized
+
+    run_steps(a, 3, 6)
+    run_steps(b, 3, 6)
+    a.synchronize()
+    b.synchronize()
+    assert np.array_equal(a.pde.v.x.array, b.pde.v.x.array)
+    assert np.array_equal(a.ode.values, b.ode.values)
 
 
 def test_restart_functions_hand_out_the_pde_potential_itself():
@@ -711,7 +848,7 @@ class RecordingMonitor(beat.BaseMonitor):
 ODE_ONLY_DT = 0.125  # a power of two, so t1 - t0 == dt exactly
 
 
-def build_ode_only(splitting="godunov", monitor=None):
+def build_ode_only(splitting="godunov", monitor=None, merge_half_steps=False):
     """A pde=None solver over a 2-state forward-Euler ODE on P1, and its initial states"""
     mesh = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, 8, 8, dolfinx.cpp.mesh.CellType.triangle)
     V = dolfinx.fem.functionspace(mesh, ("P", 1))
@@ -729,7 +866,14 @@ def build_ode_only(splitting="godunov", monitor=None):
         v_index=0,
     )
     kwargs = {} if monitor is None else {"monitor": monitor}
-    return beat.SplittingSolver(pde=None, ode=ode, splitting=splitting, **kwargs), init_states
+    solver = beat.SplittingSolver(
+        pde=None,
+        ode=ode,
+        splitting=splitting,
+        merge_half_steps=merge_half_steps,
+        **kwargs,
+    )
+    return solver, init_states
 
 
 def test_splitting_solver_v_is_the_pde_potential():
