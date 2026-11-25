@@ -124,7 +124,7 @@ phi_e = record()["P_E"]
 
 | Class | What it is for | Builds on / implements | Demos |
 |---|---|---|---|
-| `SplittingSolver` | Godunov/Strang splitting of a `PDEModel` and an `ODESolver`, or the ODE solver alone (`pde=None`); restart; `solve` steps with `beat.utils.time_steps` | uses `PDEModel`, `ODESolver` | almost every demo |
+| `SplittingSolver` | Godunov/Strang splitting (`splitting="godunov"` or `"strang"`) of a `PDEModel` and an `ODESolver`, or the ODE solver alone (`pde=None`); restart; `solve` steps with `beat.utils.time_steps` | uses `PDEModel`, `ODESolver` | almost every demo |
 | `MonodomainSplittingSolver` | deprecated name of `SplittingSolver`; warns | `SplittingSolver` | — |
 | `PDEModel`, `ODESolver` | the protocols above | `Protocol` | — |
 

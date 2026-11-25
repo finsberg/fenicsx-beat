@@ -2,7 +2,7 @@ import logging
 import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, ClassVar, Literal, Protocol
 
 from mpi4py import MPI
 
@@ -74,28 +74,75 @@ class PDEModel(Protocol):
     def step(self, interval: tuple[float, float]) -> None: ...
 
 
+# Fraction of the time step the first ODE sub-step covers, per splitting scheme.
+_SPLITTING_FRACTION: dict[str, float] = {"godunov": 1.0, "strang": 0.5}
+
+
 @dataclass
 class SplittingSolver:
-    """Advance a PDE model and an ODE solver by operator splitting (Godunov or Strang, ``theta``)
+    """Advance a PDE model and an ODE solver by operator splitting.
 
-    With ``pde=None`` only the cell model is advanced and ``theta`` is ignored. Wrapping the ODE
-    solver in :class:`beat.reaction_eikonal.FootCurrentODESolver` gives the R-E+ model (with a PDE)
-    or the R-E- model (``pde=None``). ``monitor=None`` (or leaving it out) records nothing
+    ``splitting="godunov"`` (the default) takes a full ODE step and then a full PDE step: first
+    order in time. ``splitting="strang"`` takes half an ODE step, a full PDE step and another half
+    ODE step: second order in time, provided both sub-steps are second order themselves (PDE
+    ``params["theta"] = 0.5`` and a second-order cell scheme such as gotranx's
+    ``generalized_rush_larsen_2``). ``theta`` is the deprecated way of choosing the splitting (the
+    fraction of the step the first ODE sub-step covers: 1.0 Godunov, 0.5 Strang); after
+    construction it always holds that fraction.
+
+    With ``pde=None`` only the cell model is advanced and the splitting is ignored. Wrapping the
+    ODE solver in :class:`beat.reaction_eikonal.FootCurrentODESolver` gives the R-E+ model (with a
+    PDE) or the R-E- model (``pde=None``). ``monitor=None`` (or leaving it out) records nothing
     (a :class:`beat.telemetry.NullMonitor`).
     """
 
     pde: PDEModel | None
     ode: ODESolver
-    theta: float = 1.0
+    theta: float | None = None  # deprecated; kept third for positional callers
     monitor: BaseMonitor = field(default_factory=NullMonitor)
+    splitting: Literal["godunov", "strang"] | None = None
+
+    # frames up to the caller; subclasses with an extra __post_init__ frame add one
+    _theta_warning_stacklevel: ClassVar[int] = 4
 
     def __post_init__(self) -> None:
+        self._resolve_splitting()
         if self.monitor is None:
             self.monitor = NullMonitor()
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
         if self.pde is not None:
             self.ode.ode_to_pde()  # dolfin function in ODE space (quad?) -> CG1 dolfin function
             self.pde.assign_previous()
+
+    def _resolve_splitting(self) -> None:
+        if self.theta is None:
+            splitting = "godunov" if self.splitting is None else self.splitting
+            if splitting not in _SPLITTING_FRACTION:
+                raise ValueError(f"splitting must be 'godunov' or 'strang', got {splitting!r}")
+            self.splitting = splitting  # type: ignore[assignment]
+            self.theta = _SPLITTING_FRACTION[splitting]
+            return
+        if self.splitting is not None:
+            raise TypeError("Give splitting=, not the deprecated theta= as well")
+        theta = float(self.theta)
+        if not 0.0 <= theta <= 1.0:
+            raise ValueError(f"theta must be in [0, 1], got {theta}")
+        name = next((n for n, f in _SPLITTING_FRACTION.items() if np.isclose(theta, f)), None)
+        if name is None:
+            hint = (
+                "only splitting='godunov' (theta=1) and splitting='strang' (theta=0.5) are "
+                f"supported; theta={theta} still runs but is first order"
+            )
+        else:
+            hint = f"use splitting={name!r}"
+        warnings.warn(
+            f"SplittingSolver(theta=...) is deprecated; {hint}",
+            DeprecationWarning,
+            # default 4: _resolve_splitting -> __post_init__ -> dataclass __init__ -> caller
+            stacklevel=self._theta_warning_stacklevel,
+        )
+        self.splitting = name  # type: ignore[assignment]
+        self.theta = theta
 
     @property
     def v(self) -> dolfinx.fem.Function:
@@ -199,10 +246,13 @@ class SplittingSolver:
 
         # Extract some parameters for readability
         theta = self.theta
+        assert theta is not None
 
         # Extract time domain
         t0, t1 = interval
-        logger.debug(f"Stepping from {t0} to {t1} using theta = {theta}")
+        logger.debug(
+            f"Stepping from {t0} to {t1} with {self.splitting or f'theta={theta}'} splitting",
+        )
 
         dt = t1 - t0
         t = t0 + theta * dt
@@ -264,6 +314,8 @@ class SplittingSolver:
 
 class MonodomainSplittingSolver(SplittingSolver):
     """Deprecated name of :class:`SplittingSolver` (same arguments and behaviour)."""
+
+    _theta_warning_stacklevel: ClassVar[int] = 5
 
     def __post_init__(self) -> None:
         warnings.warn(

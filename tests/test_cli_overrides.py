@@ -1,10 +1,11 @@
+import tempfile
 from pathlib import Path
 
 import pytest
 import toml
 from cli_helpers import MITCHELL_SCHAEFFER_ODE, minimal_config_dict
 
-from beat.cli.config import ConfigError, ms
+from beat.cli.config import Config, ConfigError, ms
 from beat.cli.overrides import (
     apply_override,
     dump_config,
@@ -268,3 +269,47 @@ def test_env_vars_without_a_section_are_not_config_overrides(cfg_file):
 def test_env_var_with_a_single_underscore_after_a_section_warns(cfg_file):
     with pytest.warns(UserWarning, match="BEAT_SOLVER__DT"):
         assert env_overrides({"BEAT_SOLVER_DT": "0.05 ms"}) == []
+
+
+# physics_hash of cli_helpers.minimal_config_dict, computed with beat 0.12.0 (before
+# solver.splitting and cell.stiff_states existed). A checkpoint written by 0.12 must still
+# restart after upgrading, so an equivalent config must hash to exactly these values. If a new
+# config field makes this fail, drop the field from the hash while it has its default value.
+LEGACY_PHYSICS_HASH = {
+    1.0: "99052ff4f7c6dc60b3348026a218300b95352137add6e02119755abd7cf98aca",
+    0.5: "f4562a7fbfa95a2dd9221b57184be240d7e2867f14506a548e3a78d3e27ea410",
+}
+
+
+@pytest.mark.parametrize(
+    ("solver", "theta"),
+    [
+        ({}, 1.0),
+        ({"splitting": "godunov"}, 1.0),
+        ({"splitting": "strang"}, 0.5),
+        ({"theta": 1.0}, 1.0),
+        ({"theta": 0.5}, 0.5),
+    ],
+)
+def test_physics_hash_matches_beat_0_12(solver, theta):
+    data = minimal_config_dict(Path(tempfile.mkdtemp()), solver=solver)
+    assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[theta]
+
+
+def test_physics_hash_with_default_stiff_states_matches_beat_0_12():
+    data = minimal_config_dict(Path(tempfile.mkdtemp()), cell={"stiff_states": []})
+    assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[1.0]
+
+
+def test_set_solver_theta_override_maps_to_splitting(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(toml.dumps(minimal_config_dict(tmp_path)))
+    conf = load_config(cfg, sets=["solver.theta=0.5"], environ={})
+    assert conf.solver.splitting == "strang"
+
+
+def test_env_solver_theta_override_maps_to_splitting(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(toml.dumps(minimal_config_dict(tmp_path)))
+    conf = load_config(cfg, environ={"BEAT_SOLVER__THETA": "0.5"})
+    assert conf.solver.splitting == "strang"

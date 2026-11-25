@@ -26,7 +26,7 @@
 #
 # This demo combines both: a [`gotranx`](https://finsberg.github.io/gotranx)-generated UFL cell model
 # (the two-variable Mitchell–Schaeffer model) is solved with `IrksomeODESolver`, coupled through
-# `beat.SplittingSolver` (Godunov splitting, $\theta = 1$) to an `IrksomeMonodomainModel` PDE
+# `beat.SplittingSolver` (Godunov splitting, `splitting="godunov"`) to an `IrksomeMonodomainModel` PDE
 # step, on a domain with a banded, strongly heterogeneous conductivity $M$. We track when each point
 # first crosses a voltage threshold to build an activation-time map, which should show fast activation
 # in the high-conductivity band and progressively slower activation as $M$ decreases.
@@ -200,7 +200,7 @@ pde = IrksomeMonodomainModel(
 # plain-numpy `fun` expected by `DolfinODESolver`), so we wrap the gotranx-generated `ms_ufl.rhs` to
 # match the `fun(states, t, parameters)` signature Irksome expects. We build `pde` first so that its
 # state can be passed directly as `v_pde` here, combining the two into the usual splitting solver —
-# `theta=1.0` selects Godunov splitting, matching the first-order `BackwardEuler` tableau used for both
+# `splitting="godunov"` selects Godunov splitting, matching the first-order `BackwardEuler` tableau used for both
 # sub-steps.
 
 ode_tableau = irksome.BackwardEuler()
@@ -222,7 +222,7 @@ ode = IrksomeODESolver(
     parameters=default_params,
 )
 
-solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
+solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="godunov")
 
 # ## Time stepping
 #

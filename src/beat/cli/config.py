@@ -4,6 +4,7 @@ This module must not import dolfinx: it is used by ``beat validate-config`` and 
 tests. Everything with a physical unit is a pint quantity (``"<value> <unit>"`` in TOML).
 """
 
+import logging
 import math
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Union
@@ -14,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic_pint import PydanticPintQuantity, set_registry
 
 from ..units import ureg
+
+logger = logging.getLogger(__name__)
 
 # Share beat's registry so config quantities combine with quantities created elsewhere in beat.
 set_registry(ureg)
@@ -285,6 +288,11 @@ class RegionConfig(_Base):
 class CellConfig(_Base):
     ode_file: Path = Field(description="Path to the gotranx .ode cell model")
     scheme: str = "generalized_rush_larsen"
+    stiff_states: list[str] = Field(
+        default_factory=list,
+        description="States given the exponential (Rush-Larsen) update; only for the hybrid_* "
+        "schemes",
+    )
     v_name: str = Field(default="v", description="Name of the transmembrane potential state")
     parameters: dict[str, float] = Field(default_factory=dict)
     steady_state: SteadyStateConfig | None = Field(
@@ -300,6 +308,15 @@ class CellConfig(_Base):
         if self.layers.method == "transmural":
             return list(TRANSMURAL_REGIONS)
         return list(self.layers.map)
+
+    @model_validator(mode="after")
+    def _check_stiff_states(self) -> "CellConfig":
+        if self.stiff_states and not self.scheme.startswith("hybrid_"):
+            raise ValueError(
+                f"cell.stiff_states is only used by the hybrid_* schemes, not cell.scheme = "
+                f"{self.scheme!r}",
+            )
+        return self
 
     @model_validator(mode="after")
     def _check_regions(self) -> "CellConfig":
@@ -463,7 +480,11 @@ ODEBackendConfig = Annotated[
 
 class SolverConfig(_Base):
     dt: Time = Field(default_factory=lambda: _q("0.05 ms"))
-    theta: float = Field(default=1.0, ge=0, le=1, description="Splitting: 1.0 Godunov, 0.5 Strang")
+    splitting: Literal["godunov", "strang"] = Field(
+        default="godunov",
+        description="Operator splitting: 'godunov' (first order) or 'strang' (second order with "
+        "a second-order cell.scheme and solver.pde.theta = 0.5)",
+    )
     end_time: Time | None = Field(
         default=None,
         description="Simulated end time. Give either this or num_beats and BCL",
@@ -481,6 +502,28 @@ class SolverConfig(_Base):
     pde: PDEConfig = Field(default_factory=ThetaPDE)
     ode: ODEBackendConfig = Field(default_factory=DolfinODE)
     petsc_options: dict[str, str | int | float | bool] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _deprecated_theta(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or "theta" not in data:
+            return data
+        data = dict(data)
+        theta = data.pop("theta")
+        if "splitting" in data:
+            raise ValueError("solver: give `splitting`, not the deprecated `theta` as well")
+        names = {1.0: "godunov", 0.5: "strang"}
+        try:
+            data["splitting"] = names[float(theta)]
+        except (KeyError, TypeError, ValueError):
+            raise ValueError(
+                "solver.theta is deprecated; only 1.0 (godunov) and 0.5 (strang) are supported; "
+                "use solver.splitting",
+            ) from None
+        logger.warning(
+            f"solver.theta is deprecated; use solver.splitting = {data['splitting']!r}",
+        )
+        return data
 
     @model_validator(mode="after")
     def _check_end(self) -> "SolverConfig":
@@ -601,6 +644,39 @@ class Config(_Base):
         if 0 < ms(self.output.checkpoint_every) < ms(self.solver.dt):
             raise ValueError("output.checkpoint_every must be 0 or >= solver.dt")
         return self
+
+
+# gotranx schemes that are second order in time (gotranx does not record a scheme's order).
+SECOND_ORDER_SCHEMES: frozenset[str] = frozenset(
+    {"rush_larsen_2", "generalized_rush_larsen_2", "hybrid_rush_larsen_2"},
+)
+
+
+def splitting_order_warnings(conf: Config) -> list[str]:
+    """Why a Strang-split run would only be first order in time (empty if it is not).
+
+    Strang splitting is second order only when both sub-steps are: a second-order cell scheme and
+    a Crank-Nicolson (theta = 0.5) PDE step. Irksome backends are not checked (their order
+    depends on the tableau and its number of stages).
+    """
+    solver = conf.solver
+    if solver.splitting != "strang":
+        return []
+    warnings: list[str] = []
+    scheme = conf.cell.scheme
+    if solver.ode.type in ("dolfin", "external_operator") and scheme not in SECOND_ORDER_SCHEMES:
+        warnings.append(
+            f"solver.splitting = 'strang' with cell.scheme = {scheme!r}: the cell scheme is "
+            "first order, so the run is only first order in time. Use a second-order scheme "
+            "such as 'generalized_rush_larsen_2'.",
+        )
+    if solver.pde.type == "theta" and not math.isclose(solver.pde.theta, 0.5):
+        warnings.append(
+            f"solver.splitting = 'strang' with solver.pde.theta = {solver.pde.theta}: only "
+            "theta = 0.5 (Crank-Nicolson) is second order, so the run is only first order in "
+            "time.",
+        )
+    return warnings
 
 
 ALL_MODELS: tuple[type[BaseModel], ...] = tuple(

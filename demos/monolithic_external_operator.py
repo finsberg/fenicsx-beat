@@ -395,7 +395,7 @@ def run_split(dt):
         num_states=num_states,
         v_index=v_index,
     )
-    solver = beat.SplittingSolver(pde=pde, ode=ode, theta=1.0)
+    solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="godunov")
     t = 0.0
     while t < T_end - 1e-9:
         solver.step((t, t + dt))

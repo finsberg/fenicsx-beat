@@ -36,7 +36,7 @@ import numpy as np
 from ..monodomain_solver import SplittingSolver
 from ..telemetry import NullMonitor, PerformanceMonitor
 from .cellmodel import CellModel, build_cell_model, build_region_markers, state_index
-from .config import Config, ConfigError, ms
+from .config import Config, ConfigError, ms, splitting_order_warnings
 from .geometry import CLIGeometry, build_conductivity, build_geometry
 from .log import add_logfile_handler, remove_logfile_handlers
 from .overrides import dump_config, physics_hash
@@ -278,7 +278,7 @@ def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulat
     solver = SplittingSolver(
         pde=pde,
         ode=ode,
-        theta=conf.solver.theta,
+        splitting=conf.solver.splitting,
         monitor=monitor or NullMonitor(),
     )
     return Simulation(conf, geo, time, pde, ode, solver, cell, stimuli, V_ode)
@@ -406,6 +406,8 @@ def run(
             "does not pace the tissue and no [[stimulus]] has a period. Set a stimulus "
             "`period` (e.g. equal to BCL) to pace every beat.",
         )
+    for warning in splitting_order_warnings(conf):
+        logger.warning(warning)
     monitor = PerformanceMonitor(comm=comm) if conf.output.performance else None
     try:
         sim = build_simulation(conf, comm, monitor=monitor)

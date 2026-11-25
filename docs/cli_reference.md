@@ -169,6 +169,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 |---|---|---|---|
 | `ode_file` | path | **required** | Path to the gotranx .ode cell model |
 | `scheme` | str | `'generalized_rush_larsen'` |  |
+| `stiff_states` | list[str] | `[]` | States given the exponential (Rush-Larsen) update; only for the hybrid_* schemes |
 | `v_name` | str | `'v'` | Name of the transmembrane potential state |
 | `parameters` | dict[str, float] | `{}` |  |
 | `steady_state` | SteadyStateConfig (optional) | – | If set, pre-pace a single cell to steady state before the tissue run |
@@ -265,7 +266,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `dt` | Quantity | `'0.05 ms'` |  |
-| `theta` | float | `1.0` | Splitting: 1.0 Godunov, 0.5 Strang |
+| `splitting` | 'godunov' \| 'strang' | `'godunov'` | Operator splitting: 'godunov' (first order) or 'strang' (second order with a second-order cell.scheme and solver.pde.theta = 0.5) |
 | `end_time` | Quantity (optional) | – | Simulated end time. Give either this or num_beats and BCL |
 | `num_beats` | int (optional) | – | Run length in beats: end time = num_beats x BCL |
 | `BCL` | Quantity (optional) | – | Basic cycle length, only used for the run length (num_beats x BCL). It does not pace anything: set a [[stimulus]] period for that |

@@ -1,7 +1,10 @@
+from pathlib import Path
+
 import pytest
+import toml
 from pydantic import ValidationError
 
-from beat.cli.config import Config, SolverConfig, ms
+from beat.cli.config import SECOND_ORDER_SCHEMES, Config, SolverConfig, ms, splitting_order_warnings
 
 
 def base(tmp_path, **kw):
@@ -287,3 +290,111 @@ def test_postprocess_ecg_potential_reference_without_leads(tmp_path):
 
 def test_postprocess_ecg_default_none(tmp_path):
     assert _load_with_postprocess(tmp_path, {}).postprocess.ecg is None
+
+
+def test_splitting_defaults_to_godunov(tmp_path):
+    assert Config.model_validate(base(tmp_path)).solver.splitting == "godunov"
+
+
+def test_splitting_strang(tmp_path):
+    data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "splitting": "strang"})
+    assert Config.model_validate(data).solver.splitting == "strang"
+
+
+@pytest.mark.parametrize(("theta", "name"), [(1.0, "godunov"), (0.5, "strang"), (1, "godunov")])
+def test_deprecated_solver_theta_maps_to_splitting(tmp_path, caplog, theta, name):
+    data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "theta": theta})
+    conf = Config.model_validate(data)
+    assert conf.solver.splitting == name
+    assert "solver.theta is deprecated" in caplog.text
+    assert "theta" not in conf.solver.model_dump(mode="json")
+
+
+def test_deprecated_solver_theta_other_value_is_rejected(tmp_path):
+    data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "theta": 0.3})
+    with pytest.raises(ValidationError, match="only 1.0 \\(godunov\\) and 0.5 \\(strang\\)"):
+        Config.model_validate(data)
+
+
+def test_solver_theta_and_splitting_together_is_rejected(tmp_path):
+    data = base(
+        tmp_path,
+        solver={"dt": "0.1 ms", "end_time": "1 ms", "theta": 0.5, "splitting": "strang"},
+    )
+    with pytest.raises(ValidationError, match="not the deprecated `theta`"):
+        Config.model_validate(data)
+
+
+def test_stiff_states_need_a_hybrid_scheme(tmp_path):
+    cell = {
+        "ode_file": str(tmp_path / "m.ode"),
+        "scheme": "generalized_rush_larsen_2",
+        "stiff_states": ["v"],
+    }
+    with pytest.raises(ValidationError, match="hybrid_"):
+        Config.model_validate(base(tmp_path, cell=cell))
+
+
+def test_stiff_states_with_hybrid_scheme(tmp_path):
+    cell = {
+        "ode_file": str(tmp_path / "m.ode"),
+        "scheme": "hybrid_rush_larsen_2",
+        "stiff_states": ["v"],
+    }
+    assert Config.model_validate(base(tmp_path, cell=cell)).cell.stiff_states == ["v"]
+
+
+def _order_conf(tmp_path, splitting, scheme="generalized_rush_larsen", pde=None, ode=None):
+    solver = {"dt": "0.1 ms", "end_time": "1 ms", "splitting": splitting}
+    if pde is not None:
+        solver["pde"] = pde
+    if ode is not None:
+        solver["ode"] = ode
+    cell = {"ode_file": str(tmp_path / "m.ode"), "scheme": scheme}
+    return Config.model_validate(base(tmp_path, cell=cell, solver=solver))
+
+
+def test_no_order_warning_for_godunov(tmp_path):
+    assert splitting_order_warnings(_order_conf(tmp_path, "godunov")) == []
+
+
+def test_no_order_warning_for_strang_with_second_order_scheme(tmp_path):
+    conf = _order_conf(tmp_path, "strang", scheme="generalized_rush_larsen_2")
+    assert splitting_order_warnings(conf) == []
+
+
+def test_order_warning_for_strang_with_first_order_scheme(tmp_path):
+    (msg,) = splitting_order_warnings(_order_conf(tmp_path, "strang"))
+    assert "'generalized_rush_larsen'" in msg
+    assert "generalized_rush_larsen_2" in msg
+    assert "first order" in msg
+
+
+def test_order_warning_for_strang_with_backward_euler_pde(tmp_path):
+    conf = _order_conf(
+        tmp_path,
+        "strang",
+        scheme="generalized_rush_larsen_2",
+        pde={"type": "theta", "theta": 1.0},
+    )
+    (msg,) = splitting_order_warnings(conf)
+    assert "solver.pde.theta = 1.0" in msg
+
+
+def test_order_warning_skips_irksome_backends(tmp_path):
+    conf = _order_conf(tmp_path, "strang", pde={"type": "irksome"}, ode={"type": "irksome"})
+    assert splitting_order_warnings(conf) == []
+
+
+def test_second_order_schemes_exist_in_gotranx():
+    gotranx = pytest.importorskip("gotranx")
+    assert SECOND_ORDER_SCHEMES <= {s.name for s in gotranx.schemes.Scheme}
+
+
+def test_niederer_template_has_no_order_warning(tmp_path):
+    import beat.cli
+
+    path = Path(beat.cli.__file__).parent / "templates" / "niederer_benchmark" / "config.toml"
+    conf = Config.model_validate(toml.loads(path.read_text()))
+    assert conf.solver.splitting == "strang"
+    assert splitting_order_warnings(conf) == []

@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from mpi4py import MPI
 
 import dolfinx
@@ -125,6 +128,32 @@ def test_steady_state_cache_key_includes_scheme(tmp_path):
     assert len(files_after) == 2
 
 
+def test_steady_state_cache_name_without_stiff_states_is_unchanged(tmp_path):
+    """Steady states cached before cell.stiff_states existed must still be found."""
+    ss = {"num_beats": 1, "BCL": "2 ms", "dt": "0.1 ms"}
+    conf = conf_with(tmp_path, steady_state=ss)
+    model = build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    legacy_key = json.dumps(
+        {
+            "ode": hashlib.sha256(conf.cell.ode_file.read_bytes()).hexdigest(),
+            "scheme": conf.cell.scheme,
+            "params": model.parameters[0].tolist(),
+            "ss": conf.cell.steady_state.model_dump(mode="json"),
+        },
+        sort_keys=True,
+    )
+    h = hashlib.sha256(legacy_key.encode()).hexdigest()[:16]
+    assert (tmp_path / "c" / "init_states" / f"tissue_{h}.npy").is_file()
+
+
+def test_steady_state_cache_key_includes_stiff_states(tmp_path):
+    ss = {"num_beats": 1, "BCL": "2 ms", "dt": "0.1 ms"}
+    for stiff in (["h"], ["v"]):
+        conf = conf_with(tmp_path, scheme="hybrid_rush_larsen", stiff_states=stiff, steady_state=ss)
+        build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    assert len(list((tmp_path / "c" / "init_states").glob("tissue_*.npy"))) == 2
+
+
 def test_malformed_ode_file_raises_config_error(tmp_path):
     """A gotranx parse failure on rank 0 (during codegen) must surface as a `ConfigError` on
     every rank, not a raw traceback (and, under MPI, not a hang on the other ranks)."""
@@ -206,3 +235,24 @@ def test_steady_state_cache_check_is_decided_on_rank0(tmp_path, monkeypatch):
         )
     again = build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
     assert np.allclose(first.init_states[0], again.init_states[0])
+
+
+def test_unknown_stiff_state_raises_config_error(tmp_path):
+    conf = conf_with(tmp_path, scheme="hybrid_rush_larsen", stiff_states=["nope"])
+    with pytest.raises(ConfigError, match="nope"):
+        build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+
+
+def test_stiff_states_are_part_of_the_codegen_cache_key(tmp_path):
+    for stiff in (["h"], ["v"]):
+        conf = conf_with(tmp_path, scheme="hybrid_rush_larsen", stiff_states=stiff)
+        build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    assert len(list((tmp_path / "c").glob("cell_model_*.py"))) == 2
+
+
+def test_codegen_cache_name_without_stiff_states_is_unchanged(tmp_path):
+    """Caches written before cell.stiff_states existed must still be found."""
+    conf = conf_with(tmp_path)
+    build_cell_model(conf.cell, tmp_path / "c", MPI.COMM_WORLD)
+    h = hashlib.sha256(conf.cell.ode_file.read_bytes() + conf.cell.scheme.encode()).hexdigest()[:16]
+    assert (tmp_path / "c" / f"cell_model_{h}.py").is_file()
