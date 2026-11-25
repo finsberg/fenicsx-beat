@@ -485,6 +485,12 @@ class SolverConfig(_Base):
         description="Operator splitting: 'godunov' (first order) or 'strang' (second order with "
         "a second-order cell.scheme and solver.pde.theta = 0.5)",
     )
+    merge_half_steps: bool = Field(
+        default=False,
+        description="Merge consecutive Strang ODE half-steps: still second order at Godunov's cost "
+        "per step, with a larger error than plain Strang at the same dt. The state is "
+        "synchronized at every save and checkpoint. Needs splitting = 'strang'",
+    )
     end_time: Time | None = Field(
         default=None,
         description="Simulated end time. Give either this or num_beats and BCL",
@@ -533,6 +539,12 @@ class SolverConfig(_Base):
             raise ValueError(
                 "solver: give exactly one of `end_time` or (`num_beats` and `BCL`)",
             )
+        return self
+
+    @model_validator(mode="after")
+    def _check_merge_half_steps(self) -> "SolverConfig":
+        if self.merge_half_steps and self.splitting != "strang":
+            raise ValueError("solver.merge_half_steps = true needs solver.splitting = 'strang'")
         return self
 
     def t_end_ms(self) -> float:

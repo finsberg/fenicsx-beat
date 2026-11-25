@@ -279,6 +279,7 @@ def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulat
         pde=pde,
         ode=ode,
         splitting=conf.solver.splitting,
+        merge_half_steps=conf.solver.merge_half_steps,
         monitor=monitor or NullMonitor(),
     )
     return Simulation(conf, geo, time, pde, ode, solver, cell, stimuli, V_ode)
@@ -499,6 +500,7 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
     tic = perf_counter()
     for step in range(step0, n_steps):
         if step % save_stride == 0:
+            sim.solver.synchronize()
             maybe_save(step)
         t = step * dt
         sim.time.value = t  # type: ignore[assignment]
@@ -510,6 +512,7 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
         if not comm.allreduce(finite, op=MPI.LAND):
             raise SolverFailure(f"Non-finite transmembrane potential at t={t + dt} ms")
         if ckpt_stride and (step + 1) % ckpt_stride == 0 and step + 1 < n_steps:
+            sim.solver.synchronize()
             checkpoint(step + 1)
         if (step + 1) % conf.output.log_every == 0:
             elapsed = perf_counter() - tic
@@ -518,5 +521,6 @@ def _time_loop(sim: Simulation, restart: bool) -> None:
                 f"t={(step + 1) * dt:.3f} ms  step {step + 1}/{n_steps}  "
                 f"{rate:.1f} steps/s  ETA {(n_steps - step - 1) / rate:.0f} s",
             )
+    sim.solver.synchronize()
     maybe_save(n_steps)
     checkpoint(n_steps)

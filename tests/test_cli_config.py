@@ -398,3 +398,18 @@ def test_niederer_template_has_no_order_warning(tmp_path):
     conf = Config.model_validate(toml.loads(path.read_text()))
     assert conf.solver.splitting == "strang"
     assert splitting_order_warnings(conf) == []
+
+
+def test_merge_half_steps_defaults_to_false(tmp_path):
+    assert Config.model_validate(base(tmp_path)).solver.merge_half_steps is False
+
+
+def test_merge_half_steps_with_strang(tmp_path):
+    solver = {"dt": "0.1 ms", "end_time": "1 ms", "splitting": "strang", "merge_half_steps": True}
+    assert Config.model_validate(base(tmp_path, solver=solver)).solver.merge_half_steps is True
+
+
+def test_merge_half_steps_needs_strang(tmp_path):
+    solver = {"dt": "0.1 ms", "end_time": "1 ms", "merge_half_steps": True}
+    with pytest.raises(ValidationError, match="merge_half_steps"):
+        Config.model_validate(base(tmp_path, solver=solver))
