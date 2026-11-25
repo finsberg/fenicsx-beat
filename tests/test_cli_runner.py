@@ -408,3 +408,76 @@ def test_run_warns_on_strang_with_first_order_scheme(tmp_path, caplog):
     )
     run(conf)
     assert "generalized_rush_larsen_2" in caplog.text
+
+
+MERGED = {"splitting": "strang", "merge_half_steps": True}
+
+
+def test_merged_restart_matches_continuous_run(tmp_path):
+    # save every 3 steps, so steps in between really are merged
+    output = {"save_every": "0.3 ms"}
+    full = load_config(
+        write_cfg(
+            tmp_path / "a",
+            solver={"dt": "0.1 ms", "end_time": "0.6 ms", **MERGED},
+            output=output,
+        ),
+        environ={},
+    )
+    run(full)
+    part = load_config(
+        write_cfg(
+            tmp_path / "b",
+            solver={"dt": "0.1 ms", "end_time": "0.3 ms", **MERGED},
+            output=output,
+        ),
+        environ={},
+    )
+    run(part)
+    ext = load_config(tmp_path / "b" / "config.toml", environ={}, sets=['solver.end_time="0.6 ms"'])
+    run(ext, restart=True)
+    assert np.allclose(
+        read_result_times(ext.output.folder / RESULTS, MPI.COMM_WORLD),
+        [0.0, 0.3, 0.6],
+    )
+    assert np.array_equal(_final_v(full).x.array, _final_v(ext).x.array)
+
+    plain = load_config(
+        write_cfg(
+            tmp_path / "c",
+            solver={"dt": "0.1 ms", "end_time": "0.6 ms", "splitting": "strang"},
+            output=output,
+        ),
+        environ={},
+    )
+    run(plain)
+    # merging changed the numerics (it is not silently plain Strang)
+    assert not np.array_equal(_final_v(full).x.array, _final_v(plain).x.array)
+
+
+def test_merged_run_saving_every_step_is_plain_strang(tmp_path):
+    # synchronizing at every save makes every step a plain Strang step
+    solver = {"dt": "0.1 ms", "end_time": "0.3 ms", "splitting": "strang"}
+    merged = load_config(
+        write_cfg(
+            tmp_path / "m",
+            solver={**solver, "merge_half_steps": True},
+            output={"save_every": "0.1 ms"},
+        ),
+        environ={},
+    )
+    plain = load_config(
+        write_cfg(tmp_path / "p", solver=solver, output={"save_every": "0.1 ms"}),
+        environ={},
+    )
+    run(merged)
+    run(plain)
+    assert np.array_equal(_final_v(merged).x.array, _final_v(plain).x.array)
+
+
+def test_restart_rejects_changed_merge_half_steps(tmp_path):
+    cfg = write_cfg(tmp_path, solver={"dt": "0.1 ms", "end_time": "0.3 ms", "splitting": "strang"})
+    run(load_config(cfg, environ={}))
+    changed = load_config(cfg, environ={}, sets=["solver.merge_half_steps=true"])
+    with pytest.raises(ConfigError, match="physics"):
+        run(changed, restart=True)

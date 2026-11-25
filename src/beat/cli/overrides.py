@@ -254,6 +254,8 @@ def physics_hash(conf: Config) -> str:
     data["solver"]["theta"] = {"godunov": 1.0, "strang": 0.5}[data["solver"].pop("splitting")]
     if not data["cell"].get("stiff_states"):
         data["cell"].pop("stiff_states", None)  # not in beat <= 0.12; hash the old way
+    if not data["solver"].get("merge_half_steps"):
+        data["solver"].pop("merge_half_steps", None)  # not in beat <= 0.13; hash the old way
     if data["geometry"].get("type") != "folder":
         data["geometry"].pop("folder", None)
     blob = json.dumps(data, sort_keys=True).encode()

@@ -287,6 +287,7 @@ LEGACY_PHYSICS_HASH = {
         ({}, 1.0),
         ({"splitting": "godunov"}, 1.0),
         ({"splitting": "strang"}, 0.5),
+        ({"splitting": "strang", "merge_half_steps": False}, 0.5),
         ({"theta": 1.0}, 1.0),
         ({"theta": 0.5}, 0.5),
     ],

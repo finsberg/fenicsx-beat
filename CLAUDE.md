@@ -53,7 +53,10 @@ Operator-split PDE/ODE solve per timestep:
   deprecated alias that warns) drives Godunov/Strang splitting (`splitting="godunov"|"strang"`;
   `theta=` is a deprecated alias): ODE step → project to PDE → PDE step → project back → second ODE
   half-step for Strang. Strang is only second order with PDE `theta=0.5` and a second-order gotranx
-  scheme (`*_rush_larsen_2`).
+  scheme (`*_rush_larsen_2`). With `merge_half_steps=True` (Strang only) consecutive ODE half-steps
+  are merged (Godunov's cost, still second order); the state is then only valid after
+  `synchronize()`, which `solve`, `restart_functions` and the CLI runner (before saves/checkpoints)
+  call.
 - **Irksome backend** (`irksome_model.py`, `irksome_odesolver.py`, `irksome` extra):
   `IrksomeMonodomainModel` / `IrksomeODESolver` / `IrksomeMultiODESolver` are drop-in alternatives that
   advance the PDE/ODE step with a fully implicit Runge–Kutta Butcher tableau instead of theta-rule/

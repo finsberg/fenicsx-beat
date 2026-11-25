@@ -94,6 +94,17 @@ class SplittingSolver:
     ODE solver in :class:`beat.reaction_eikonal.FootCurrentODESolver` gives the R-E+ model (with a
     PDE) or the R-E- model (``pde=None``). ``monitor=None`` (or leaving it out) records nothing
     (a :class:`beat.telemetry.NullMonitor`).
+
+    ``merge_half_steps=True`` (Strang only) merges each step's closing ODE half-step with the next
+    step's opening one: still second order, at Godunov's cost of one ODE step per step, but with a
+    larger error than plain Strang at the same ``dt``. Between steps the state then lacks the
+    closing half-step, so call :meth:`synchronize` before reading ``v`` or the ODE states;
+    :meth:`solve` and :meth:`restart_functions` do it automatically. A parameter or stimulus change
+    made between steps also affects the pending half-step of the previous step. Anything that reads
+    ``v`` after every step (probes, :class:`beat.activation.ActivationTracker`, conduction-velocity
+    estimates) sees it lagging its closing half-step, so threshold activation times come out late
+    by up to about half a time step; synchronizing every step to avoid this costs as much as plain
+    Strang splitting.
     """
 
     pde: PDEModel | None
@@ -101,12 +112,19 @@ class SplittingSolver:
     theta: float | None = None  # deprecated; kept third for positional callers
     monitor: BaseMonitor = field(default_factory=NullMonitor)
     splitting: Literal["godunov", "strang"] | None = None
+    merge_half_steps: bool = False
+    _pending: tuple[float, float] | None = field(default=None, init=False, repr=False)
 
     # frames up to the caller; subclasses with an extra __post_init__ frame add one
     _theta_warning_stacklevel: ClassVar[int] = 4
 
     def __post_init__(self) -> None:
         self._resolve_splitting()
+        if self.merge_half_steps and self.splitting != "strang":
+            raise ValueError(
+                "merge_half_steps=True needs splitting='strang', got "
+                f"{self.splitting or f'theta={self.theta}'}",
+            )
         if self.monitor is None:
             self.monitor = NullMonitor()
         self.ode.to_dolfin()  # numpy array (ODE solver) -> dolfin function
@@ -149,6 +167,35 @@ class SplittingSolver:
         """The transmembrane potential: ``pde.v``, or ``ode.v_ode`` without a PDE."""
         return self.ode.v_ode if self.pde is None else self.pde.v
 
+    @property
+    def synchronized(self) -> bool:
+        """``False`` while merged Strang splitting owes the last step's closing ODE half-step."""
+        return self._pending is None
+
+    def synchronize(self) -> None:
+        """Run the pending closing ODE half-step of merged Strang splitting, if there is one.
+
+        With ``merge_half_steps=True`` each step leaves its closing half-step pending, to be merged
+        with the next step's opening half-step. Until then ``v`` and the ODE states lack that
+        half-step (``v`` is only first-order accurate), so call this before saving or
+        post-processing them. Does nothing when nothing is pending (Godunov, no merging, no PDE,
+        or already synchronized).
+        """
+        if self._pending is None:
+            return
+        t, dt = self._pending
+        self._pending = None
+        assert self.pde is not None
+        logger.debug(f"Synchronizing: closing ODE half-step with t0={t:.5f} and dt={dt:.5f}")
+        with self.monitor.track_time("corrective_ode_step"):
+            self.ode.step(t, dt)
+        with self.monitor.track_time("corrective_ode_to_dolfin"):
+            self.ode.to_dolfin()
+        with self.monitor.track_time("corrective_ode_to_pde"):
+            self.ode.ode_to_pde()
+        with self.monitor.track_time("corrective_pde_assign_previous"):
+            self.pde.assign_previous()
+
     def restart_functions(
         self,
         state_names: Sequence[str],
@@ -158,8 +205,11 @@ class SplittingSolver:
         These are ``("v", pde.v)`` followed by ``("state_<name>", f)`` for each ODE state, named
         by ``state_names`` (one per state). Write them to save a checkpoint. On a fresh solver,
         read into them and pass them to :meth:`load_restart`. Without a PDE, ``"v"`` is
-        ``ode.v_ode``.
+        ``ode.v_ode``. Synchronizes first (see :meth:`synchronize`), so a checkpoint is never
+        taken mid-step. This means calling it mid-run (e.g. to checkpoint) changes the rest of a
+        merged run at truncation-error level, compared with a run that never checkpoints.
         """
+        self.synchronize()
         states = self.ode.states_to_dolfin(list(state_names))
         return [("v", self.v)] + [(f"state_{name}", f) for name, f in zip(state_names, states)]
 
@@ -222,18 +272,31 @@ class SplittingSolver:
         self.ode.load_all_states([f for _, f in functions[1:]])
         if self.pde is None:
             self.ode.to_dolfin()
+            self._pending = None
             return
         if metadata is not None and "pde" in metadata:
             self.pde.load_restart_metadata(metadata["pde"])  # type: ignore[attr-defined]
         self.pde.assign_previous()
+        self._pending = None
 
     def solve(self, interval: tuple[float, float], dt: float | None) -> None:
-        """Step over ``interval`` with time step ``dt`` (see :func:`beat.utils.time_steps`)."""
+        """Step over ``interval`` with time step ``dt`` (see :func:`beat.utils.time_steps`).
+
+        Synchronizes at the end (see :meth:`synchronize`).
+        """
         for t0, t1 in time_steps(interval, dt):
             logger.debug(f"Solving on t = ({t0:.2f}, {t1:.2f})")
             self.step((t0, t1))
+        self.synchronize()
 
     def step(self, interval):
+        """Advance the coupled system over ``interval = (t0, t1)``.
+
+        Godunov: a full ODE step, then a full PDE step. Strang: half an ODE step, a PDE step and a
+        closing half ODE step. Merged Strang: the closing half-step is left pending and merged
+        into the next step's opening ODE step (see :meth:`synchronize`). If a pending half-step
+        is left over after merging was turned off, it is synchronized first.
+        """
         if self.pde is None:
             t0, t1 = interval
             with self.monitor.track_time("total_step"):
@@ -256,12 +319,22 @@ class SplittingSolver:
 
         dt = t1 - t0
         t = t0 + theta * dt
+        merging = self.merge_half_steps and self.splitting == "strang"
+        if self._pending is not None and not merging:
+            # merging was turned off (or the scheme changed) after a merged step
+            self.synchronize()
+        if merging and self._pending is not None:
+            # the previous step's closing half-step and this step's opening half-step, as one step
+            t_ode, dt_ode = self._pending[0], self._pending[1] + theta * dt
+            self._pending = None
+        else:
+            t_ode, dt_ode = t0, theta * dt
 
-        logger.debug(f"Tentative ODE step with t0={t0:.5f} dt={theta * dt:.5f}")
+        logger.debug(f"Tentative ODE step with t0={t_ode:.5f} dt={dt_ode:.5f}")
 
         with self.monitor.track_time("total_step"):
             with self.monitor.track_time("ode_step"):
-                self.ode.step(t0=t0, dt=theta * dt)
+                self.ode.step(t0=t_ode, dt=dt_ode)
 
             with self.monitor.track_time("ode_to_dolfin"):
                 # numpy array (ODE solver) -> dolfin function
@@ -291,6 +364,9 @@ class SplittingSolver:
                 with self.monitor.track_time("pde_assign_previous_after"):
                     # But first update previous value in PDE
                     self.pde.assign_previous()
+            elif merging:
+                # leave the closing half-step pending; synchronize() or the next step runs it
+                self._pending = (t, (1.0 - theta) * dt)
             else:
                 logger.debug(f"Corrective ODE step with t0={t:5f} and dt={(1.0 - theta) * dt:.5f}")
 
