@@ -75,6 +75,27 @@ def test_splitting_solver_logs_both_ends_of_the_interval(caplog):
     assert "Solving on t = (0.50, 1.00)" in messages, messages
 
 
+def test_merged_strang_splitting_is_second_order(strang_mms_module):
+    """Merging the half-steps keeps Strang + generalized_rush_larsen_2 second order."""
+    module = strang_mms_module
+
+    def final_v(dt):
+        return _strang_mms_final_v(
+            module,
+            "generalized_rush_larsen_2",
+            "strang",
+            dt,
+            merge_half_steps=True,
+        )
+
+    ref = final_v(2.0**-10)
+    dts = [2.0**-k for k in range(2, 7)]
+    errors = [_rms_difference(final_v(dt), ref) for dt in dts]
+    rate = np.mean(np.log2(np.array(errors[:-1]) / np.array(errors[1:])))
+    print("merged", errors, rate)
+    assert rate >= 1.9
+
+
 @pytest.mark.parametrize(
     "odespace",
     [
@@ -285,7 +306,7 @@ def strang_mms_module():
     return module
 
 
-def _strang_mms_final_v(module, scheme, splitting, dt, N=16, M=0.01, T=1.0):
+def _strang_mms_final_v(module, scheme, splitting, dt, N=16, M=0.01, T=1.0, merge_half_steps=False):
     """v at T for the manufactured solution v = phi sin t, s = phi (sin t - cos t) / 2.
 
     s solves ds/dt = v - s exactly; the stimulus closes the v equation
@@ -315,7 +336,12 @@ def _strang_mms_final_v(module, scheme, splitting, dt, N=16, M=0.01, T=1.0):
         num_states=2,
         v_index=module["state_index"]("v"),
     )
-    beat.SplittingSolver(pde=pde, ode=ode, splitting=splitting).solve((0.0, T), dt=dt)
+    beat.SplittingSolver(
+        pde=pde,
+        ode=ode,
+        splitting=splitting,
+        merge_half_steps=merge_half_steps,
+    ).solve((0.0, T), dt=dt)
     return pde.state
 
 

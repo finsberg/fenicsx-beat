@@ -238,6 +238,17 @@ Godunov scheme; the [verification](../demos/verification.py) demo shows second-o
 splitting with a manufactured solution, with gotranx's cell schemes, and with the ten
 Tusscher–Panfilov 2006 cell model.
 
+**Merged half-steps.** In Strang splitting the closing ODE half-step of one time step and the
+opening half-step of the next can be combined into one ODE step of length $\Delta t$
+(`SplittingSolver(..., splitting="strang", merge_half_steps=True)`). The scheme stays second order
+and costs one ODE solve per step, like Godunov splitting, but the cell scheme then steps with
+$\Delta t$ instead of $\Delta t/2$, so its error is larger than plain Strang splitting's at the same
+$\Delta t$ (and smaller at the same cost). Between merged steps the solution is not synchronized: $v$
+still lacks its closing half-step and is only first-order accurate until `SplittingSolver.synchronize`
+runs it. `SplittingSolver.solve` and `SplittingSolver.restart_functions` synchronize automatically
+and the CLI does so before every save and checkpoint; a time loop of your own must call
+`synchronize()` before saving or post-processing $v$.
+
 ## 7. Alternative backends for the ODE/PDE steps
 
 `beat.SplittingSolver` only depends on its `pde` and `ode` objects implementing a small
