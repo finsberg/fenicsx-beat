@@ -396,9 +396,10 @@ fig.savefig("verification_tp06.png")
 
 # %% [markdown]
 # Godunov splitting and Strang splitting with the first-order `generalized_rush_larsen` stay at
-# (or below) first order; the last Strang rate even drops to 0.8. Strang splitting with
-# `generalized_rush_larsen_2` approaches second order. In the [CLI](../docs/cli.md) this is
-# `solver.splitting = "strang"` with `cell.scheme = "generalized_rush_larsen_2"`.
+# (or below) first order; the last rate of Strang with `generalized_rush_larsen` even drops to
+# 0.8. Strang splitting with `generalized_rush_larsen_2` approaches second order. In the
+# [CLI](../docs/cli.md) this is `solver.splitting = "strang"` with
+# `cell.scheme = "generalized_rush_larsen_2"`.
 
 # %% [markdown]
 # ## 7. Merging Strang half-steps

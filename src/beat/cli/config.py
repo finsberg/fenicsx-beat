@@ -316,7 +316,7 @@ class CellConfig(_Base):
         # cache names nor the physics hash (gotranx treats them as a set).
         duplicates = sorted({s for s in value if value.count(s) > 1})
         if duplicates:
-            raise ValueError(f"cell.stiff_states has duplicate states {duplicates}")
+            raise ValueError(f"duplicate states {duplicates}")
         return sorted(value)
 
     @model_validator(mode="after")

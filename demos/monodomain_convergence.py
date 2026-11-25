@@ -227,8 +227,9 @@ fig.savefig("convergence.png")
 
 # ## First order in time
 #
-# Godunov splitting (`splitting="godunov"`, the default) is first order in time whatever the
-# cell model's time-stepping scheme. Strang splitting (`splitting="strang"`) can reach second
+# Godunov splitting (`splitting="godunov"`, the default) is first order in time; a second-order
+# cell scheme does not change that (the verification demo shows it for
+# `generalized_rush_larsen_2`). Strang splitting (`splitting="strang"`) can reach second
 # order, but only with a Crank-Nicolson PDE step and a second-order cell scheme; the
 # [verification demo](verification.py) shows this with gotranx's `generalized_rush_larsen_2`
 # and the ten Tusscher-Panfilov 2006 cell model.
