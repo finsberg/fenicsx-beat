@@ -4,7 +4,14 @@ import pytest
 import toml
 from pydantic import ValidationError
 
-from beat.cli.config import SECOND_ORDER_SCHEMES, Config, SolverConfig, ms, splitting_order_warnings
+from beat.cli.config import (
+    SECOND_ORDER_SCHEMES,
+    Config,
+    SolverConfig,
+    config_warnings,
+    ms,
+    splitting_order_warnings,
+)
 
 
 def base(tmp_path, **kw):
@@ -316,6 +323,13 @@ def test_deprecated_solver_theta_other_value_is_rejected(tmp_path):
         Config.model_validate(data)
 
 
+@pytest.mark.parametrize("theta", [True, False])
+def test_deprecated_solver_theta_rejects_booleans(tmp_path, theta):
+    data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "theta": theta})
+    with pytest.raises(ValidationError, match="only 1.0 \\(godunov\\) and 0.5 \\(strang\\)"):
+        Config.model_validate(data)
+
+
 def test_solver_theta_and_splitting_together_is_rejected(tmp_path):
     data = base(
         tmp_path,
@@ -352,6 +366,60 @@ def _order_conf(tmp_path, splitting, scheme="generalized_rush_larsen", pde=None,
         solver["ode"] = ode
     cell = {"ode_file": str(tmp_path / "m.ode"), "scheme": scheme}
     return Config.model_validate(base(tmp_path, cell=cell, solver=solver))
+
+
+def _hybrid_cell(tmp_path, stiff_states):
+    return {
+        "ode_file": str(tmp_path / "m.ode"),
+        "scheme": "hybrid_rush_larsen_2",
+        "stiff_states": stiff_states,
+    }
+
+
+def test_stiff_states_are_sorted(tmp_path):
+    cell = _hybrid_cell(tmp_path, ["m", "h", "j"])
+    assert Config.model_validate(base(tmp_path, cell=cell)).cell.stiff_states == ["h", "j", "m"]
+
+
+def test_stiff_states_order_does_not_change_the_physics_hash(tmp_path):
+    from beat.cli.overrides import physics_hash
+
+    (tmp_path / "m.ode").write_text("")
+    hashes = {
+        physics_hash(Config.model_validate(base(tmp_path, cell=_hybrid_cell(tmp_path, stiff))))
+        for stiff in (["m", "h"], ["h", "m"])
+    }
+    assert len(hashes) == 1
+
+
+def test_duplicate_stiff_states_are_rejected(tmp_path):
+    with pytest.raises(ValidationError, match="duplicate.*'h'"):
+        Config.model_validate(base(tmp_path, cell=_hybrid_cell(tmp_path, ["h", "m", "h"])))
+
+
+@pytest.mark.parametrize("scheme", ["hybrid_rush_larsen", "hybrid_rush_larsen_2"])
+def test_warning_for_hybrid_scheme_without_stiff_states(tmp_path, scheme):
+    conf = _order_conf(tmp_path, "godunov", scheme=scheme)
+    (msg,) = config_warnings(conf)
+    assert "cell.stiff_states" in msg
+    assert repr(scheme) in msg
+
+
+def test_no_hybrid_warning_with_stiff_states(tmp_path):
+    conf = Config.model_validate(base(tmp_path, cell=_hybrid_cell(tmp_path, ["h"])))
+    assert config_warnings(conf) == []
+
+
+def test_unknown_scheme_warns_it_is_unknown_not_first_order(tmp_path):
+    pytest.importorskip("gotranx")
+    (msg,) = config_warnings(_order_conf(tmp_path, "strang", scheme="rush_larsen_3"))
+    assert "'rush_larsen_3' is not a gotranx scheme" in msg
+    assert "first order" not in msg
+
+
+def test_config_warnings_include_order_warnings(tmp_path):
+    conf = _order_conf(tmp_path, "strang")
+    assert config_warnings(conf) == splitting_order_warnings(conf)
 
 
 def test_no_order_warning_for_godunov(tmp_path):

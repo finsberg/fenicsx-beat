@@ -6,30 +6,31 @@
 # step and an explicit or Rush–Larsen scheme for the cell-model ODE step.
 #
 # `beat.IrksomeMonodomainModel` and `beat.IrksomeODESolver` are drop-in alternatives to
-# `beat.MonodomainModel` and `beat.odesolver.DolfinODESolver`/`DolfinMultiODESolver` that instead use
-# [Irksome](https://firedrakeproject.org/Irksome) to advance the PDE step and/or the ODE step with a
-# fully implicit Runge–Kutta method, specified as a *Butcher tableau* (e.g. `irksome.BackwardEuler()`
-# for a first-order implicit step, or `irksome.GaussLegendre(2)` for a fourth-order one). Since they
-# implement the same `pde`/`ode` interfaces as the default solvers, they plug directly into
-# `beat.SplittingSolver` and can even be mixed with the default solvers (an
+# `beat.MonodomainModel` and `beat.odesolver.DolfinODESolver`/`DolfinMultiODESolver` that instead
+# use [Irksome](https://firedrakeproject.org/Irksome) to advance the PDE step and/or the ODE step
+# with a fully implicit Runge–Kutta method, specified as a *Butcher tableau* (e.g.
+# `irksome.BackwardEuler()` for a first-order implicit step, or `irksome.GaussLegendre(2)` for a
+# fourth-order one). Since they implement the same `pde`/`ode` interfaces as the default solvers,
+# they plug directly into `beat.SplittingSolver` and can even be mixed with the default solvers (an
 # `IrksomeMonodomainModel` PDE step can be paired with a plain `DolfinODESolver` ODE step, or vice
-# versa) — see `tests/test_monodomain_solver.py::test_irksome_monodomain_splitting_analytic` for such
-# a mix. `IrksomeMonodomainModel` can also be used entirely on its own (without any splitting or cell
-# model at all) for a purely implicit, high-order-in-time diffusion equation, as in
+# versa) — see `tests/test_monodomain_solver.py::test_irksome_monodomain_splitting_analytic` for
+# such a mix. `IrksomeMonodomainModel` can also be used entirely on its own (without any splitting
+# or cell model at all) for a purely implicit, high-order-in-time diffusion equation, as in
 # `tests/test_irksome_monodomain.py`.
 #
 # This is useful when the default low-order splitting is not accurate enough in time, or when the
 # cell-model ODEs are too stiff for the explicit/Rush–Larsen schemes used elsewhere in this
-# repository. The trade-off is that each implicit stage requires solving a (nonlinear, for a nonlinear
-# cell model) system over the whole mesh, which is more expensive per step than the default explicit
-# ODE update.
+# repository. The trade-off is that each implicit stage requires solving a (nonlinear, for a
+# nonlinear cell model) system over the whole mesh, which is more expensive per step than the
+# default explicit ODE update.
 #
-# This demo combines both: a [`gotranx`](https://finsberg.github.io/gotranx)-generated UFL cell model
-# (the two-variable Mitchell–Schaeffer model) is solved with `IrksomeODESolver`, coupled through
-# `beat.SplittingSolver` (Godunov splitting, `splitting="godunov"`) to an `IrksomeMonodomainModel` PDE
-# step, on a domain with a banded, strongly heterogeneous conductivity $M$. We track when each point
-# first crosses a voltage threshold to build an activation-time map, which should show fast activation
-# in the high-conductivity band and progressively slower activation as $M$ decreases.
+# This demo combines both: a [`gotranx`](https://finsberg.github.io/gotranx)-generated UFL cell
+# model (the two-variable Mitchell–Schaeffer model) is solved with `IrksomeODESolver`, coupled
+# through `beat.SplittingSolver` (Godunov splitting, `splitting="godunov"`) to an
+# `IrksomeMonodomainModel` PDE step, on a domain with a banded, strongly heterogeneous conductivity
+# $M$. We track when each point first crosses a voltage threshold to build an activation-time map,
+# which should show fast activation in the high-conductivity band and progressively slower
+# activation as $M$ decreases.
 #
 # Note that `irksome` is an optional dependency — install it with the `irksome` extra,
 # `python3 -m pip install fenicsx-beat[irksome]`.
@@ -106,10 +107,11 @@ def generate_and_import_cell_model():
 # ## Geometry and heterogeneous conductivity
 #
 # We solve on a unit square, with the conductivity tensor $M$ set piecewise-constant in four
-# horizontal bands, differing by a factor of $64$ between the fastest (top) and slowest (bottom) band.
-# A real conductivity tensor would be built with `beat.conductivities.define_conductivity_tensor` from
-# physical intra-/extracellular conductivities and a fibre field, as in the other tissue demos; here we
-# construct it directly to keep the focus on the Irksome time stepping.
+# horizontal bands, differing by a factor of $64$ between the fastest (top) and slowest (bottom)
+# band. A real conductivity tensor would be built with
+# `beat.conductivities.define_conductivity_tensor` from physical intra-/extracellular conductivities
+# and a fibre field, as in the other tissue demos; here we construct it directly to keep the focus
+# on the Irksome time stepping.
 
 
 def eval_conductivity(x):
@@ -150,8 +152,8 @@ M.interpolate(eval_conductivity)
 # Rather than applying an external stimulus current $I_{stim}$ (as in most of the other demos), here
 # we trigger the action potential with a localized initial condition: $v = 1$ (i.e. already fully
 # depolarized) on a thin strip along the left edge of the domain, and the resting state everywhere
-# else. All other state variables (here just the gating variable $h$) start at the cell model's default
-# resting values.
+# else. All other state variables (here just the gating variable $h$) start at the cell model's
+# default resting values.
 
 V_ode = dolfinx.fem.functionspace(mesh, ("CG", 1))
 v_ode = dolfinx.fem.Function(V_ode, name="V_ode")
@@ -175,12 +177,12 @@ init_states[v_idx, :] = v_ode.x.array
 
 # ## Setting up the Irksome PDE and ODE solvers
 #
-# We use `irksome.BackwardEuler()` — a single-stage, first-order implicit Runge–Kutta method — as the
-# Butcher tableau for both the PDE and ODE steps, matching the (also first-order) Godunov splitting
-# used below; a higher-order tableau such as `irksome.GaussLegendre(2)` could be used for either step
-# without any other changes. We pass no explicit stimulus (`I_s=None`) since the action potential is
-# triggered by the initial condition above, and use a block-Jacobi-preconditioned CG solver for the
-# (here, symmetric positive definite) linear system arising at each implicit stage.
+# We use `irksome.BackwardEuler()` — a single-stage, first-order implicit Runge–Kutta method — as
+# the Butcher tableau for both the PDE and ODE steps, matching the (also first-order) Godunov
+# splitting used below; a higher-order tableau such as `irksome.GaussLegendre(2)` could be used for
+# either step without any other changes. We pass no explicit stimulus (`I_s=None`) since the action
+# potential is triggered by the initial condition above, and use a block-Jacobi-preconditioned CG
+# solver for the (here, symmetric positive definite) linear system arising at each implicit stage.
 
 pde_tableau = irksome.BackwardEuler()
 params = dict(
@@ -200,8 +202,8 @@ pde = IrksomeMonodomainModel(
 # plain-numpy `fun` expected by `DolfinODESolver`), so we wrap the gotranx-generated `ms_ufl.rhs` to
 # match the `fun(states, t, parameters)` signature Irksome expects. We build `pde` first so that its
 # state can be passed directly as `v_pde` here, combining the two into the usual splitting solver —
-# `splitting="godunov"` selects Godunov splitting, matching the first-order `BackwardEuler` tableau used for both
-# sub-steps.
+# `splitting="godunov"` selects Godunov splitting, matching the first-order `BackwardEuler` tableau
+# used for both sub-steps.
 
 ode_tableau = irksome.BackwardEuler()
 
@@ -226,8 +228,8 @@ solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="godunov")
 
 # ## Time stepping
 #
-# As in the other tissue demos, we save the transmembrane potential $v$ to an XDMF file at every step,
-# and additionally record, for every mesh point, the first time at which $v$ crosses
+# As in the other tissue demos, we save the transmembrane potential $v$ to an XDMF file at every
+# step, and additionally record, for every mesh point, the first time at which $v$ crosses
 # `activation_threshold` — the local activation time.
 
 xdmf = dolfinx.io.XDMFFile(comm, "results_gotranx_irksome.xdmf", "w")
@@ -261,9 +263,9 @@ xdmf.close()
 # ## Plotting the activation map
 #
 # We save the activation-time field to XDMF for visualization in ParaView, and also produce a quick
-# scatter plot directly with matplotlib. The activation time should increase from left to right (away
-# from the initial stimulus) and, within that, increase from top to bottom as the conductivity $M$
-# drops by a factor of $64$ from the fastest to the slowest band.
+# scatter plot directly with matplotlib. The activation time should increase from left to right
+# (away from the initial stimulus) and, within that, increase from top to bottom as the conductivity
+# $M$ drops by a factor of $64$ from the fastest to the slowest band.
 
 with dolfinx.io.XDMFFile(comm, "activation_time.xdmf", "w") as xdmf_tact:
     xdmf_tact.write_mesh(mesh)

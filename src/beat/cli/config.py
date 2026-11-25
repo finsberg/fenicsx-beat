@@ -309,6 +309,16 @@ class CellConfig(_Base):
             return list(TRANSMURAL_REGIONS)
         return list(self.layers.map)
 
+    @field_validator("stiff_states")
+    @classmethod
+    def _canonical_stiff_states(cls, value: list[str]) -> list[str]:
+        # Sorted, so the order a user lists them in changes neither the codegen/steady-state
+        # cache names nor the physics hash (gotranx treats them as a set).
+        duplicates = sorted({s for s in value if value.count(s) > 1})
+        if duplicates:
+            raise ValueError(f"cell.stiff_states has duplicate states {duplicates}")
+        return sorted(value)
+
     @model_validator(mode="after")
     def _check_stiff_states(self) -> "CellConfig":
         if self.stiff_states and not self.scheme.startswith("hybrid_"):
@@ -520,6 +530,8 @@ class SolverConfig(_Base):
             raise ValueError("solver: give `splitting`, not the deprecated `theta` as well")
         names = {1.0: "godunov", 0.5: "strang"}
         try:
+            if isinstance(theta, bool):  # float(True) == 1.0 would silently pick godunov
+                raise TypeError
             data["splitting"] = names[float(theta)]
         except (KeyError, TypeError, ValueError):
             raise ValueError(
@@ -664,6 +676,36 @@ SECOND_ORDER_SCHEMES: frozenset[str] = frozenset(
 )
 
 
+def _is_gotranx_scheme(name: str) -> bool:
+    try:
+        import gotranx
+    except ImportError:  # cannot tell; `beat run` checks it when it generates the code
+        return True
+    return name in gotranx.schemes.Scheme.__members__
+
+
+def cell_scheme_warnings(conf: Config) -> list[str]:
+    """Problems with ``cell.scheme`` that validation alone does not catch (empty if none)."""
+    cell = conf.cell
+    if not _is_gotranx_scheme(cell.scheme):
+        return [
+            f"cell.scheme = {cell.scheme!r} is not a gotranx scheme; `beat run` will reject it.",
+        ]
+    uses_scheme = conf.solver.ode.type in ("dolfin", "external_operator")
+    if uses_scheme and cell.scheme.startswith("hybrid_") and not cell.stiff_states:
+        return [
+            f"cell.scheme = {cell.scheme!r} without cell.stiff_states: no state gets the "
+            "exponential (Rush-Larsen) update, so every state is stepped explicitly. List the "
+            "stiff states in cell.stiff_states.",
+        ]
+    return []
+
+
+def config_warnings(conf: Config) -> list[str]:
+    """Everything ``beat validate-config`` and ``beat run`` warn about (empty if nothing)."""
+    return cell_scheme_warnings(conf) + splitting_order_warnings(conf)
+
+
 def splitting_order_warnings(conf: Config) -> list[str]:
     """Why a Strang-split run would only be first order in time (empty if it is not).
 
@@ -674,21 +716,22 @@ def splitting_order_warnings(conf: Config) -> list[str]:
     solver = conf.solver
     if solver.splitting != "strang":
         return []
-    warnings: list[str] = []
+    messages: list[str] = []
     scheme = conf.cell.scheme
-    if solver.ode.type in ("dolfin", "external_operator") and scheme not in SECOND_ORDER_SCHEMES:
-        warnings.append(
+    first_order = scheme not in SECOND_ORDER_SCHEMES and _is_gotranx_scheme(scheme)
+    if solver.ode.type in ("dolfin", "external_operator") and first_order:
+        messages.append(
             f"solver.splitting = 'strang' with cell.scheme = {scheme!r}: the cell scheme is "
             "first order, so the run is only first order in time. Use a second-order scheme "
             "such as 'generalized_rush_larsen_2'.",
         )
     if solver.pde.type == "theta" and not math.isclose(solver.pde.theta, 0.5):
-        warnings.append(
+        messages.append(
             f"solver.splitting = 'strang' with solver.pde.theta = {solver.pde.theta}: only "
             "theta = 0.5 (Crank-Nicolson) is second order, so the run is only first order in "
             "time.",
         )
-    return warnings
+    return messages
 
 
 ALL_MODELS: tuple[type[BaseModel], ...] = tuple(

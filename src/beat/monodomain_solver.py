@@ -160,7 +160,7 @@ class SplittingSolver:
             stacklevel=self._theta_warning_stacklevel,
         )
         self.splitting = name  # type: ignore[assignment]
-        self.theta = theta
+        self.theta = theta if name is None else _SPLITTING_FRACTION[name]
 
     @property
     def v(self) -> dolfinx.fem.Function:

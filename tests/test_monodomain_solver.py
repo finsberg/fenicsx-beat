@@ -215,10 +215,8 @@ def test_monodomain_splitting_spatial_convergence(odespace):
     assert cvg_rate > 1.85
 
 
-@pytest.mark.parametrize(
-    "splitting",
-    ["godunov"],
-)  # Strang: test_strang_splitting_second_order_with_gotranx_schemes
+# Strang is checked by test_strang_splitting_second_order_with_gotranx_schemes
+@pytest.mark.parametrize("splitting", ["godunov"])
 @pytest.mark.parametrize(
     "odespace",
     [
@@ -858,6 +856,13 @@ def test_deprecated_theta_maps_to_a_splitting_name(theta, name):
     assert record[0].filename == __file__
     assert solver.splitting == name
     assert solver.theta == theta
+
+
+@pytest.mark.parametrize(("theta", "fraction"), [(1.0 - 1e-9, 1.0), (0.5 + 1e-9, 0.5)])
+def test_deprecated_theta_close_to_a_splitting_stores_its_exact_fraction(theta, fraction):
+    with pytest.warns(DeprecationWarning):
+        solver = beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver(), theta=theta)
+    assert solver.theta == fraction
 
 
 def test_deprecated_positional_theta_still_works():
