@@ -275,6 +275,8 @@ def build_simulation(conf: Config, comm=MPI.COMM_WORLD, monitor=None) -> Simulat
     V_ode = ode_space(geo.mesh)
     markers = build_region_markers(conf.cell, geo, V_ode)
     ode = build_ode(conf.solver, cell, markers, pde, time, monitor=monitor)
+    # SolverConfig's validator always resolves merge_half_steps to a bool
+    assert conf.solver.merge_half_steps is not None
     solver = SplittingSolver(
         pde=pde,
         ode=ode,
