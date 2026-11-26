@@ -103,11 +103,11 @@ def parse_args(argv=None):
 
 
 def cell_model(outdir: Path):
-    """The generalized Rush-Larsen code of the endocardial ToR-ORd model (all cell types)"""
+    """The `rush_larsen_2` code of the endocardial ToR-ORd model (all cell types)"""
     path = outdir / "ToRORd_dynCl_endo.py"
-    if not path.is_file():
+    if not path.is_file() or "def rush_larsen_2" not in path.read_text():
         ode = gotranx.load_ode(ROOT / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
-        scheme = [gotranx.schemes.Scheme.generalized_rush_larsen]
+        scheme = [gotranx.schemes.Scheme.rush_larsen_2]
         path.write_text(gotranx.cli.gotran2py.get_code(ode, scheme=scheme))
     model: dict = {}
     exec(compile(path.read_text(), str(path), "exec"), model)
@@ -204,7 +204,7 @@ def simulate(args, geo, activation, mesh_unit):
         output_endo_marker=LAYERS["endo"][0],
         output_epi_marker=LAYERS["epi"][0],
     )
-    fun = model["generalized_rush_larsen"]
+    fun = model["rush_larsen_2"]
     v_index = model["state_index"]("v")
     init_states, parameters = {}, {}
     for name, (marker, celltype) in LAYERS.items():
@@ -257,6 +257,8 @@ def simulate(args, geo, activation, mesh_unit):
         parameters=parameters,
         v_index={k: v_index for k in init_states},
     )
+    # Strang splitting (the default) without merged half-steps: we read `v` after every step
+    # (activation times), which merged half-steps would delay by up to half a time step.
     solver = beat.SplittingSolver(pde=pde, ode=ode)
 
     # --- ECG: electrode potentials every ms -----------------------------------------------------

@@ -37,12 +37,12 @@ from beat.external_operator_odesolver import ExternalOperatorODESolver
 # ## The cell model
 #
 # As in the [Niederer benchmark](niederer_benchmark.py) and other tissue demos, we generate the ten
-# Tusscher–Panfilov 2006 epicardial cell model with `gotranx`, using a generalized Rush–Larsen scheme.
+# Tusscher–Panfilov 2006 epicardial cell model with `gotranx`, using the second-order Rush–Larsen scheme (`rush_larsen_2`).
 # Since `ExternalOperatorODESolver` calls the generated function exactly like `DolfinODESolver` does,
 # no special code-generation option is needed here.
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     here = Path.cwd()
     cell_ode = gotranx.load_ode(
         here
@@ -53,13 +53,13 @@ if not model_path.is_file():
     )
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
 import tentusscher_panfilov_2006_epi_cell as model
 
-fun = model.generalized_rush_larsen
+fun = model.rush_larsen_2
 v_index = model.state_index("V")
 
 # ## Geometry, PDE and stimulus
@@ -195,7 +195,7 @@ print(f"Max |V_ExternalOperatorODESolver - V_DolfinODESolver| = {diff:.3e} mV")
 # NumPy array — so we expect `ExternalOperatorODESolver` to still be slower per step, just not by the
 # dramatic amount a naive (un-warmed-up) timing would suggest.
 
-fun_numba = numba.jit(nopython=True)(model.generalized_rush_larsen)
+fun_numba = numba.jit(nopython=True)(model.rush_larsen_2)
 # Warm up the JIT compilation before timing
 fun_numba(states=init_states.copy(), t=0.0, parameters=parameters, dt=dt)
 

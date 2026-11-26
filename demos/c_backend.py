@@ -9,7 +9,7 @@
 # `fun` without changing anything else.
 #
 # In this demo we compare NumPy, Numba, C and C with OpenMP threads, for the ten Tusscher–Panfilov
-# 2006 epicardial cell model (as in the [spiral wave demo](spiral_wave.py)) with the generalized
+# 2006 epicardial cell model (as in the [spiral wave demo](spiral_wave.py)) with the second-order
 # Rush–Larsen scheme: first the ODE step alone, then a small monodomain simulation. We also check
 # that they give the same solution.
 #
@@ -63,10 +63,10 @@ ode_file = (
 cell_ode = gotranx.load_ode(ode_file)
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
@@ -82,7 +82,7 @@ dt = 0.05  # ms
 #
 # The NumPy backend is the generated function itself.
 
-backends: dict[str, Any] = {"NumPy": model.generalized_rush_larsen}
+backends: dict[str, Any] = {"NumPy": model.rush_larsen_2}
 build_times = {}
 
 # Numba compiles the same function the first time it is called, so we call it once on a small
@@ -90,7 +90,7 @@ build_times = {}
 
 if numba is not None:
     tic = pytime.perf_counter()
-    fun_numba = numba.jit(nopython=True)(model.generalized_rush_larsen)
+    fun_numba = numba.jit(nopython=True)(model.rush_larsen_2)
     warmup = np.zeros((num_states, 2))
     warmup.T[:] = model.init_state_values()
     fun_numba(states=warmup, t=0.0, parameters=parameters, dt=dt)
@@ -104,7 +104,7 @@ else:
 # hash of the code, the compiler and the flags, so the next run skips the compilation.
 
 tic = pytime.perf_counter()
-fun_c = beat.c_backend.from_ode(cell_ode, scheme="generalized_rush_larsen")
+fun_c = beat.c_backend.from_ode(cell_ode, scheme="rush_larsen_2")
 build_times["C"] = pytime.perf_counter() - tic
 backends["C"] = fun_c
 print0(f"The C library is {fun_c.library_path}")
@@ -119,7 +119,7 @@ if beat.c_backend.openmp_available():
     tic = pytime.perf_counter()
     backends["C + OpenMP"] = beat.c_backend.from_ode(
         cell_ode,
-        scheme="generalized_rush_larsen",
+        scheme="rush_larsen_2",
         openmp=True,
         num_threads=num_threads,
     )

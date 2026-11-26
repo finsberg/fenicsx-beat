@@ -64,7 +64,7 @@ def load_cell_models():
         ode = gotranx.load_ode(ODE_DIR / f"tentusscher_panfilov_2006_{name}_cell.ode")
         code = gotranx.cli.gotran2py.get_code(
             ode,
-            scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+            scheme=[gotranx.schemes.Scheme.rush_larsen_2],
         )
         ns: dict = {}
         exec(code, ns)
@@ -81,7 +81,7 @@ def cell_solver(V, v_pde, markers):
         markers=markers,
         init_states=init,
         parameters={k: m["init_parameter_values"](stim_amplitude=0.0) for k, m in models.items()},
-        fun={k: m["generalized_rush_larsen"] for k, m in models.items()},
+        fun={k: m["rush_larsen_2"] for k, m in models.items()},
         num_states={k: len(v) for k, v in init.items()},
         v_index={k: m["state_index"]("V") for k, m in models.items()},
     )
@@ -114,6 +114,7 @@ def build(model, dx, cv, comm, source_delay=0.0):
             t_a,
             ExponentialFoot(),
         )
+        # Strang splitting (the default); there is no PDE, and `v` is read after every step.
         solver = beat.SplittingSolver(pde=None, ode=ode)
         return solver, solver.v, t_a, wedge
     layer = interface_layer(mesh, num_layers=num_layers(dx))
@@ -152,6 +153,8 @@ def build(model, dx, cv, comm, source_delay=0.0):
             params={"petsc_options": PETSC},
         )
         ode = FootCurrentODESolver(cell_solver(V, pde.state, markers), t_a, ExponentialFoot())
+    # Strang splitting (the default) without merged half-steps: we read `v` after every step
+    # (activation times), which merged half-steps would delay by up to half a time step.
     solver = beat.SplittingSolver(pde=pde, ode=ode)
     return solver, solver.v, t_a, wedge
 

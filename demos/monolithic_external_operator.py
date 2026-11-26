@@ -87,11 +87,18 @@ dh_dt = (h_inf - h) / tau_h
 
 jax_model_path = Path("ms_jax_monolithic.py")
 np_model_path = Path("ms_np_monolithic.py")
-if not jax_model_path.is_file() or not np_model_path.is_file():
+if (
+    not jax_model_path.is_file()
+    or not np_model_path.is_file()
+    or "def generalized_rush_larsen" not in np_model_path.read_text()
+):
     ode_path = Path("mitchell_schaeffer_monolithic.ode")
     ode_path.write_text(ms_ode_code)
     ode = gotranx.load_ode(ode_path)
     jax_model_path.write_text(get_code(ode, scheme=None, backend=Backend.jax))
+    # The comparison scheme stays the first-order `generalized_rush_larsen`: the second-order
+    # `rush_larsen_2` advances `v` with an explicit midpoint step, which is unstable for this stiff
+    # model at the large time steps compared below (the solution overflows).
     np_model_path.write_text(
         get_code(ode, scheme=[gotranx.schemes.Scheme.generalized_rush_larsen]),
     )

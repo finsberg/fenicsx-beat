@@ -16,7 +16,7 @@ import gotranx
 import beat
 
 ode = gotranx.load_ode("tentusscher_panfilov_2006_epi_cell.ode")
-fun = beat.c_backend.from_ode(ode, scheme="generalized_rush_larsen")
+fun = beat.c_backend.from_ode(ode, scheme="rush_larsen_2")
 
 ode_solver = beat.odesolver.DolfinODESolver(
     v_ode=v_ode,  # e.g. a dolfinx.fem.Function in a P1 space
@@ -34,7 +34,7 @@ or from C code that you already have, for example from `gotranx ode2c`,
 ```python
 fun = beat.c_backend.compile_scheme(
     c_code,
-    scheme="generalized_rush_larsen",
+    scheme="rush_larsen_2",
     num_states=...,
     num_parameters=...,
 )
@@ -52,7 +52,7 @@ The function also has `state_index(name)`, `parameter_index(name)`, `init_state_
 
 | Option | Default | Meaning |
 |---|---|---|
-| `scheme` | `"generalized_rush_larsen"` | The name of the scheme (and of the C function) |
+| `scheme` | `"rush_larsen_2"` | The name of the scheme (and of the C function) |
 | `codegen_kwargs` (`from_ode` only) | `None` | Passed on to `gotranx.codegen.CCodeGenerator.scheme` |
 | `num_states` | `None` (filled in by `from_ode`) | Checked against the arrays; without it there is no bounds check |
 | `num_parameters` | `None` (filled in by `from_ode`) | Checked against the arrays; without it there is no bounds check |

@@ -18,7 +18,7 @@
 # or cell model at all) for a purely implicit, high-order-in-time diffusion equation, as in
 # `tests/test_irksome_monodomain.py`.
 #
-# This is useful when the default low-order splitting is not accurate enough in time, or when the
+# This is useful when low-order splitting is not accurate enough in time, or when the
 # cell-model ODEs are too stiff for the explicit/Rush–Larsen schemes used elsewhere in this
 # repository. The trade-off is that each implicit stage requires solving a (nonlinear, for a
 # nonlinear cell model) system over the whole mesh, which is more expensive per step than the

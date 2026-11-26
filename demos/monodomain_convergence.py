@@ -14,7 +14,7 @@
 # exact solution, we can measure the $L^2$ error of the numerical solution produced by
 # `beat.SplittingSolver` for decreasing mesh size $h = 1/N$ and time step $\Delta t$, and
 # check that it decreases at the expected rate — second order in space (from the finite element
-# discretization) and first order in time for Godunov splitting (`splitting="godunov"`, the solver's default).
+# discretization) and first order in time for Godunov splitting (`splitting="godunov"`, set explicitly here).
 # See the [verification demo](verification.py) for the corresponding second-order-in-time check using
 # Strang splitting, and the [mathematical background](../docs/math_background.md) page for where the
 # operator splitting scheme comes from.
@@ -227,9 +227,9 @@ fig.savefig("convergence.png")
 
 # ## First order in time
 #
-# Godunov splitting (`splitting="godunov"`, the default) is first order in time; a second-order
+# Godunov splitting (`splitting="godunov"`) is first order in time; a second-order
 # cell scheme does not change that (the verification demo shows it for
-# `generalized_rush_larsen_2`). Strang splitting (`splitting="strang"`) can reach second
+# `rush_larsen_2`). Strang splitting (`splitting="strang"`) can reach second
 # order, but only with a Crank-Nicolson PDE step and a second-order cell scheme; the
-# [verification demo](verification.py) shows this with gotranx's `generalized_rush_larsen_2`
+# [verification demo](verification.py) shows this with gotranx's `rush_larsen_2`
 # and the ten Tusscher-Panfilov 2006 cell model.

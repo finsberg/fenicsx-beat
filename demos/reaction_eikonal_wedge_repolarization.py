@@ -48,7 +48,7 @@ cell_models = {}
 for layer, name in {"EPI": "epi", "M": "M", "ENDO": "endo"}.items():
     code = gotranx.cli.gotran2py.get_code(
         gotranx.load_ode(ode_dir / f"tentusscher_panfilov_2006_{name}_cell.ode"),
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     namespace: dict = {}
     exec(code, namespace)
@@ -60,7 +60,7 @@ cells = beat.odesolver.DolfinMultiODESolver(
     markers=layers,
     init_states=init,
     parameters={k: m["init_parameter_values"](stim_amplitude=0.0) for k, m in cell_models.items()},
-    fun={k: m["generalized_rush_larsen"] for k, m in cell_models.items()},
+    fun={k: m["rush_larsen_2"] for k, m in cell_models.items()},
     num_states={k: len(v) for k, v in init.items()},
     v_index={k: m["state_index"]("V") for k, m in cell_models.items()},
 )

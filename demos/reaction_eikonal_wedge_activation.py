@@ -80,7 +80,7 @@ cell_models = {}
 for layer, name in {"EPI": "epi", "M": "M", "ENDO": "endo"}.items():
     code = gotranx.cli.gotran2py.get_code(
         gotranx.load_ode(ode_dir / f"tentusscher_panfilov_2006_{name}_cell.ode"),
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     namespace: dict = {}
     exec(code, namespace)
@@ -95,7 +95,7 @@ def cell_solver(v_pde):
         markers=layers,
         init_states=init,
         parameters={k: m["init_parameter_values"](stim_amplitude=0.0) for k, m in cell_models.items()},
-        fun={k: m["generalized_rush_larsen"] for k, m in cell_models.items()},
+        fun={k: m["rush_larsen_2"] for k, m in cell_models.items()},
         num_states={k: len(v) for k, v in init.items()},
         v_index={k: m["state_index"]("V") for k, m in cell_models.items()},
     )
@@ -176,6 +176,8 @@ pde = beat.MonodomainModel(
     time=time, mesh=mesh, M=M, I_s=I_s, C_m=C_m, dx=I_s[0].dZ,
     params={"petsc_options": petsc_options},
 )
+# Strang splitting (the default) without merged half-steps: we read `v` after every step
+# (activation times), which merged half-steps would delay by up to half a time step.
 run("R-D", beat.SplittingSolver(pde=pde, ode=cell_solver(pde.state)), pde.v)
 # -
 

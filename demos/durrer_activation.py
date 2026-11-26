@@ -181,11 +181,11 @@ if comm.rank == 0:
 # instead of pacing to steady state.
 
 model_path = Path("ToRORd_dynCl_endo.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     cell_ode = gotranx.load_ode(Path.cwd() / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
@@ -238,7 +238,7 @@ calibration = beat.conduction_velocity.calibrate_conductivities(
     ureg.Quantity(0.6, "mm/ms"),
     ureg.Quantity(0.3, "mm/ms"),
     conductivities=beat.conductivities.default_conductivities("Bishop"),
-    fun=model["generalized_rush_larsen"],
+    fun=model["rush_larsen_2"],
     init_states=init_states,
     parameters=parameters,
     v_index=model["state_index"]("v"),
@@ -294,12 +294,14 @@ num_points = V_ode.dofmap.index_map.size_local + V_ode.dofmap.index_map.num_ghos
 ode = beat.odesolver.DolfinODESolver(
     v_ode=dolfinx.fem.Function(V_ode),
     v_pde=pde.state,
-    fun=model["generalized_rush_larsen"],
+    fun=model["rush_larsen_2"],
     init_states=np.repeat(init_states[:, None], num_points, axis=1),
     parameters=parameters,
     num_states=len(init_states),
     v_index=model["state_index"]("v"),
 )
+# Strang splitting (the default) without merged half-steps: we read `v` after every step
+# (activation times), which merged half-steps would delay by up to half a time step.
 solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # We record the activation time of every node with `beat.activation.ActivationTracker` and run

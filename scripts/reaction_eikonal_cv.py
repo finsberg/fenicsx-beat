@@ -38,7 +38,7 @@ ODE = (
 def cell_model():
     code = gotranx.cli.gotran2py.get_code(
         gotranx.load_ode(ODE),
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model: dict = {}
     exec(code, model)
@@ -81,12 +81,14 @@ def conduction_velocity(comm, dx, dt, direction):
     ode = beat.odesolver.DolfinODESolver(
         v_ode=dolfinx.fem.Function(V),
         v_pde=pde.state,
-        fun=model["generalized_rush_larsen"],
+        fun=model["rush_larsen_2"],
         init_states=init,
         parameters=model["init_parameter_values"](stim_amplitude=0.0),
         num_states=len(init),
         v_index=model["state_index"]("V"),
     )
+    # Strang splitting (the default) without merged half-steps: we read `v` after every step
+    # (activation times), which merged half-steps would delay by up to half a time step.
     solver = beat.SplittingSolver(pde=pde, ode=ode)
     tracker = ActivationTracker(pde.state, method="threshold")
     upstroke = ActivationTracker(pde.state, method="max_dvdt", threshold=-30.0, t0=0.0)
