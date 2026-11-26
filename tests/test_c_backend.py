@@ -538,3 +538,14 @@ def test_build_library_error_uses_description(tmp_path):
             source_name="test.c",
             description="test library",
         )
+
+
+def test_default_scheme_is_rush_larsen_2():
+    import inspect
+
+    for f in (
+        beat.c_backend.compile_scheme,
+        beat.c_backend.generate_c_code,
+        beat.c_backend.from_ode,
+    ):
+        assert inspect.signature(f).parameters["scheme"].default == "rush_larsen_2"

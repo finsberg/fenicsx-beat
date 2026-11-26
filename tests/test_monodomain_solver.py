@@ -829,12 +829,29 @@ def test_new_name_does_not_warn():
         beat.SplittingSolver(pde=pde, ode=NullODESolver())
 
 
-def test_splitting_defaults_to_godunov_without_warning():
+def test_default_splitting_is_strang_without_merging():
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
         solver = beat.SplittingSolver(pde=_small_pde(), ode=NullODESolver())
-    assert solver.splitting == "godunov"
-    assert solver.theta == 1.0
+    assert solver.splitting == "strang"
+    assert solver.theta == 0.5
+    assert solver.merge_half_steps is False
+
+
+class RecordingODESolver(NullODESolver):
+    def __init__(self):
+        self.calls = []
+        self.v_ode = None
+
+    def step(self, t0: float, dt: float) -> None:
+        self.calls.append((t0, dt))
+
+
+def test_ode_only_mode_takes_one_full_ode_step_with_the_default_splitting():
+    ode = RecordingODESolver()
+    solver = beat.SplittingSolver(pde=None, ode=ode)
+    solver.step((0.0, 0.1))
+    assert ode.calls == [(0.0, 0.1)]
 
 
 def test_strang_splitting_takes_half_an_ode_step_first():
