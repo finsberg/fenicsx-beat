@@ -78,7 +78,7 @@ t_S2 = 340.0  # Start time of the S2 stimulus (ms)
 # ## Cell model
 #
 # We use the epicardial version of the TP06 model, and generate code for it with `gotranx`, using
-# the second-order Rush–Larsen scheme `rush_larsen_2` for the gating variables, just as in the original paper.
+# the second-order Rush–Larsen scheme `rush_larsen_2` for the gating variables.
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
 if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():

@@ -150,7 +150,6 @@ parameters_ode[g_Ks_index, :] = g_Ks.x.array
 
 # Finally we set up the PDE and ODE models and combine them with a splitting solver.
 # We use Strang splitting with merged half-steps: it is second order at the cost of Godunov splitting. Between steps the state lacks its closing half-step, so we call `solver.synchronize()` before every save/frame.
-# A stimulus switched on or off between steps also affects the pending half-step, which shifts its timing by up to half a time step.
 
 # +
 pde = beat.MonodomainModel(

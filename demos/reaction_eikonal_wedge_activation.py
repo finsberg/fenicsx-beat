@@ -243,7 +243,7 @@ if comm.rank == 0:
 
 # ## Precomputed results at 100, 200 and 400 µm
 #
-# These results were computed with beat ≤ 0.13's numerics (`generalized_rush_larsen` with Godunov splitting), while the demo code itself now uses `rush_larsen_2` and Strang splitting.
+# These results (and the source-delay calibration in `scripts/reaction_eikonal_cv.json` that this demo loads) were computed with beat ≤ 0.13's numerics (`generalized_rush_larsen` with Godunov splitting), while the demo code itself now uses `rush_larsen_2` and Strang splitting.
 #
 # The figures below come from `scripts/reaction_eikonal_wedge.py` (run with MPI at each
 # resolution) and `scripts/reaction_eikonal_wedge_figures.py`. As in the paper's Fig. 2, the R-D

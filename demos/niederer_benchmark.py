@@ -213,7 +213,7 @@ ode = beat.odesolver.DolfinODESolver(
     monitor=monitor,
 )
 
-# Combine the PDE and ODE solver. We use strang splitting (the default) without merged half-steps: we read `v` after every step
+# Combine the PDE and ODE solver. We use Strang splitting (the default) without merged half-steps: we read `v` after every step
 # (activation times), which merged half-steps would delay by up to half a time step.
 
 # +

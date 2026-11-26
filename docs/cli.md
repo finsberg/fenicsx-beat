@@ -183,8 +183,10 @@ The defaults changed in beat 0.14: `cell.scheme = "rush_larsen_2"`, `solver.spli
 and `solver.merge_half_steps = true` (for Strang). A run started with beat <= 0.13 that relied on
 the old defaults cannot be restarted, or post-processed with `beat post`, using a config that
 relies on the new ones; beat refuses and names the keys to add to the config to keep the old
-behavior: `cell.scheme = "generalized_rush_larsen"`, `solver.splitting = "godunov"`, and, for a
-0.13 run that set `splitting = "strang"` explicitly, `solver.merge_half_steps = false`.
+behavior: `scheme = "generalized_rush_larsen"` under `[cell]` and `splitting = "godunov"` under
+`[solver]` (or `--set cell.scheme="generalized_rush_larsen"` and `--set solver.splitting="godunov"`),
+and, for a 0.13 run that set `splitting = "strang"` explicitly, `merge_half_steps = false` under
+`[solver]`.
 ```
 
 (overrides)=

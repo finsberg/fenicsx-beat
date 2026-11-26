@@ -93,7 +93,7 @@ if comm.rank == 0:
 
 # ## Precomputed results
 #
-# These results were computed with beat ≤ 0.13's numerics (`generalized_rush_larsen` with Godunov splitting), while the demo code itself now uses `rush_larsen_2` and Strang splitting.
+# These results (and the source-delay calibration in `scripts/reaction_eikonal_cv.json` that this demo loads) were computed with beat ≤ 0.13's numerics (`generalized_rush_larsen` with Godunov splitting), while the demo code itself now uses `rush_larsen_2` and Strang splitting.
 #
 # Top: $v$ along the transmural line at $t_{r50}$ for R-D (100 µm) and the R-E models (400 µm),
 # with the normalised spatial derivative (dotted). Bottom: histograms of the absolute deviation

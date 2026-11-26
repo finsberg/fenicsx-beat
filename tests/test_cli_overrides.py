@@ -339,16 +339,16 @@ def test_legacy_hint_names_both_keys_for_a_default_relying_config(tmp_path):
     old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
     hint = legacy_defaults_hint(_conf(tmp_path), physics_hash(old))
     assert "beat <= 0.13" in hint
-    assert 'cell.scheme = "generalized_rush_larsen"' in hint
-    assert 'solver.splitting = "godunov"' in hint
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert 'splitting = "godunov" under [solver]' in hint
 
 
 def test_legacy_hint_names_only_the_unset_key(tmp_path):
     old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
     new = _conf(tmp_path, solver={"splitting": "godunov"})
     hint = legacy_defaults_hint(new, physics_hash(old))
-    assert 'cell.scheme = "generalized_rush_larsen"' in hint
-    assert "solver.splitting" not in hint
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert "splitting =" not in hint
 
 
 def test_no_legacy_hint_for_a_real_physics_change(tmp_path):
@@ -370,21 +370,39 @@ def test_legacy_hint_names_only_merge_half_steps_for_explicit_strang(tmp_path):
     old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
     new = _conf(tmp_path, cell=_OLD[0], solver={"splitting": "strang"})
     hint = legacy_defaults_hint(new, physics_hash(old))
-    assert "solver.merge_half_steps = false" in hint
-    assert "cell.scheme" not in hint
-    assert "solver.splitting" not in hint
+    assert "merge_half_steps = false under [solver]" in hint
+    assert "[cell]" not in hint
+    assert "splitting =" not in hint
 
 
 def test_legacy_hint_names_scheme_and_merge_half_steps_for_explicit_strang(tmp_path):
     old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
     new = _conf(tmp_path, solver={"splitting": "strang"})
     hint = legacy_defaults_hint(new, physics_hash(old))
-    assert 'cell.scheme = "generalized_rush_larsen"' in hint
-    assert "solver.merge_half_steps = false" in hint
-    assert "solver.splitting" not in hint
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert "merge_half_steps = false under [solver]" in hint
+    assert "splitting =" not in hint
 
 
 def test_legacy_hint_does_not_name_merge_half_steps_for_godunov(tmp_path):
     old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
     hint = legacy_defaults_hint(_conf(tmp_path), physics_hash(old))
     assert "merge_half_steps" not in hint
+
+
+def test_legacy_hint_lines_parse_under_their_tables(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
+    new = _conf(tmp_path, solver={"splitting": "strang"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    data = minimal_config_dict(tmp_path, cell={}, solver={"splitting": "strang"})
+    data["cell"].pop("scheme")
+    # The suggested `key = value` lines, inserted under their [table] in TOML text.
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert "merge_half_steps = false under [solver]" in hint
+    text = toml.dumps(data)
+    text = text.replace("[cell]\n", '[cell]\nscheme = "generalized_rush_larsen"\n', 1)
+    text = text.replace("[solver]\n", "[solver]\nmerge_half_steps = false\n", 1)
+    path = tmp_path / "legacy.toml"
+    path.write_text(text)
+    conf = load_config(path, environ={})
+    assert physics_hash(conf) == physics_hash(old)

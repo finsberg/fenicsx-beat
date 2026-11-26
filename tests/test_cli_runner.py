@@ -413,7 +413,7 @@ def test_run_warns_on_strang_with_first_order_scheme(tmp_path, caplog):
         environ={},
     )
     run(conf)
-    assert "rush_larsen_2" in caplog.text
+    assert "'rush_larsen_2'" in caplog.text
 
 
 MERGED = {"splitting": "strang", "merge_half_steps": True}
@@ -503,5 +503,5 @@ def test_restart_of_a_beat_0_13_run_names_the_keys_to_add(tmp_path):
     MPI.COMM_WORLD.barrier()
     with pytest.raises(ConfigError, match="physics") as e:
         run(load_config(cfg, environ={}), restart=True)
-    assert 'cell.scheme = "generalized_rush_larsen"' in str(e.value)
-    assert 'solver.splitting = "godunov"' in str(e.value)
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in str(e.value)
+    assert 'splitting = "godunov" under [solver]' in str(e.value)

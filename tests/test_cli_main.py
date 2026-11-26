@@ -235,4 +235,4 @@ def test_validate_config_missing_ode_file_exit_1(cfg, tmp_path, caplog):
 def test_validate_config_warns_on_strang_with_first_order_scheme(cfg, caplog):
     caplog.set_level(logging.WARNING)
     assert main(["validate-config", str(cfg), "--set", 'solver.splitting="strang"']) == 0
-    assert "rush_larsen_2" in caplog.text
+    assert "'rush_larsen_2'" in caplog.text

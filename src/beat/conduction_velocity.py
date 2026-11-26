@@ -76,7 +76,8 @@ def measure_conduction_velocity(
     (``"longitudinal"``) or across it (``"transverse"``). The cells within ``max(1 mm, dx)`` of
     one end are stimulated for 2 ms, and the velocity is the slope of a least-squares fit of
     position against activation time (``threshold`` crossing) of the nodes between 40 % and
-    90 % of the length.
+    90 % of the length. The splitting is the :class:`beat.SplittingSolver` default (Strang since
+    beat 0.14).
 
     Parameters
     ----------
@@ -262,7 +263,8 @@ def calibrate_conductivities(
     after two iterations it is the slope of ``log c`` against ``log k`` between the last two,
     which is smaller on a coarse mesh. Both directions are measured with both scales applied:
     on a coarse mesh of tetrahedra a plane wave along one direction also feels the
-    conductivity across it.
+    conductivity across it. The splitting is the :class:`beat.SplittingSolver` default (Strang
+    since beat 0.14), through :func:`measure_conduction_velocity`.
 
     Parameters
     ----------

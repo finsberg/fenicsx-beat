@@ -372,8 +372,6 @@ ode = beat.odesolver.DolfinMultiODESolver(
 # We will solve the ODE and PDE with `beat.SplittingSolver`. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
 #
 # We use Strang splitting with merged half-steps: it is second order at the cost of Godunov splitting. Between steps the state lacks its closing half-step, so we call `solver.synchronize()` before every save/frame.
-#
-# A stimulus switched on or off between steps also affects the pending half-step, which shifts its timing by up to half a time step.
 
 
 solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="strang", merge_half_steps=True)

@@ -245,7 +245,7 @@ for example the sum of a Markov chain's occupancies, or ion totals when every po
 constant volume factors. The per-state exponential update of `generalized_rush_larsen` does not
 preserve them. This is not a guarantee of conserving total ion content in general: with
 rapid-buffering approximations (as in ToRORd's `Bcai` and `Bcajsr`) the total calcium is a
-nonlinear function of the states, so no first-order explicit step conserves it exactly. gotranx
+nonlinear function of the states, so no explicit Runge–Kutta step conserves it exactly. gotranx
 decides structurally which states are "gating" (the right-hand side is affine in the state), and
 those are exponentiated by `rush_larsen*`. For example ToRORd's `cansr` and the IKr Markov states
 are exponentiated and therefore lose the guarantee. `rush_larsen_2` was chosen as the default for

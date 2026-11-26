@@ -495,5 +495,5 @@ def test_post_of_a_beat_0_13_run_names_the_keys_to_add(tmp_path):
     MPI.COMM_WORLD.barrier()
     with pytest.raises(ConfigError, match="config.resolved.toml") as e:
         run_post(load_config(path, environ={}), MPI.COMM_WORLD)
-    assert 'cell.scheme = "generalized_rush_larsen"' in str(e.value)
-    assert 'solver.splitting = "godunov"' in str(e.value)
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in str(e.value)
+    assert 'splitting = "godunov" under [solver]' in str(e.value)

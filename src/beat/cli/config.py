@@ -289,8 +289,8 @@ class CellConfig(_Base):
     ode_file: Path = Field(description="Path to the gotranx .ode cell model")
     scheme: str = Field(
         default="rush_larsen_2",
-        description="gotranx scheme that steps the cell model (second order; conserves the "
-        "states it steps explicitly)",
+        description="gotranx scheme that steps the cell model "
+        "(default rush_larsen_2, second order)",
     )
     stiff_states: list[str] = Field(
         default_factory=list,

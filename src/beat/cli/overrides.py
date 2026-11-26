@@ -299,8 +299,12 @@ def legacy_defaults_hint(conf: Config, recorded_hash: str) -> str:
     def literal(value: str | bool) -> str:
         return json.dumps(value)  # TOML literal: "text" / false
 
-    lines = " and ".join(f"{s}.{k} = {literal(LEGACY_DEFAULTS[s, k])}" for s, k in named)
+    by_section: dict[str, list[str]] = {}
+    for s, k in named:
+        by_section.setdefault(s, []).append(f"{k} = {literal(LEGACY_DEFAULTS[s, k])}")
+    lines = " and ".join(f"{' and '.join(items)} under [{s}]" for s, items in by_section.items())
+    sets = " ".join(f"--set {s}.{k}={literal(LEGACY_DEFAULTS[s, k])}" for s, k in named)
     return (
         f" This run was started with the defaults of beat <= 0.13; to continue it, add {lines} "
-        "to the config."
+        f"to the config (or pass {sets})."
     )
