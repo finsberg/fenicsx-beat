@@ -78,7 +78,7 @@ t_S2 = 340.0  # Start time of the S2 stimulus (ms)
 # ## Cell model
 #
 # We use the epicardial version of the TP06 model, and generate code for it with `gotranx`, using
-# the generalized Rush–Larsen scheme for the gating variables, just as in the original paper.
+# the second-order Rush–Larsen scheme `rush_larsen_2` for the gating variables, just as in the original paper.
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
 if not model_path.is_file():
@@ -92,7 +92,7 @@ if not model_path.is_file():
     )
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
@@ -229,13 +229,13 @@ pde = beat.MonodomainModel(
 ode = beat.odesolver.DolfinODESolver(
     v_ode=dolfinx.fem.Function(dolfinx.fem.functionspace(mesh, ("P", 1))),
     v_pde=pde.state,
-    fun=model.generalized_rush_larsen,
+    fun=model.rush_larsen_2,
     init_states=init_states,
     parameters=parameters,
     num_states=len(init_states),
     v_index=v_index,
 )
-solver = beat.SplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="strang", merge_half_steps=True)
 v = solver.v
 
 # ## Tracking the spiral tip
@@ -343,6 +343,9 @@ t = 0.0
 i = 0
 num_steps = round(end_time / dt)
 while i <= num_steps:
+    if i % probe_every == 0 or i % frame_every == 0:
+        solver.synchronize()
+
     if i % probe_every == 0:
         probe_time_list.append(t)
         probe_value_list.append(scifem.evaluate_function(v, probes).ravel())

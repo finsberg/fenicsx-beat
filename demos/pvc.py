@@ -52,7 +52,7 @@ if not model_path.is_file():
     )
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
@@ -77,7 +77,7 @@ parameters = model["init_parameter_values"](stim_period=1000.0)
 
 dt = 0.01
 nbeats = 50
-fun = model["generalized_rush_larsen"]
+fun = model["rush_larsen_2"]
 y = get_steady_state(
     fun=fun,
     init_states=model["init_state_values"](),
@@ -148,8 +148,9 @@ g_Ks.interpolate(
 )
 parameters_ode[g_Ks_index, :] = g_Ks.x.array
 
-# Finally we set up the PDE and ODE models and combine them with the (default `splitting="godunov"`,
-# first-order) splitting solver.
+# Finally we set up the PDE and ODE models and combine them with a splitting solver.
+# We use Strang splitting with merged half-steps: it is second order at the cost of Godunov splitting. Between steps the state lacks its closing half-step, so we call `solver.synchronize()` before every save/frame.
+# A stimulus switched on or off between steps also affects the pending half-step, which shifts its timing by up to half a time step.
 
 # +
 pde = beat.MonodomainModel(
@@ -168,7 +169,7 @@ ode = beat.odesolver.DolfinODESolver(
     num_states=len(y),
     v_index=model["state_index"]("V"),
 )
-solver = beat.SplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="strang", merge_half_steps=True)
 
 checkpointfname = outdir / "pvc_checkpoint.h5"
 
@@ -194,6 +195,7 @@ done_stimulating = False
 while t < end_time + 1e-12:
 
     if i % save_freq == 0:
+        solver.synchronize()
         save(t)
     solver.step((t, t + dt))
     i += 1

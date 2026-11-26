@@ -144,7 +144,7 @@ if not model_path.is_file():
     cell_ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
@@ -165,7 +165,7 @@ print("Get steady states")
 nbeats = 2  # Should be set to at least 200
 init_states = {
     0: beat.single_cell.get_steady_state(
-        fun=model["generalized_rush_larsen"],
+        fun=model["rush_larsen_2"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=2),
         outdir=results_folder / "mid",
@@ -175,7 +175,7 @@ init_states = {
         dt=0.05,
     ),
     1: beat.single_cell.get_steady_state(
-        fun=model["generalized_rush_larsen"],
+        fun=model["rush_larsen_2"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=0),
         outdir=results_folder / "endo",
@@ -189,7 +189,7 @@ init_states = {
         dt=0.05,
     ),
     2: beat.single_cell.get_steady_state(
-        fun=model["generalized_rush_larsen"],
+        fun=model["rush_larsen_2"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=1),
         outdir=results_folder / "epi",
@@ -206,9 +206,9 @@ parameters = {
     2: model["init_parameter_values"](i_Stim_Amplitude=0.0, celltype=1),
 }
 fun = {
-    0: model["generalized_rush_larsen"],
-    1: model["generalized_rush_larsen"],
-    2: model["generalized_rush_larsen"],
+    0: model["rush_larsen_2"],
+    1: model["rush_larsen_2"],
+    2: model["rush_larsen_2"],
 }
 v_index = {
     0: model["state_index"]("v"),
@@ -268,11 +268,11 @@ ode = beat.odesolver.DolfinMultiODESolver(
     parameters=parameters,
     v_index=v_index,
 )
-# Combine the PDE and (multi-region) ODE solver with a splitting solver. We use the default
-# `splitting="godunov"`, i.e. (first-order) Godunov splitting.
+# Combine the PDE and (multi-region) ODE solver with a splitting solver.
+# We use Strang splitting with merged half-steps: it is second order at the cost of Godunov splitting. Between steps the state lacks its closing half-step, so we call `solver.synchronize()` before every save/frame.
 
 t = 0.0
-solver = beat.SplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="strang", merge_half_steps=True)
 
 vtxfname = results_folder / "slab.bp"
 checkpointfname = results_folder / "slab_checkpoint.h5"
@@ -302,6 +302,7 @@ while t < end_time + 1e-12:
     # Make sure to save at the same time steps that is used by Ambit
 
     if i % save_freq == 0:
+        solver.synchronize()
         save(t)
 
     solver.step((t, t + dt))
