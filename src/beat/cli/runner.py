@@ -39,7 +39,7 @@ from .cellmodel import CellModel, build_cell_model, build_region_markers, state_
 from .config import Config, ConfigError, config_warnings, ms
 from .geometry import CLIGeometry, build_conductivity, build_geometry
 from .log import add_logfile_handler, remove_logfile_handlers
-from .overrides import dump_config, physics_hash
+from .overrides import dump_config, legacy_defaults_hint, physics_hash
 from .solvers import build_ode, build_pde, check_backends_available, ode_space
 from .stimulus import StimulusSet, build_stimuli
 
@@ -194,7 +194,8 @@ def _output_decision(conf: Config, restart: bool, overwrite: bool) -> tuple[str,
             return "error", (
                 "Cannot restart: the physics settings differ from the original run "
                 "(only solver.end_time/num_beats/BCL, [output] and [postprocess] may change). "
-                f"Compare with {folder / 'config.resolved.toml'}"
+                f"Compare with {folder / 'config.resolved.toml'}."
+                + legacy_defaults_hint(conf, meta.get("physics_hash", ""))
             )
         return "restart", ""
     if (folder / RESULTS).exists() or (folder / RESTART_META).exists():

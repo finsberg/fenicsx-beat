@@ -475,3 +475,25 @@ def test_post_reads_flat_restart_json(finished):
         path.write_text(json.dumps(flat))
     MPI.COMM_WORLD.barrier()
     run_post(finished, MPI.COMM_WORLD)
+
+
+@pytest.mark.postprocess
+def test_post_of_a_beat_0_13_run_names_the_keys_to_add(tmp_path):
+    from beat.cli.config import ConfigError
+
+    tmp_path = MPI.COMM_WORLD.bcast(tmp_path, root=0)
+    old = {"cell": {"scheme": "generalized_rush_larsen"}, "solver": {"splitting": "godunov"}}
+    path = tmp_path / "config.toml"
+    if MPI.COMM_WORLD.rank == 0:
+        path.write_text(toml.dumps(minimal_config_dict(tmp_path, **old)))
+    MPI.COMM_WORLD.barrier()
+    run(load_config(path, environ={}))
+    data = minimal_config_dict(tmp_path, **old)
+    del data["cell"]["scheme"], data["solver"]["splitting"]
+    if MPI.COMM_WORLD.rank == 0:
+        path.write_text(toml.dumps(data))
+    MPI.COMM_WORLD.barrier()
+    with pytest.raises(ConfigError, match="config.resolved.toml") as e:
+        run_post(load_config(path, environ={}), MPI.COMM_WORLD)
+    assert 'cell.scheme = "generalized_rush_larsen"' in str(e.value)
+    assert 'solver.splitting = "godunov"' in str(e.value)

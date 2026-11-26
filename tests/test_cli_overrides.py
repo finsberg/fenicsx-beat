@@ -10,6 +10,7 @@ from beat.cli.overrides import (
     dump_config,
     env_overrides,
     file_hash,
+    legacy_defaults_hint,
     load_config,
     parse_petsc_options,
     parse_value,
@@ -321,3 +322,42 @@ def test_env_solver_theta_override_maps_to_splitting(tmp_path):
     cfg.write_text(toml.dumps(minimal_config_dict(tmp_path)))
     conf = load_config(cfg, environ={"BEAT_SOLVER__THETA": "0.5"})
     assert conf.solver.splitting == "strang"
+
+
+def _conf(tmp_path, cell=None, solver=None):
+    """A minimal config; ``cell.scheme`` is left to the default unless ``cell`` sets it."""
+    data = minimal_config_dict(tmp_path, cell=cell or {}, solver=solver or {})
+    if "scheme" not in (cell or {}):
+        data["cell"].pop("scheme")
+    return Config.model_validate(data)
+
+
+_OLD = {"scheme": "generalized_rush_larsen"}, {"splitting": "godunov"}
+
+
+def test_legacy_hint_names_both_keys_for_a_default_relying_config(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    hint = legacy_defaults_hint(_conf(tmp_path), physics_hash(old))
+    assert "beat <= 0.13" in hint
+    assert 'cell.scheme = "generalized_rush_larsen"' in hint
+    assert 'solver.splitting = "godunov"' in hint
+
+
+def test_legacy_hint_names_only_the_unset_key(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    new = _conf(tmp_path, solver={"splitting": "godunov"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    assert 'cell.scheme = "generalized_rush_larsen"' in hint
+    assert "solver.splitting" not in hint
+
+
+def test_no_legacy_hint_for_a_real_physics_change(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    changed = _conf(tmp_path, solver={"dt": "0.025 ms"})
+    assert legacy_defaults_hint(changed, physics_hash(old)) == ""
+
+
+def test_no_legacy_hint_when_everything_is_explicit(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    new = _conf(tmp_path, cell={"scheme": "rush_larsen_2"}, solver={"splitting": "strang"})
+    assert legacy_defaults_hint(new, physics_hash(old)) == ""

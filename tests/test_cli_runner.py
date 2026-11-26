@@ -487,3 +487,21 @@ def test_restart_rejects_changed_merge_half_steps(tmp_path):
     changed = load_config(cfg, environ={}, sets=["solver.merge_half_steps=true"])
     with pytest.raises(ConfigError, match="physics"):
         run(changed, restart=True)
+
+
+def test_restart_of_a_beat_0_13_run_names_the_keys_to_add(tmp_path):
+    old = {
+        "cell": {"scheme": "generalized_rush_larsen"},
+        "solver": {"splitting": "godunov"},
+    }
+    cfg = write_cfg(tmp_path, **old)
+    run(load_config(cfg, environ={}))
+    data = minimal_config_dict(tmp_path, **old)
+    del data["cell"]["scheme"], data["solver"]["splitting"]
+    if MPI.COMM_WORLD.rank == 0:
+        cfg.write_text(toml.dumps(data))
+    MPI.COMM_WORLD.barrier()
+    with pytest.raises(ConfigError, match="physics") as e:
+        run(load_config(cfg, environ={}), restart=True)
+    assert 'cell.scheme = "generalized_rush_larsen"' in str(e.value)
+    assert 'solver.splitting = "godunov"' in str(e.value)

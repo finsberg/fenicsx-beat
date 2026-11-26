@@ -260,3 +260,37 @@ def physics_hash(conf: Config) -> str:
         data["geometry"].pop("folder", None)
     blob = json.dumps(data, sort_keys=True).encode()
     return hashlib.sha256(blob).hexdigest()
+
+
+# Defaults of beat <= 0.13 that beat 0.14 changed: a run started with them (config not setting
+# these keys) no longer matches a default-relying config's physics_hash.
+LEGACY_DEFAULTS: dict[tuple[str, str], str] = {
+    ("cell", "scheme"): "generalized_rush_larsen",
+    ("solver", "splitting"): "godunov",
+}
+
+
+def legacy_defaults_hint(conf: Config, recorded_hash: str) -> str:
+    """Explain a physics-hash mismatch caused only by beat 0.14's new defaults ("" otherwise)."""
+    unset = [
+        (section, key)
+        for section, key in LEGACY_DEFAULTS
+        if key not in getattr(conf, section).model_fields_set
+    ]
+    if not unset:
+        return ""
+    updates: dict[str, dict] = {}
+    for section, key in unset:
+        updates.setdefault(section, {})[key] = LEGACY_DEFAULTS[section, key]
+    if "splitting" in updates.get("solver", {}):
+        updates["solver"]["merge_half_steps"] = False  # beat <= 0.13 never merged by default
+    old = conf.model_copy(
+        update={s: getattr(conf, s).model_copy(update=u) for s, u in updates.items()},
+    )
+    if physics_hash(old) != recorded_hash:
+        return ""
+    lines = " and ".join(f'{s}.{k} = "{LEGACY_DEFAULTS[s, k]}"' for s, k in unset)
+    return (
+        f" This run was started with the defaults of beat <= 0.13; to continue it, add {lines} "
+        "to the config."
+    )

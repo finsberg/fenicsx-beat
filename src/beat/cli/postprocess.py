@@ -24,7 +24,7 @@ from ..ecg import ECGRecovery, ElectrodePotentials, LeadSystem, twelve_lead
 from ..units import ureg
 from .config import Config, ConfigError
 from .geometry import CLIGeometry, build_conductivity, build_geometry
-from .overrides import load_config, physics_hash
+from .overrides import legacy_defaults_hint, load_config, physics_hash
 from .runner import (
     IO_BACKEND,
     RESTART_META,
@@ -66,7 +66,8 @@ def _check_matches_run(conf: Config, comm) -> None:
             raise ConfigError(
                 f"The config's physics settings differ from the run that wrote "
                 f"{folder / RESULTS} (only [output], [postprocess] and the run length may "
-                f"change for beat post). Compare with {resolved}",
+                f"change for beat post). Compare with {resolved}."
+                + legacy_defaults_hint(conf, recorded),
             )
 
     _on_rank0(comm, ConfigError, check)
