@@ -338,3 +338,7 @@ mendonca
 discretised
 eigh
 polyfit
+Bcai
+Bcajsr
+exponentiated
+cansr

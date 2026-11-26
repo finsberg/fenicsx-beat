@@ -149,28 +149,43 @@ regenerating it inside the timed job.
 
 `cell.scheme` names the gotranx scheme that steps the cell model (`beat` lists the valid names if
 you give a wrong one). `rush_larsen_2`, `generalized_rush_larsen_2` and `hybrid_rush_larsen_2`
-are second order in time; the others, such as `explicit_euler`, `rush_larsen`, `generalized_rush_larsen`
-(the default) and `hybrid_rush_larsen`, are first order. The `hybrid_*` schemes apply the
+are second order in time (the default is `rush_larsen_2`); the others, such as `explicit_euler`, `rush_larsen`, `generalized_rush_larsen`
+and `hybrid_rush_larsen`, are first order. The `hybrid_*` schemes apply the
 exponential update only to the states listed in `cell.stiff_states`; setting `cell.stiff_states`
 with any other scheme is an error, as is naming a state the model does not have or naming one
 twice. The order does not matter (`beat` sorts the list). A `hybrid_*` scheme with no
 `cell.stiff_states` steps every state explicitly; `beat validate-config` and `beat run` warn about
 it.
 
-`solver.splitting` chooses the operator splitting: `"godunov"` (default, first order) or
-`"strang"` (second order). Strang splitting is only second order when both sub-steps are: a
+`rush_larsen_2` steps `v` explicitly, so it can need a smaller `solver.dt` than
+`generalized_rush_larsen`; if a run produces non-finite values, reduce `solver.dt` or set
+`cell.scheme = "generalized_rush_larsen"`.
+
+`solver.splitting` chooses the operator splitting: `"strang"` (default, second order) or
+`"godunov"` (first order). Strang splitting is only second order when both sub-steps are: a
 second-order `cell.scheme` and `solver.pde.theta = 0.5` (the default). `beat validate-config` and
 `beat run` warn when `splitting = "strang"` is combined with a first-order sub-step (the Irksome
 backends are not checked: their order depends on the tableau). `solver.theta` is the deprecated
 name: `1.0` means `"godunov"`, `0.5` means `"strang"`.
 
-With `splitting = "strang"`, `solver.merge_half_steps = true` merges each step's closing ODE half-step
+With `splitting = "strang"`, `solver.merge_half_steps` (default `true` for Strang, `false` for
+Godunov; `true` with Godunov is an error) merges each step's closing ODE half-step
 with the next step's opening one: still second order, at Godunov's cost of one ODE step per time step,
 but with a larger error than plain Strang splitting at the same `solver.dt` (and a smaller one at the
 same cost). `beat run` synchronizes the state before every save and checkpoint, so saving every
 step gives plain Strang splitting, and with merging the results depend (at truncation-error level)
 on `output.save_every` and `output.checkpoint_every`. Changing `merge_half_steps` between a run and
 its restart is refused.
+
+:::{admonition} Changed in 0.14
+:class: warning
+The defaults changed in beat 0.14: `cell.scheme = "rush_larsen_2"`, `solver.splitting = "strang"`
+and `solver.merge_half_steps = true` (for Strang). A run started with beat <= 0.13 that relied on
+the old defaults cannot be restarted, or post-processed with `beat post`, using a config that
+relies on the new ones; beat refuses and names the keys to add to the config to keep the old
+behavior: `cell.scheme = "generalized_rush_larsen"`, `solver.splitting = "godunov"`, and, for a
+0.13 run that set `splitting = "strang"` explicitly, `solver.merge_half_steps = false`.
+:::
 
 (overrides)=
 ## Overrides

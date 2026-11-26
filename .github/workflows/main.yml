@@ -13,6 +13,9 @@ jobs:
     container: ${{ matrix.container }}
     env:
       DEB_PYTHON_INSTALL_LAYOUT: deb_system
+      LIBGL_ALWAYS_SOFTWARE: 1
+      VTK_DEFAULT_OPENGL_WINDOW: vtkOSOpenGLRenderWindow
+      PYVISTA_OFF_SCREEN: "true"
 
     strategy:
       fail-fast: false
@@ -24,6 +27,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Install dependencies for pyvista
+        run: apt-get update && apt-get install -y --no-install-recommends libgl1 libosmesa6
 
       - name: Install build requirements
         run: |
