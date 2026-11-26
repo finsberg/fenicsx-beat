@@ -177,7 +177,7 @@ step gives plain Strang splitting, and with merging the results depend (at trunc
 on `output.save_every` and `output.checkpoint_every`. Changing `merge_half_steps` between a run and
 its restart is refused.
 
-:::{admonition} Changed in 0.14
+```{admonition} Changed in 0.14
 :class: warning
 The defaults changed in beat 0.14: `cell.scheme = "rush_larsen_2"`, `solver.splitting = "strang"`
 and `solver.merge_half_steps = true` (for Strang). A run started with beat <= 0.13 that relied on
@@ -185,7 +185,7 @@ the old defaults cannot be restarted, or post-processed with `beat post`, using 
 relies on the new ones; beat refuses and names the keys to add to the config to keep the old
 behavior: `cell.scheme = "generalized_rush_larsen"`, `solver.splitting = "godunov"`, and, for a
 0.13 run that set `splitting = "strang"` explicitly, `solver.merge_half_steps = false`.
-:::
+```
 
 (overrides)=
 ## Overrides

@@ -250,9 +250,10 @@ decides structurally which states are "gating" (the right-hand side is affine in
 those are exponentiated by `rush_larsen*`. For example ToRORd's `cansr` and the IKr Markov states
 are exponentiated and therefore lose the guarantee. `rush_larsen_2` was chosen as the default for
 three reasons: it costs about what `generalized_rush_larsen` costs (per step for 100k cells, TP06
-86 vs 64 ms and ToRORd 232 vs 262 ms), it was about ten times more accurate in a single-cell test
-(ten Tusscher–Panfilov 2006, 20 beats, $\Delta t = 0.05$ ms: RMS $\Delta V$ of 0.05 vs 0.50 mV),
-and it is second order, which Strang splitting needs. Over 20 beats `generalized_rush_larsen` and
+86 vs 64 ms and ToRORd 232 vs 262 ms), it was more accurate in a single-cell test
+at $\Delta t = 0.05$ ms over 20 beats (ten Tusscher–Panfilov 2006: RMS $\Delta V$ of 0.05 vs 0.50 mV;
+ToRORd: RMS $\Delta V$ of 0.48 vs 0.49 mV, so no gain in RMS, though the maximum $|\Delta V|$
+dropped from 32.7 to 4.0 mV), and it is second order, which Strang splitting needs. Over 20 beats `generalized_rush_larsen` and
 `rush_larsen` gave comparable results. One caveat: `rush_larsen_2` steps $v$ explicitly, so it can
 need a smaller time step than `generalized_rush_larsen`. A strong box stimulus on a
 Mitchell–Schaeffer tissue at $\Delta t = 0.1$ ms diverges with `rush_larsen_2`, and Mitchell–Schaeffer
