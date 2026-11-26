@@ -215,7 +215,8 @@ for i, dt in enumerate(dts):
 # Real cell models are stepped by a scheme generated with
 # [gotranx](https://github.com/finsberg/gotranx). The Rush-Larsen family treats each state's
 # own (diagonal) dependence exponentially and the rest explicitly: `generalized_rush_larsen` is
-# first order, `generalized_rush_larsen_2` second order. To see the difference we use a cell model
+# first order, `generalized_rush_larsen_2` second order. (On this model every state is affine in
+# itself, so `rush_larsen` and `generalized_rush_larsen` coincide; section 6 uses `rush_larsen`.) To see the difference we use a cell model
 # whose states are coupled,
 #
 # $$
@@ -327,10 +328,10 @@ for scheme in ["generalized_rush_larsen", "generalized_rush_larsen_2"]:
 # $\Delta t = 0.0015625$ ms. The model has piecewise rate functions (for example, the time
 # constants of the sodium gates $h$ and $j$ jump at $V = -40$ mV). A jump like that can pull any
 # fixed-step method back to first order, but it does not show at these step sizes: Strang
-# splitting with `generalized_rush_larsen_2` approaches second order (rates 1.36, 1.79, 1.93
+# splitting with `rush_larsen_2` approaches second order (rates 1.35, 1.8, 1.94
 # below). A separate run with time steps down to $\Delta t = 0.003125$ ms (against a
-# $\Delta t = 0.000390625$ ms reference, too slow to include here) gave rates 1.79, 1.91, 1.96,
-# 2.01, so the rate reaches 2.
+# $\Delta t = 0.000390625$ ms reference, too slow to include here) gave rates 1.79, 1.92, 1.96,
+# 2.01 (measured with `rush_larsen_2`), so the rate reaches 2.
 
 # %%
 from pathlib import Path
@@ -342,8 +343,8 @@ tp06_file = (
 tp06_code = gotranx.cli.gotran2py.get_code(
     gotranx.load_ode(tp06_file),
     scheme=[
-        gotranx.schemes.Scheme.generalized_rush_larsen,
-        gotranx.schemes.Scheme.generalized_rush_larsen_2,
+        gotranx.schemes.Scheme.rush_larsen,
+        gotranx.schemes.Scheme.rush_larsen_2,
     ],
 )
 tp06: dict = {}
@@ -378,9 +379,9 @@ def tp06_final_v(scheme, splitting, dt, T=10.0, merge_half_steps=False):
 tp06_dts = [0.1, 0.05, 0.025, 0.0125]
 fig, ax = plt.subplots()
 for scheme, splitting in [
-    ("generalized_rush_larsen", "godunov"),
-    ("generalized_rush_larsen", "strang"),
-    ("generalized_rush_larsen_2", "strang"),
+    ("rush_larsen", "godunov"),
+    ("rush_larsen", "strang"),
+    ("rush_larsen_2", "strang"),
 ]:
     errors, rates = self_convergence(
         lambda dt, scheme=scheme, splitting=splitting: tp06_final_v(scheme, splitting, dt), tp06_dts, 0.0015625,
@@ -395,11 +396,10 @@ ax.legend()
 fig.savefig("verification_tp06.png")
 
 # %% [markdown]
-# Godunov splitting and Strang splitting with the first-order `generalized_rush_larsen` stay at
-# (or below) first order; the last rate of Strang with `generalized_rush_larsen` even drops to
-# 0.8. Strang splitting with `generalized_rush_larsen_2` approaches second order. In the
+# Godunov splitting and Strang splitting with the first-order `rush_larsen` stay at
+# (or below) first order (rates 0.78, 1.05, 0.73 and 1.06, 0.74, 0.88). Strang splitting with `rush_larsen_2` approaches second order. In the
 # [CLI](../docs/cli.md) this is `solver.splitting = "strang"` with
-# `cell.scheme = "generalized_rush_larsen_2"`.
+# `cell.scheme = "rush_larsen_2"`.
 
 # %% [markdown]
 # ## 7. Merging Strang half-steps
@@ -414,7 +414,7 @@ fig.savefig("verification_tp06.png")
 # %%
 from time import perf_counter
 
-tp06_ref = tp06_final_v("generalized_rush_larsen_2", "strang", 0.0015625)
+tp06_ref = tp06_final_v("rush_larsen_2", "strang", 0.0015625)
 print(f"{'case':16s} {'dt (ms)':>8s} {'error (mV)':>11s} {'time (s)':>9s}")
 for name, splitting, merge in [
     ("godunov", "godunov", False),
@@ -423,11 +423,11 @@ for name, splitting, merge in [
 ]:
     for dt in (0.025, 0.0125):
         tic = perf_counter()
-        v = tp06_final_v("generalized_rush_larsen_2", splitting, dt, merge_half_steps=merge)
+        v = tp06_final_v("rush_larsen_2", splitting, dt, merge_half_steps=merge)
         seconds = perf_counter() - tic
         print(f"{name:16s} {dt:8.4f} {rms_difference(v, tp06_ref):11.3f} {seconds:9.2f}")
 errors, rates = self_convergence(
-    lambda dt: tp06_final_v("generalized_rush_larsen_2", "strang", dt, merge_half_steps=True),
+    lambda dt: tp06_final_v("rush_larsen_2", "strang", dt, merge_half_steps=True),
     tp06_dts,
     0.0015625,
 )
@@ -436,8 +436,9 @@ print(f"strang, merged rates {np.round(rates, 2)}")
 # %% [markdown]
 # Merged Strang splitting at $\Delta t = 0.0125$ ms takes about as long as Godunov splitting at
 # the same step and as plain Strang splitting at $\Delta t = 0.025$ ms, and is more accurate than
-# both (errors of about 0.32 mV against 0.50 and 0.42 mV). At the same $\Delta t$ plain Strang
+# both (errors of about 0.33 mV against 0.51 and 0.43 mV). At the same $\Delta t$ plain Strang
 # splitting is about three times more accurate, at twice the cost. When you drive the time loop
 # yourself, call `SplittingSolver.synchronize` before saving or post-processing $V$: between
 # merged steps it still lacks its closing half-step.
-# Merged Strang's rates approach 2 as well, more slowly than plain Strang's (section 6).
+# Merged Strang's rates (0.85, 1.4, 1.79) approach 2 as well, more slowly than plain Strang's
+# (section 6).
