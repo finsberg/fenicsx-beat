@@ -1,4 +1,3 @@
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -292,13 +291,13 @@ LEGACY_PHYSICS_HASH = {
         ({"theta": 0.5}, 0.5),
     ],
 )
-def test_physics_hash_matches_beat_0_12(solver, theta):
-    data = minimal_config_dict(Path(tempfile.mkdtemp()), solver=solver)
+def test_physics_hash_matches_beat_0_12(tmp_path, solver, theta):
+    data = minimal_config_dict(tmp_path, solver=solver)
     assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[theta]
 
 
-def test_physics_hash_with_default_stiff_states_matches_beat_0_12():
-    data = minimal_config_dict(Path(tempfile.mkdtemp()), cell={"stiff_states": []})
+def test_physics_hash_with_default_stiff_states_matches_beat_0_12(tmp_path):
+    data = minimal_config_dict(tmp_path, cell={"stiff_states": []})
     assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[1.0]
 
 

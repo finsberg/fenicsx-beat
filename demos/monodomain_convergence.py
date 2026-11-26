@@ -219,10 +219,17 @@ fig.legend(
 fig.savefig("convergence.png")
 # -
 
+# The three columns are identical. The ODE is solved pointwise at the degrees of freedom of the
+# ODE space, and $v$ is passed to the P1 PDE by interpolation, which only reads the values at the
+# mesh vertices. P1, P2 and DG1 all have degrees of freedom at the vertices, where they start from
+# the same values and therefore evolve identically; the extra P2 and DG1 degrees of freedom never
+# reach the PDE.
+
 # ## First order in time
 #
-# Godunov splitting (`splitting="godunov"`, the default) is first order in time whatever the
-# cell model's time-stepping scheme. Strang splitting (`splitting="strang"`) can reach second
+# Godunov splitting (`splitting="godunov"`, the default) is first order in time; a second-order
+# cell scheme does not change that (the verification demo shows it for
+# `generalized_rush_larsen_2`). Strang splitting (`splitting="strang"`) can reach second
 # order, but only with a Crank-Nicolson PDE step and a second-order cell scheme; the
 # [verification demo](verification.py) shows this with gotranx's `generalized_rush_larsen_2`
 # and the ten Tusscher-Panfilov 2006 cell model.

@@ -152,7 +152,10 @@ you give a wrong one). `rush_larsen_2`, `generalized_rush_larsen_2` and `hybrid_
 are second order in time; the others, such as `explicit_euler`, `rush_larsen`, `generalized_rush_larsen`
 (the default) and `hybrid_rush_larsen`, are first order. The `hybrid_*` schemes apply the
 exponential update only to the states listed in `cell.stiff_states`; setting `cell.stiff_states`
-with any other scheme is an error, as is naming a state the model does not have.
+with any other scheme is an error, as is naming a state the model does not have or naming one
+twice. The order does not matter (`beat` sorts the list). A `hybrid_*` scheme with no
+`cell.stiff_states` steps every state explicitly; `beat validate-config` and `beat run` warn about
+it.
 
 `solver.splitting` chooses the operator splitting: `"godunov"` (default, first order) or
 `"strang"` (second order). Strang splitting is only second order when both sub-steps are: a
