@@ -264,9 +264,10 @@ def physics_hash(conf: Config) -> str:
 
 # Defaults of beat <= 0.13 that beat 0.14 changed: a run started with them (config not setting
 # these keys) no longer matches a default-relying config's physics_hash.
-LEGACY_DEFAULTS: dict[tuple[str, str], str] = {
+LEGACY_DEFAULTS: dict[tuple[str, str], str | bool] = {
     ("cell", "scheme"): "generalized_rush_larsen",
     ("solver", "splitting"): "godunov",
+    ("solver", "merge_half_steps"): False,  # beat <= 0.13 never merged half-steps
 }
 
 
@@ -282,14 +283,23 @@ def legacy_defaults_hint(conf: Config, recorded_hash: str) -> str:
     updates: dict[str, dict] = {}
     for section, key in unset:
         updates.setdefault(section, {})[key] = LEGACY_DEFAULTS[section, key]
-    if "splitting" in updates.get("solver", {}):
-        updates["solver"]["merge_half_steps"] = False  # beat <= 0.13 never merged by default
     old = conf.model_copy(
         update={s: getattr(conf, s).model_copy(update=u) for s, u in updates.items()},
     )
     if physics_hash(old) != recorded_hash:
         return ""
-    lines = " and ".join(f'{s}.{k} = "{LEGACY_DEFAULTS[s, k]}"' for s, k in unset)
+    # merge_half_steps is only worth naming when it differs from what an unset key resolves to
+    # for the (legacy) splitting, i.e. for Strang; Godunov already resolves it to false.
+    named = [
+        (s, k)
+        for s, k in unset
+        if (s, k) != ("solver", "merge_half_steps") or old.solver.splitting == "strang"
+    ]
+
+    def literal(value: str | bool) -> str:
+        return json.dumps(value)  # TOML literal: "text" / false
+
+    lines = " and ".join(f"{s}.{k} = {literal(LEGACY_DEFAULTS[s, k])}" for s, k in named)
     return (
         f" This run was started with the defaults of beat <= 0.13; to continue it, add {lines} "
         "to the config."

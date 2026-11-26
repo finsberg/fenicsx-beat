@@ -361,3 +361,30 @@ def test_no_legacy_hint_when_everything_is_explicit(tmp_path):
     old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
     new = _conf(tmp_path, cell={"scheme": "rush_larsen_2"}, solver={"splitting": "strang"})
     assert legacy_defaults_hint(new, physics_hash(old)) == ""
+
+
+_OLD_STRANG = {"splitting": "strang", "merge_half_steps": False}
+
+
+def test_legacy_hint_names_only_merge_half_steps_for_explicit_strang(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
+    new = _conf(tmp_path, cell=_OLD[0], solver={"splitting": "strang"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    assert "solver.merge_half_steps = false" in hint
+    assert "cell.scheme" not in hint
+    assert "solver.splitting" not in hint
+
+
+def test_legacy_hint_names_scheme_and_merge_half_steps_for_explicit_strang(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
+    new = _conf(tmp_path, solver={"splitting": "strang"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    assert 'cell.scheme = "generalized_rush_larsen"' in hint
+    assert "solver.merge_half_steps = false" in hint
+    assert "solver.splitting" not in hint
+
+
+def test_legacy_hint_does_not_name_merge_half_steps_for_godunov(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    hint = legacy_defaults_hint(_conf(tmp_path), physics_hash(old))
+    assert "merge_half_steps" not in hint
