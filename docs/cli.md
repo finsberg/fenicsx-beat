@@ -396,7 +396,7 @@ summarized here:
 | Template | Demo | Known deviation |
 |---|---|---|
 | `slab` | [slab.py](../demos/slab.py) | Cable partitioned into endo/mid/epi celltypes by raw x-position isn't expressible via `[cell.layers]` yet; homogeneous ToR-ORd region instead. |
-| `niederer_benchmark` | [niederer_benchmark.py](../demos/niederer_benchmark.py) | Strang splitting with `generalized_rush_larsen_2` (second order in time) instead of the demo's Godunov splitting with `generalized_rush_larsen`. |
+| `niederer_benchmark` | [niederer_benchmark.py](../demos/niederer_benchmark.py) | Strang splitting with merged half-steps (the CLI default) and `rush_larsen_2` (second order in time); the demo uses plain Strang because it reads the activation times after every step. |
 | `fitzhughnagumo` | [fitzhughnagumo.py](../demos/fitzhughnagumo.py) | Rescaled from a dimensionless unit square to 100x100 mm; conductivity from the `Niederer` preset rather than the demo's arbitrary scalar `M`. |
 | `diffusion` | [diffusion.py](../demos/diffusion.py) | The demo has no ODE/cell model at all (pure diffusion); the CLI always couples an ODE step, so this template ships a trivial `passive.ode` (`dv/dt = 0`) instead. |
 | `pvc` | [pvc.py](../demos/pvc.py) | The demo's per-DOF g_Kr/g_Ks heterogeneity (right half of the cable) has no marker to key `[cell.layers]` off on an `interval` geometry; homogeneous cable instead (no PVC emerges, but pacing/cell model match). |

@@ -1,6 +1,7 @@
 # Niederer et al. (2011) benchmark: cuboid slab, corner stimulus, ten Tusscher-Panfilov 2006.
-# Matches demos/niederer_benchmark.py except that it uses second-order Strang splitting with
-# generalized_rush_larsen_2 (the demo: Godunov with generalized_rush_larsen).
+# Uses Strang splitting with merged half-steps (the CLI default) and rush_larsen_2, both
+# second order. demos/niederer_benchmark.py uses plain Strang (no merging) because it reads
+# the activation times after every step.
 
 [geometry]
 type = "box_slab"          # structured tetrahedral box, no gmsh needed
@@ -19,7 +20,7 @@ conductivity = { preset = "Niederer" }
 [cell]
 ode_file = "tentusscher_panfilov_2006_epi_cell.ode"
 v_name = "V"
-scheme = "generalized_rush_larsen_2"   # second order: Strang splitting (below) needs it
+scheme = "rush_larsen_2"   # second order: the default Strang splitting needs it
 parameters = { stim_amplitude = 0.0 }   # PDE stimulus only
 
 [[stimulus]]
@@ -32,7 +33,6 @@ start = "0 ms"
 
 [solver]
 dt = "0.05 ms"
-splitting = "strang"   # second order with the *_2 scheme and the default solver.pde.theta = 0.5
 end_time = "150 ms"
 
 [output]
