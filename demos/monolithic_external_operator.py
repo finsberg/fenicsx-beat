@@ -96,9 +96,8 @@ if (
     ode_path.write_text(ms_ode_code)
     ode = gotranx.load_ode(ode_path)
     jax_model_path.write_text(get_code(ode, scheme=None, backend=Backend.jax))
-    # The comparison scheme stays the first-order `generalized_rush_larsen`: the second-order
-    # `rush_larsen_2` advances `v` with an explicit midpoint step, which is unstable for this stiff
-    # model at the large time steps compared below (the solution overflows).
+    # `rush_larsen_2` steps `v` explicitly and overflows for Mitchell–Schaeffer at this demo's large time
+    # steps (dt 0.5–0.125 ms), so the comparison scheme stays the first-order `generalized_rush_larsen`.
     np_model_path.write_text(
         get_code(ode, scheme=[gotranx.schemes.Scheme.generalized_rush_larsen]),
     )

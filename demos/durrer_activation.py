@@ -259,7 +259,10 @@ conductivities = calibration.conductivities
 # calibration against the activation map that the target velocities give in the heart, from the
 # same endocardial times (an eikonal solution with `beat.eikonal.EikonalSolver`): on a 1 mm mesh
 # the calibrated simulation is within 1.6 ms of it at 95 % of the nodes, while with the Bishop
-# conductivities it is 7.6 ms late at half of them. On this 3 mm mesh the base is activated a few
+# conductivities it is 7.6 ms late at half of them. (The 1 mm-mesh numbers in this paragraph and the
+# one above were measured with beat ≤ 0.13's numerics, `generalized_rush_larsen` with Godunov
+# splitting, while the demo code itself now uses `rush_larsen_2` and Strang splitting.) On this
+# 3 mm mesh the base is activated a few
 # milliseconds early. For real simulations, use a mesh of 0.5 mm or finer and calibrate at that
 # mesh size.
 #

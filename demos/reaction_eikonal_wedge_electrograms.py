@@ -147,6 +147,8 @@ if comm.rank == 0:
 
 # ## Precomputed results
 #
+# These results were computed with beat ≤ 0.13's numerics (`generalized_rush_larsen` with Godunov splitting), while the demo code itself now uses `rush_larsen_2` and Strang splitting.
+#
 # The figure below was computed with the scripts in `scripts/` on 16 MPI ranks (see their
 # docstrings): the lead field of $P_E$ (`reaction_eikonal_wedge_leadfield.py`), the bath-loaded
 # runs with electrograms and snapshots of $v$ at 40 and 320 ms (`reaction_eikonal_wedge.py`), and
