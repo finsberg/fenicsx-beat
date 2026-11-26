@@ -274,6 +274,7 @@ def test_env_var_with_a_single_underscore_after_a_section_warns(cfg_file):
 # solver.splitting and cell.stiff_states existed). A checkpoint written by 0.12 must still
 # restart after upgrading, so an equivalent config must hash to exactly these values. If a new
 # config field makes this fail, drop the field from the hash while it has its default value.
+OLD_SCHEME = {"scheme": "generalized_rush_larsen"}  # the beat <= 0.13 default
 LEGACY_PHYSICS_HASH = {
     1.0: "99052ff4f7c6dc60b3348026a218300b95352137add6e02119755abd7cf98aca",
     0.5: "f4562a7fbfa95a2dd9221b57184be240d7e2867f14506a548e3a78d3e27ea410",
@@ -283,21 +284,28 @@ LEGACY_PHYSICS_HASH = {
 @pytest.mark.parametrize(
     ("solver", "theta"),
     [
-        ({}, 1.0),
         ({"splitting": "godunov"}, 1.0),
-        ({"splitting": "strang"}, 0.5),
         ({"splitting": "strang", "merge_half_steps": False}, 0.5),
         ({"theta": 1.0}, 1.0),
         ({"theta": 0.5}, 0.5),
     ],
 )
 def test_physics_hash_matches_beat_0_12(tmp_path, solver, theta):
-    data = minimal_config_dict(tmp_path, solver=solver)
+    data = minimal_config_dict(tmp_path, solver=solver, cell=OLD_SCHEME)
     assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[theta]
 
 
+def test_physics_hash_of_merged_strang_differs_from_legacy(tmp_path):
+    data = minimal_config_dict(tmp_path, solver={"splitting": "strang"}, cell=OLD_SCHEME)
+    assert physics_hash(Config.model_validate(data)) != LEGACY_PHYSICS_HASH[0.5]
+
+
 def test_physics_hash_with_default_stiff_states_matches_beat_0_12(tmp_path):
-    data = minimal_config_dict(tmp_path, cell={"stiff_states": []})
+    data = minimal_config_dict(
+        tmp_path,
+        solver={"splitting": "godunov"},
+        cell={**OLD_SCHEME, "stiff_states": []},
+    )
     assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[1.0]
 
 

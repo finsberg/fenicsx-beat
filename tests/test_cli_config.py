@@ -299,10 +299,6 @@ def test_postprocess_ecg_default_none(tmp_path):
     assert _load_with_postprocess(tmp_path, {}).postprocess.ecg is None
 
 
-def test_splitting_defaults_to_godunov(tmp_path):
-    assert Config.model_validate(base(tmp_path)).solver.splitting == "godunov"
-
-
 def test_splitting_strang(tmp_path):
     data = base(tmp_path, solver={"dt": "0.1 ms", "end_time": "1 ms", "splitting": "strang"})
     assert Config.model_validate(data).solver.splitting == "strang"
@@ -434,7 +430,7 @@ def test_no_order_warning_for_strang_with_second_order_scheme(tmp_path):
 def test_order_warning_for_strang_with_first_order_scheme(tmp_path):
     (msg,) = splitting_order_warnings(_order_conf(tmp_path, "strang"))
     assert "'generalized_rush_larsen'" in msg
-    assert "generalized_rush_larsen_2" in msg
+    assert "'rush_larsen_2'" in msg
     assert "first order" in msg
 
 
@@ -468,8 +464,50 @@ def test_niederer_template_has_no_order_warning(tmp_path):
     assert splitting_order_warnings(conf) == []
 
 
-def test_merge_half_steps_defaults_to_false(tmp_path):
-    assert Config.model_validate(base(tmp_path)).solver.merge_half_steps is False
+S = {"dt": "0.1 ms", "end_time": "1 ms"}
+
+
+def test_default_cell_scheme_is_rush_larsen_2(tmp_path):
+    assert Config.model_validate(base(tmp_path, solver=S)).cell.scheme == "rush_larsen_2"
+
+
+def test_default_splitting_is_strang_with_merged_half_steps(tmp_path):
+    solver = Config.model_validate(base(tmp_path, solver=S)).solver
+    assert solver.splitting == "strang"
+    assert solver.merge_half_steps is True
+
+
+def test_godunov_alone_resolves_merge_half_steps_to_false(tmp_path):
+    solver = Config.model_validate(base(tmp_path, solver={**S, "splitting": "godunov"})).solver
+    assert solver.merge_half_steps is False
+
+
+def test_explicit_merge_half_steps_false_is_kept(tmp_path):
+    data = base(tmp_path, solver={**S, "splitting": "strang", "merge_half_steps": False})
+    assert Config.model_validate(data).solver.merge_half_steps is False
+
+
+def test_explicit_merge_half_steps_with_godunov_is_rejected(tmp_path):
+    data = base(tmp_path, solver={**S, "splitting": "godunov", "merge_half_steps": True})
+    with pytest.raises(ValidationError, match="needs solver.splitting = 'strang'"):
+        Config.model_validate(data)
+
+
+def test_deprecated_theta_keeps_plain_strang(tmp_path):
+    solver = Config.model_validate(base(tmp_path, solver={**S, "theta": 0.5})).solver
+    assert (solver.splitting, solver.merge_half_steps) == ("strang", False)
+
+
+def test_default_config_has_no_warnings(tmp_path):
+    assert config_warnings(Config.model_validate(base(tmp_path, solver=S))) == []
+
+
+def test_resolved_defaults_stay_out_of_fields_set(tmp_path):
+    conf = Config.model_validate(base(tmp_path, solver=S))
+    assert "merge_half_steps" not in conf.solver.model_fields_set
+    assert "scheme" not in conf.cell.model_fields_set
+    theta = Config.model_validate(base(tmp_path, solver={**S, "theta": 0.5})).solver
+    assert {"splitting", "merge_half_steps"} <= theta.model_fields_set
 
 
 def test_merge_half_steps_with_strang(tmp_path):
@@ -478,6 +516,6 @@ def test_merge_half_steps_with_strang(tmp_path):
 
 
 def test_merge_half_steps_needs_strang(tmp_path):
-    solver = {"dt": "0.1 ms", "end_time": "1 ms", "merge_half_steps": True}
+    solver = {"dt": "0.1 ms", "end_time": "1 ms", "splitting": "godunov", "merge_half_steps": True}
     with pytest.raises(ValidationError, match="merge_half_steps"):
         Config.model_validate(base(tmp_path, solver=solver))

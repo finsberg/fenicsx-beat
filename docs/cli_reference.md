@@ -168,7 +168,7 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `ode_file` | path | **required** | Path to the gotranx .ode cell model |
-| `scheme` | str | `'generalized_rush_larsen'` |  |
+| `scheme` | str | `'rush_larsen_2'` | gotranx scheme that steps the cell model (second order; conserves the states it steps explicitly) |
 | `stiff_states` | list[str] | `[]` | States given the exponential (Rush-Larsen) update; only for the hybrid_* schemes |
 | `v_name` | str | `'v'` | Name of the transmembrane potential state |
 | `parameters` | dict[str, float] | `{}` |  |
@@ -266,8 +266,8 @@ Structured tetrahedral box (beat.geometry.get_3D_slab_mesh); no gmsh needed.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `dt` | Quantity | `'0.05 ms'` |  |
-| `splitting` | 'godunov' \| 'strang' | `'godunov'` | Operator splitting: 'godunov' (first order) or 'strang' (second order with a second-order cell.scheme and solver.pde.theta = 0.5) |
-| `merge_half_steps` | bool | `False` | Merge consecutive Strang ODE half-steps: still second order at Godunov's cost per step, with a larger error than plain Strang at the same dt. The state is synchronized at every save and checkpoint. Needs splitting = 'strang' |
+| `splitting` | 'godunov' \| 'strang' | `'strang'` | Operator splitting: 'godunov' (first order) or 'strang' (second order with a second-order cell.scheme and solver.pde.theta = 0.5) |
+| `merge_half_steps` | bool (optional) | – | Merge consecutive Strang ODE half-steps: still second order at Godunov's cost per step, with a larger error than plain Strang at the same dt. The state is synchronized at every save and checkpoint. Default: true for splitting = 'strang', false for 'godunov' |
 | `end_time` | Quantity (optional) | – | Simulated end time. Give either this or num_beats and BCL |
 | `num_beats` | int (optional) | – | Run length in beats: end time = num_beats x BCL |
 | `BCL` | Quantity (optional) | – | Basic cycle length, only used for the run length (num_beats x BCL). It does not pace anything: set a [[stimulus]] period for that |
