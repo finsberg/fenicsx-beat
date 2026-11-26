@@ -90,7 +90,7 @@ parameter_set = "slope_1.8"
 # identical to the original one.
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell_tau_f.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     here = Path.cwd()
     ode_text = (
         here
@@ -402,17 +402,17 @@ if comm.rank == 0:
 #
 # The spiral first rotates as a single spiral, similar to the one in the [spiral wave
 # demo](spiral_wave.py). From about 1.3 s (the first wave break according to the definition above is
-# at 1311 ms), the wavefront close to the spiral tip starts to break into several smaller spirals,
-# which for a while merge back into one dominant spiral. From about 2.9 s, there are several spirals
-# most of the time, and at the end of the simulation, waves also start to break further away from
-# the core.
+# at 1317 ms), the wavefront close to the spiral tip starts to break into several smaller spirals,
+# with up to five tips at the same time. With the current numerical scheme these do not persist: from
+# about 2.3 s there are no tips left, i.e. the activity has died out before the end of the
+# simulation.
 #
-# This is qualitatively the behaviour reported in {cite}`tentusscher2006alternans`, where the first
-# wave break for this parameter set happens at 2.16 s, after which the breakup spreads over the
-# whole sheet. Within the 4 s we simulate, the breakup here stays more localised around the core
-# than in the paper. Spiral breakup is known to be sensitive to the numerical resolution, and we use
-# a coarser mesh (0.5 mm instead of 0.25 mm), a larger time step and a different numerical scheme
-# than the paper, so the timing and extent of the breakup should not be expected to match exactly.
+# In {cite}`tentusscher2006alternans` the first wave break for this parameter set happens at 2.16 s,
+# after which the breakup spreads over the whole sheet. Here the first wave break comes earlier, but
+# the breakup does not spread and dies out. Spiral breakup is known to be sensitive to the numerical
+# resolution, and we use a coarser mesh (0.5 mm instead of 0.25 mm), a larger time step and a
+# different numerical scheme than the paper, so the timing and extent of the breakup should not be
+# expected to match exactly.
 # Lowering `h` and `dt`, or simulating for longer, are good places to start if you want to explore
 # this further.
 #

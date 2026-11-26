@@ -81,7 +81,7 @@ t_S2 = 340.0  # Start time of the S2 stimulus (ms)
 # the second-order Rush–Larsen scheme `rush_larsen_2` for the gating variables, just as in the original paper.
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     here = Path.cwd()
     cell_ode = gotranx.load_ode(
         here
@@ -462,8 +462,8 @@ if comm.rank == 0:
 #
 # ![_](../docs/_static/spiral_wave.gif)
 #
-# The S1 wave travels at 66.7 cm/s, close to the 68 cm/s in {cite}`tentusscher2006alternans`. Once
-# the spiral has settled, it activates the probes with a period of $241 \pm 8$ ms.
+# The S1 wave travels at 68.5 cm/s, close to the 68 cm/s in {cite}`tentusscher2006alternans`. Once
+# the spiral has settled, it activates the probes with a period of $239 \pm 7$ ms.
 # ten Tusscher et al. report a period of $264.7 \pm 10.5$ ms on a $12 \times 12$ cm sheet
 # {cite}`tentusscher2004model`, i.e. in the same range, given our slightly smaller domain and
 # different numerical scheme.

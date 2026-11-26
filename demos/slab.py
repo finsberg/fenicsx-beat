@@ -138,7 +138,7 @@ save_freq = round(save_every_ms / dt)
 print("Running model")
 # Load the model
 model_path = Path("ToRORd_dynCl_endo.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     print("Generate code for cell model")
     here = Path.cwd()
     cell_ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")

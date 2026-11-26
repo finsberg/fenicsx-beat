@@ -40,7 +40,7 @@ mesh = dolfinx.mesh.create_interval(comm, num_cells, (0, L))
 # We will use the tensusscher panfilov model
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     here = Path.cwd()
     cell_ode = gotranx.load_ode(
         here
