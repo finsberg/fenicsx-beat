@@ -40,6 +40,11 @@ beat version   # only if the CLI route is likely; needs the `cli` extra
   [install.md](install.md) with your recommendation (conda on a laptop/workstation, Spack on an HPC
   cluster, Docker for a quick isolated try, Debian/Ubuntu packages if they are on Ubuntu and want
   system packages) and let the user choose.
+- **Version.** This skill describes beat 0.14 (defaults `rush_larsen_2` + Strang, merged half-steps
+  in the CLI). An editable install can report a stale `beat.__version__`, so check features, not only
+  the number: `python -c "import beat, inspect; print(inspect.signature(beat.SplittingSolver))"` must
+  show `splitting` and `merge_half_steps`. If the installed beat is older, say so: recommend
+  upgrading, or follow that version's docs and `help()` instead of the defaults described here.
 - Later, once the plan is clear, check the extras it needs (`gotranx` for cell models,
   `cardiac_geometries` and `ldrb` for ellipsoids and fibres, `ukb` for the UK Biobank atlas,
   `pyvista` for images/movies, `io4dolfinx` for reading meshes and results).
@@ -48,8 +53,11 @@ beat version   # only if the CLI route is likely; needs the `cli` extra
 ## Step 2: Interview the user
 
 Ask **one question at a time**, multiple choice with an "other" option, and say why it matters when
-that is not obvious. Skip a topic the user already answered; confirm instead of re-asking. Topics,
-in order:
+that is not obvious. Skip a topic the user already answered; confirm instead of re-asking. Skip a
+topic that does not apply to where the conversation is heading (no cell-model question for
+activation times from the eikonal model alone), and say why. If the user asked for the CLI but wants
+something only Python can do (Durrer sequence, eikonal, reaction-eikonal, bath, custom ODE code,
+spiral-tip tracking), say so as soon as it comes up, not only at Step 3. Topics, in order:
 
 1. **Goal** — what question should the simulation answer? Conduction velocity; activation map;
    ECG (pseudo-ECG or 12-lead); arrhythmia / re-entry (spiral waves, S1–S2, breakup); effect of a
@@ -108,10 +116,24 @@ the template, `beat validate-config` errors, and the configuration reference
 (https://finsberg.github.io/fenicsx-beat/docs/cli_reference.html). Quantities are pint strings
 (`"0.05 ms"`, `"1400 cm**-1"`).
 
-**Python route**: start from the closest demo in [problems.md](problems.md) (docs page for the
-explanation, GitHub source for the code — demos are not in the pip package). Before using a `beat`
-call, read its signature in the installed version (`python -c "import beat, inspect;
-print(inspect.signature(beat.SplittingSolver))"`, `help(...)`) — the API changes between versions.
+**Python route**: start from the closest demo or script in [problems.md](problems.md) (docs page
+for the explanation, GitHub source for the code — demos and `scripts/` are not in the pip package).
+Before using a `beat` call, read its signature in the installed version (`python -c "import beat,
+inspect; print(inspect.signature(beat.SplittingSolver))"`, `help(...)`) — the API changes between
+versions. When adapting a demo:
+
+- it reads files relative to the repository (`../odes/...` cell models): download them from
+  https://github.com/finsberg/fenicsx-beat/tree/main/odes or point to the user's own file, and use
+  absolute paths;
+- it writes generated code and results into the current directory — run it in its own folder;
+- its end time and sizes are often cut down so the docs build fast — set them for the user's goal;
+- tuned values (e.g. the S2 timing of the spiral-wave demo) must be tuned again when the mesh, dt or
+  cell model change;
+- helper functions defined in the demo (e.g. spiral-tip tracking) are demo code, not `beat` API —
+  copy them along;
+- units are whatever the demo chose (e.g. mm and µF/mm²) — keep them consistent, and check
+  conductivities, $\chi$ and $C_m$ against the mesh unit.
+
 Save the fields needed for post-processing with io4dolfinx and put post-processing in a separate
 script ([outputs.md](outputs.md)).
 
@@ -121,9 +143,13 @@ script ([outputs.md](outputs.md)).
    stimulus, e.g. `beat run config.toml --set 'solver.end_time="20 ms"'`, into a separate
    `--output-folder`) and, if meshing
    is slow, a coarser mesh. One rank unless MPI itself is under test.
+   For a Python script, the same with its end time cut down. For an eikonal solve, a coarse mesh
+   is the smoke run.
 2. **Check the smoke run**: values finite (no NaN); $v$ makes an upstroke (from rest to above
    about 0 mV for physiological models) where stimulated; **the wave propagates** — tissue away from
-   the stimulus activates (activation map from `beat post`, or $v$ at a probe point). A stimulus
+   the stimulus activates (activation map from `beat post`, or $v$ at a probe point). For eikonal
+   activation times: finite everywhere, no unreached vertices (`allow_unreached=False` raises), and
+   the latest activation time plausible for the size and velocity. A stimulus
    that fires but never spreads usually means the mesh is too coarse for the conductivities, the
    stimulus is too weak or too short, or the stimulus is applied twice/never.
 3. **Hand over**: the full command (`beat run config.toml`, or `mpirun -n N beat run config.toml`;

@@ -7,7 +7,7 @@ run an install command without the user's approval.
 | Option | Best for | Notes |
 |---|---|---|
 | conda | laptops and workstations (Linux, macOS; Windows via WSL) | one command, includes beat |
-| Docker | a quick isolated try, reproducible environments | beat preinstalled |
+| Docker / Apptainer | a quick isolated try, reproducible environments; Apptainer on clusters | beat preinstalled |
 | Spack | HPC clusters (system MPI, compilers) | builds from source; slower to set up |
 | Debian/Ubuntu packages | Ubuntu users who prefer system packages | then pip-install beat |
 
@@ -30,6 +30,16 @@ docker run -ti -v "$(pwd)":/home/shared -w /home/shared ghcr.io/finsberg/fenicsx
 
 The image has dolfinx and beat installed; the `-v` mount makes the current folder visible inside.
 For MPI runs inside the container you may need `--shm-size=2g` (or larger).
+
+On HPC clusters Docker is usually not available; use Apptainer (Singularity) with the same image:
+
+```bash
+apptainer pull fenicsx-beat.sif docker://ghcr.io/finsberg/fenicsx-beat:latest
+srun apptainer exec fenicsx-beat.sif python3 script.py   # or mpirun -n N apptainer exec fenicsx-beat.sif ...
+```
+
+MPI across nodes from a container needs an MPI compatible with the host's; ask the cluster's support
+or use Spack instead.
 
 ## Spack (recommended on HPC clusters)
 

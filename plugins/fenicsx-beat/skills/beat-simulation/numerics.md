@@ -48,6 +48,8 @@ order at the cost of one ODE step per time step.
 - Physiological models with literature conductivities: about 0.1–0.25 mm for converged conduction
   velocity (the Niederer benchmark compares 0.1, 0.2 and 0.5 mm). Whole hearts at that resolution
   need clusters.
+- Whole hearts in the demos: about 1 mm with conductivities calibrated for that mesh
+  (`scripts/durrer_activation_full.py`), or 3 mm with calibration for a quick look (the Durrer demo).
 - Coarser meshes (0.5–1 mm and above): calibrate the conductivities so the wave has the wanted speed
   on that mesh (`beat.conduction_velocity.calibrate_conductivities`), or use reaction-eikonal, which
   is built for coarse meshes.

@@ -3,6 +3,8 @@ afterany
 Alfio
 allclose
 allreduce
+Apptainer
+apptainer
 arange
 arctanh
 Arens

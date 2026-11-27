@@ -16,6 +16,10 @@ maps and ECGs should never require re-running the simulation.
 | Electrograms in a bath | bounded tissue + bath | — | `beat.pseudo_bidomain.VolumeConductor`, `beat.pseudo_bidomain.LeadFieldElectrodes` |
 | Other states (e.g. calcium) | the state field | `output.fields = ["cai"]` (state names of the cell model) | write the state's Function |
 
+In Python, electrodes are a mapping name → position: `beat.ecg.twelve_lead().points(electrodes)`
+gives the points for `beat.ecg.ElectrodePotentials(recovery, points)`; read the user's CSV into that
+dict (check the column order and unit with the user).
+
 Electrode positions are in the mesh's coordinate system (`postprocess.ecg.unit`, default
 `geometry.unit`) and must lie outside the heart. For an Alya-order electrode CSV,
 [`scripts/electrodes_to_toml.py`](https://github.com/finsberg/fenicsx-beat/blob/main/scripts/electrodes_to_toml.py)
@@ -55,6 +59,9 @@ config whose physics differs from the run's; only `[output]`, `[postprocess]` an
 change.
 
 ## Python: save with io4dolfinx, post-process in a separate script
+
+`beat post` only reads CLI runs (it checks the run's config), so a Python run needs its own
+post-processing script.
 
 In the simulation script (with merged Strang half-steps, call `solver.synchronize()` first):
 
