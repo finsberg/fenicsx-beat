@@ -134,7 +134,7 @@ def test_skill_cli_keys_exist():
     from beat.cli.config import Config
 
     # A name followed by "(" is a Python call on a solver object (`solver.synchronize()`), not a key
-    pattern = r"`(%s)\.([a-z_]+)(?:\.([a-z_]+))?(?![\w(])" % "|".join(CONFIG_SECTIONS)
+    pattern = r"`(%s)\.([A-Za-z_]+)(?:\.([A-Za-z_]+))?(?![\w(])" % "|".join(CONFIG_SECTIONS)
     keys = set(re.findall(pattern, _skill_text()))
     assert keys, "the skill should name CLI config keys"
     bad = []
@@ -149,3 +149,27 @@ def test_skill_cli_keys_exist():
             if sub_models and not any(sub in m.model_fields for m in sub_models):
                 bad.append(f"{section}.{field}.{sub}")
     assert not bad, f"unknown CLI keys: {bad}"
+
+
+def _literals(annotation) -> set:
+    if typing.get_origin(annotation) is typing.Literal:
+        return set(typing.get_args(annotation))
+    return {v for arg in typing.get_args(annotation) for v in _literals(arg)}
+
+
+def test_skill_cli_values_exist():
+    """Values the skill gives for Literal-typed CLI fields: conductivity presets, geometry types."""
+    from beat.cli.config import ConductivityConfig, Config
+
+    text = _skill_text()
+    presets = _literals(ConductivityConfig.model_fields["preset"].annotation)
+    named = set(re.findall(r'preset = "([^"]+)"', text))
+    assert named, "the skill should name conductivity presets"
+    assert named <= presets, f"not CLI presets: {named - presets}"
+
+    geometry_models = _models(Config.model_fields["geometry"].annotation)
+    types = {v for m in geometry_models for v in _literals(m.model_fields["type"].annotation)}
+    table = (_skill_dir() / "geometry.md").read_text()
+    named = set(re.findall(r'geometry\.type = "([^"]+)"', text))
+    named |= set(re.findall(r"^\| `([a-z_]+)` \|", table, flags=re.MULTILINE))
+    assert named <= types, f"not CLI geometry types: {named - types}"

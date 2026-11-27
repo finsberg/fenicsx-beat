@@ -16,7 +16,8 @@ Background and evidence: https://finsberg.github.io/fenicsx-beat/docs/math_backg
 | Linear solver | `solver.pde.linear_solver = "direct"` (LU, MUMPS) | direct |
 
 Why these defaults: `rush_larsen_2` is second order, costs about what `generalized_rush_larsen` costs,
-was clearly more accurate in beat's tests at typical time steps, and steps the non-gating states with an
+was more accurate in beat's single-cell tests at typical time steps (clearly for TP06; similar RMS
+error but a smaller maximum error for ToR-ORd), and steps the non-gating states with an
 explicit Runge–Kutta step, which preserves linear invariants of those states. Strang splitting with a
 second-order cell scheme and theta 0.5 is second order in time; merging the half-steps keeps second
 order at the cost of one ODE step per time step.
@@ -30,13 +31,15 @@ order at the cost of one ODE step per time step.
   (no merging): with merging, the state between synchronizations is half a step off.
 - **Reproducing results from beat 0.13 or earlier** → `cell.scheme = "generalized_rush_larsen"`,
   `solver.splitting = "godunov"` (the old defaults).
-- **Stiff states** (a few very fast gates) → a `hybrid_rush_larsen` scheme with `cell.stiff_states`.
+- **Stiff states** (a few very fast gates) → `cell.scheme = "hybrid_rush_larsen_2"` (second order) with
+  `cell.stiff_states`; the first-order `hybrid_rush_larsen` triggers the Strang order warning.
 - **First-order scheme with Strang** → the CLI warns: Strang is only second order with a second-order
   cell scheme and theta 0.5.
 
 ## Time step
 
-- Physiological models (TP06, ToR-ORd): `solver.dt` 0.01–0.05 ms is typical; the templates use 0.05 ms.
+- Physiological models (TP06, ToR-ORd): `solver.dt` 0.01–0.05 ms is typical; most templates use
+  0.05 ms, `pvc` and `pace_train` (TP06 on a cable) 0.01 ms.
   FitzHugh–Nagumo / Mitchell–Schaeffer tolerate larger steps (0.1 ms), but check.
 - Check convergence by halving dt on a short run and comparing activation times or $v$ traces.
 - Stimulus duration and start should be multiples of dt (or several dt long).
@@ -57,10 +60,12 @@ order at the cost of one ODE step per time step.
 
 ## Conductivities and units
 
-- Presets: `ep.conductivity = { preset = "Niederer" }` (or `"Bishop"`, `"Neic2017_wedge"`, … — the
-  names `beat.conductivities.default_conductivities` accepts), or explicit intra-/extracellular
+- CLI presets: only `ep.conductivity = { preset = "Niederer" }` and
+  `ep.conductivity = { preset = "Bishop" }`. Otherwise give explicit intra-/extracellular
   longitudinal and transverse values (`sigma_il`, `sigma_it`, `sigma_el`, `sigma_et`), combined into
-  the monodomain $M$ by harmonic mean.
+  the monodomain $M$ by harmonic mean. Python has more sets (e.g. Potse, Neic2017_wedge) via
+  `beat.conductivities.default_conductivities`; copy their values into `sigma_*` to use them in the
+  CLI.
 - $\chi$ (`ep.chi`, e.g. `"1400 cm**-1"`) and $C_m$ (`ep.C_m`, e.g. `"1 uF/cm**2"`) scale the PDE;
   stimulus amplitudes are current densities (`"uA/cm**2"`). Keep the mesh unit (`geometry.unit`)
   consistent.

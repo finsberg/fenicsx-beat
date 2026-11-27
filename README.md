@@ -45,7 +45,7 @@ and checks a `beat` config or script for you. In Claude Code, run
 /plugin install fenicsx-beat@fenicsx-beat
 ```
 or copy the folder [`plugins/fenicsx-beat/skills/beat-simulation`](https://github.com/finsberg/fenicsx-beat/tree/main/plugins/fenicsx-beat/skills/beat-simulation)
-into `~/.claude/skills/`. See [Using fenicsx-beat with Claude Code](#using-fenicsx-beat-with-claude-code).
+into `~/.claude/skills/`. See "Using fenicsx-beat with Claude Code" below.
 
 
 ## Getting started

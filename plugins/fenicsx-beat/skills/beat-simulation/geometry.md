@@ -14,7 +14,13 @@
 | `folder` | a mesh already on disk in cardiac-geometriesx's folder format | — | `folder` |
 
 - `geometry.unit` is the length unit of the mesh coordinates (e.g. `"mm"`, `"cm"`); everything else
-  (conductivities, $\chi$, stimulus boxes, electrode positions) is interpreted against it.
+  (conductivities, $\chi$, stimulus boxes, electrode positions) is interpreted against it. Match it to
+  the generator's numbers: `biv_ellipsoid` dimensions are in cm (set `geometry.unit = "cm"`);
+  `lv_ellipsoid`'s defaults are mm-sized, but the `lv_endocardial` template gives cm-sized radii with
+  `geometry.unit = "cm"`; `ukb` is in mm. A wrong unit scales the heart by 10 and mis-scales the
+  conductivities.
+- Markers: `lv_ellipsoid` has `ENDO`, `EPI`, `BASE`; `biv_ellipsoid` and `ukb` have `LV`, `RV`, `EPI`
+  and base markers (no `ENDO`) — stimulate `LV` and `RV` separately.
 - `geometry.fibers` chooses the fibre field: from the geometry (rule-based / LDRB for the
   cardiac shapes), along an axis, or isotropic.
 - gmsh-based types are generated once and cached in `geometry.folder/<hash>/`; run `beat geometry
@@ -51,8 +57,8 @@ with io4dolfinx, choosing the backend from the extension:
 
 Check the backend names against the installed version first
 (`python -c "import io4dolfinx.backends as b, pkgutil; print([m.name for m in pkgutil.iter_modules(b.__path__)])"`)
-and the signature (`help(io4dolfinx.read_mesh)`). A check script (write it to a scratch file, run it
-serially, then with `mpirun -n 2`):
+and the signature (`help(io4dolfinx.read_mesh)`). A check script (write it to a scratch file and run it
+serially; then ask the user before the short `mpirun -n 2` check of the parallel read):
 
 ```python
 import sys

@@ -40,13 +40,13 @@ beat version   # only if the CLI route is likely; needs the `cli` extra
   [install.md](install.md) with your recommendation (conda on a laptop/workstation, Spack on an HPC
   cluster, Docker for a quick isolated try, Debian/Ubuntu packages if they are on Ubuntu and want
   system packages) and let the user choose.
-- **Version.** This skill describes beat 0.14 (defaults `rush_larsen_2` + Strang, merged half-steps
+- **Version.** This skill describes beat 0.14 or later (defaults `rush_larsen_2` + Strang, merged half-steps
   in the CLI). An editable install can report a stale `beat.__version__`, so check features, not only
   the number: `python -c "import beat, inspect; print(inspect.signature(beat.SplittingSolver))"` must
   show `splitting` and `merge_half_steps`. If the installed beat is older, say so: recommend
   upgrading, or follow that version's docs and `help()` instead of the defaults described here.
 - Later, once the plan is clear, check the extras it needs (`gotranx` for cell models,
-  `cardiac_geometries` and `ldrb` for ellipsoids and fibres, `ukb` for the UK Biobank atlas,
+  `cardiac_geometries` for ellipsoids, `ldrb` for BiV/atlas fibres, `ukb` for the UK Biobank atlas,
   `pyvista` for images/movies, `io4dolfinx` for reading meshes and results).
 - **Never install anything without asking.** Show the command and let the user run it or approve it.
 

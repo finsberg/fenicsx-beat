@@ -3,9 +3,8 @@
 # We will also stimulate it using a random activation pattern on the endocardial layer of the left and right ventricle.
 #
 # This is the most realistic geometry demo in this repository, and it replaces the single, localized
-# stimulus current $I_{stim}$ used in the [left ventricle](lv_endocardial.py)
-# ellipsoid demo with many small, randomly timed and positioned stimuli spread across the endocardial
-# surface. This mimics the effect of the Purkinje fibre network, which activates the endocardium at
+# stimulus current $I_{stim}$ used in the [left ventricle](lv_endocardial.py) ellipsoid demo
+# with many small, randomly timed and positioned stimuli spread across the endocardial surface. This mimics the effect of the Purkinje fibre network, which activates the endocardium at
 # many points nearly simultaneously rather than through slow cell-to-cell propagation from a single
 # site. See the [mathematical background](../docs/math_background.md) page for the monodomain model
 # and notation ($v$, $M$, $\chi$, $C_m$, $I_{ion}$, $I_{stim}$, $\theta$) used below.

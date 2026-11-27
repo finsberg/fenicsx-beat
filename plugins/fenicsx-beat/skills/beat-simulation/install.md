@@ -25,11 +25,15 @@ then `python3 -m pip install fenicsx-beat`.
 ## Docker
 
 ```bash
-docker run -ti -v "$(pwd)":/home/shared -w /home/shared ghcr.io/finsberg/fenicsx-beat:latest
+docker run -ti --entrypoint /bin/bash -v "$(pwd)":/home/shared -w /home/shared ghcr.io/finsberg/fenicsx-beat:latest
 ```
 
-The image has dolfinx and beat installed; the `-v` mount makes the current folder visible inside.
-For MPI runs inside the container you may need `--shm-size=2g` (or larger).
+The image is built on the dolfinx JupyterLab image, whose default command starts JupyterLab; the
+`--entrypoint /bin/bash` gives a shell instead (or publish the port, `-p 8888:8888`, and open
+JupyterLab). The `-v` mount makes the current folder visible inside. The image has beat with the
+`[demos]` extra; for the CLI run `python3 -m pip install "fenicsx-beat[cli]"` inside it. Image tags
+follow beat's releases — check `beat.__version__` inside. For MPI runs inside the container you may
+need `--shm-size=2g` (or larger).
 
 On HPC clusters Docker is usually not available; use Apptainer (Singularity) with the same image:
 
@@ -49,14 +53,14 @@ spack env create beat
 spack env activate beat
 spack repo add https://github.com/FEniCS/spack-fenics.git
 spack repo add https://github.com/scientificcomputing/spack_repos.git
-spack add fenicsx-beat
+spack add py-fenicsx-beat
 spack concretize
 spack install -j 4
 ```
 
 The `scientificcomputing/spack_repos` repository (https://github.com/scientificcomputing/spack_repos)
-provides the `fenicsx-beat` package; the FEniCS repository provides dolfinx. Check the package name
-with `spack list beat` and the available versions with `spack info fenicsx-beat` before adding it;
+provides the `py-fenicsx-beat` package; the FEniCS repository provides dolfinx. Check the package
+name with `spack list beat` and the available versions with `spack info py-fenicsx-beat` before adding it;
 on a cluster, configure the system MPI as an external package first (see the cluster's docs).
 
 ## Debian / Ubuntu packages

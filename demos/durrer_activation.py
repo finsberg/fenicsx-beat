@@ -176,8 +176,8 @@ if comm.rank == 0:
 
 # ## A monodomain simulation driven by the sequence
 #
-# The cell model is the endocardial ToR-ORd model, with its own stimulus switched off. To keep the demo short we start from the default initial states
-# instead of pacing to steady state.
+# The cell model is the endocardial ToR-ORd model, with its own stimulus switched off. To keep the
+# demo short we start from the default initial states instead of pacing to steady state.
 
 model_path = Path("ToRORd_dynCl_endo.py")
 if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
@@ -194,12 +194,13 @@ model = ToRORd_dynCl_endo.__dict__
 
 # ### Calibrating the conductivities
 #
-# The tissue uses the Bishop conductivities, but not as they are. The elements of this mesh are about 3 mm across, while the upstroke of the action
-# potential is less than 1 mm wide in tissue, and on a mesh that does not resolve the upstroke the
-# wave is too slow: with these conductivities and this cell model, a plane wave does not propagate
-# at all on a 3 mm mesh, and on a 1 mm mesh it travels at 0.26 mm/ms along the fibres and 0.10
-# mm/ms across them, less than half of what is measured in human ventricles. The base, which only
-# the tissue activates (it is above `max_height`), is then reached very late.
+# The tissue uses the Bishop conductivities, but not as they are. The elements of this mesh are
+# about 3 mm across, while the upstroke of the action potential is less than 1 mm wide in tissue,
+# and on a mesh that does not resolve the upstroke the wave is too slow: with these conductivities
+# and this cell model, a plane wave does not propagate at all on a 3 mm mesh, and on a 1 mm mesh it
+# travels at 0.26 mm/ms along the fibres and 0.10 mm/ms across them, less than half of what is
+# measured in human ventricles. The base, which only the tissue activates (it is above
+# `max_height`), is then reached very late.
 #
 # The usual remedy {cite}`costa2013automatic` is to calibrate the conductivities for the mesh:
 # choose them so that a plane wave on a slab, discretised with the mesh size, time step and cell
