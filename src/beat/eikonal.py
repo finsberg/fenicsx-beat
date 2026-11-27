@@ -193,13 +193,17 @@ class Source:
     ``marker`` is either a function ``x -> bool array`` of the coordinates (``x`` has shape
     ``(3, num_points)``, as in :func:`dolfinx.fem.locate_dofs_geometrical`), or a pair
     ``(meshtags, value)``: all vertices of the entities tagged with ``value``.
+
+    ``t0`` is a float, or a scalar P1 :class:`dolfinx.fem.Function` on the solver's mesh. For a
+    Function, a marked vertex starts at the Function's value there, and a vertex where that
+    value is not finite (``inf`` or ``nan``) is not a source.
     """
 
     marker: (
         Callable[[npt.NDArray[np.float64]], npt.NDArray[np.bool_]]
         | tuple[dolfinx.mesh.MeshTags, int]
     )
-    t0: float = 0.0
+    t0: float | dolfinx.fem.Function = 0.0
 
 
 def _subsimplices(mesh: Any) -> npt.NDArray[np.int64]:
@@ -353,6 +357,29 @@ class EikonalSolver:
         self.mesh.topology.create_connectivity(tags.dim, self.mesh.topology.dim)
         return dolfinx.fem.locate_dofs_topological(self.V, tags.dim, tags.find(value))
 
+    def _seed(self, t: npt.NDArray[np.float64], source: Source) -> None:
+        """Lower ``t`` to the start time of ``source`` at its vertices"""
+        dofs = self._source_dofs(source)
+        if isinstance(source.t0, dolfinx.fem.Function):
+            t0 = source.t0
+            V = t0.function_space
+            if V.mesh is not self.mesh:
+                raise ValueError(
+                    "The Function t0 is on another mesh; interpolate it onto the solver's mesh "
+                    "first",
+                )
+            if V.ufl_element() != self.V.ufl_element():
+                raise ValueError(
+                    f"The Function t0 is in {V.ufl_element()}, not the solver's scalar P1 space",
+                )
+            t0.x.scatter_forward()
+            values = t0.x.array[dofs]
+            finite = np.isfinite(values)
+            dofs, values = dofs[finite], values[finite]
+        else:
+            values = np.full(len(dofs), source.t0)
+        t[dofs] = np.minimum(t[dofs], values)
+
     def _min_exchange(self, t: npt.NDArray[np.float64]) -> None:
         """Every rank's copy of a vertex becomes the minimum over all ranks (PETSc has no
         MIN_VALUES, so take the maximum of -t)"""
@@ -375,7 +402,8 @@ class EikonalSolver:
         Parameters
         ----------
         sources : Sequence[Source]
-            Where the activation starts; where sources overlap the smallest ``t0`` wins
+            Where the activation starts; where sources overlap the smallest ``t0`` wins. A
+            Function ``t0`` gives each marked vertex its own start time
         tol : float, optional
             FIM convergence tolerance (ms), by default 1e-6
         max_iter : int | None, optional
@@ -392,8 +420,7 @@ class EikonalSolver:
         max_iter = max_iter if max_iter is not None else 4 * n + 1000
         t = np.full(n, FAR)
         for source in sources:
-            dofs = self._source_dofs(source)
-            t[dofs] = np.minimum(t[dofs], source.t0)
+            self._seed(t, source)
         self._min_exchange(t)
         fixed = (t < FAR).astype(np.uint8)
         if comm.allreduce(int(fixed[:n_owned].sum()), op=MPI.SUM) == 0:
