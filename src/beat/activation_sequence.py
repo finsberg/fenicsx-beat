@@ -20,6 +20,11 @@ activated by the tissue.
 4. a stimulus (:meth:`EndocardialActivation.stimulus`) that switches on every cell with a facet on
    the endocardium below ``max_height`` when this wave reaches it.
 
+For reaction-eikonal EP (:class:`beat.reaction_eikonal.FootCurrentODESolver`), which needs an
+activation time at every vertex of the mesh and not only on the endocardium,
+:meth:`EndocardialActivation.volume_activation_times` solves a volume eikonal seeded with the
+endocardial times, which gives the whole-heart Durrer sequence.
+
 Reference: D. Durrer, R. T. van Dam, G. E. Freud, M. J. Janse, F. L. Meijler and
 R. C. Arzbaecher, Total excitation of the isolated human heart, Circulation 41 (1970) 899-912.
 """
@@ -403,7 +408,8 @@ class EndocardialActivation:
         Per root site: ``"x"``, the vertex it was placed on, and ``"delay"`` (ms, scaled)
     activation_times : dolfinx.fem.Function
         P1 time (ms) at which the endocardial wave reaches each vertex of the endocardium below
-        ``max_height``; ``inf`` elsewhere
+        ``max_height``; ``inf`` elsewhere. These are the times that
+        :meth:`volume_activation_times` seeds its volume eikonal with
     cell_activation_times : dolfinx.fem.Function
         DG0 time (ms) at which each stimulated cell (see ``stimulated_cells``) is stimulated;
         ``inf`` for the other cells
@@ -572,6 +578,62 @@ class EndocardialActivation:
         t.x.array[W.dofmap.list[:, 0]] = t_cell
         t.x.scatter_forward()
         return t
+
+    def volume_activation_times(
+        self,
+        velocities: Sequence[Any],
+        fibers: Sequence[Any],
+        *,
+        tol: float = 1e-6,
+        max_iter: int | None = None,
+        allow_unreached: bool = False,
+    ) -> dolfinx.fem.Function:
+        """Activation time (ms) at every vertex: the Durrer sequence through the wall
+
+        Solves a volume eikonal on the mesh, seeded with ``activation_times`` on the endocardium.
+        ``activation_times`` is ``inf`` above ``max_height`` and on the unstimulated surface, so
+        those vertices are not seeds: the volume wave reaches the base from the endocardium
+        below. The seeds are fixed: a seeded vertex keeps its endocardial time even where the
+        volume wave would reach it earlier (in the Durrer demo, the wave from the LV would reach
+        127 of the 565 seeded RV vertices earlier, by up to 15.3 ms). Nothing on the object
+        changes.
+
+        Parameters
+        ----------
+        velocities
+            Conduction velocities along ``fibers``, as for :class:`beat.eikonal.EikonalSolver`:
+            floats, Constants or Functions in the object's ``mesh_unit`` per ms, or pint
+            quantities, which are converted with ``mesh_unit``
+        fibers
+            Three directions (fibre, sheet, normal), e.g. ``(f0, s0, n0)``. With the same
+            velocity in all three, any orthonormal triple gives an isotropic speed
+        tol, max_iter, allow_unreached
+            Passed to :meth:`beat.eikonal.EikonalSolver.solve`: a vertex the wave cannot reach
+            raises ``ValueError``, or, with ``allow_unreached=True``, warns and gets ``inf``
+
+        Returns
+        -------
+        dolfinx.fem.Function
+            P1 activation time (ms), named ``"activation_time"``
+
+        Example
+        -------
+        The activation time of reaction-eikonal EP::
+
+            t_a = activation.volume_activation_times(velocities, (f0, s0, n0))
+            ode = beat.reaction_eikonal.FootCurrentODESolver(ode, t_a=t_a, ...)
+        """
+        solver = EikonalSolver(
+            self.mesh,
+            velocities,
+            fibers,
+            mesh_unit=self.mesh_unit,
+            **self.eikonal_kwargs,
+        )
+        sources = [
+            Source((self.facet_tags, v), t0=self.activation_times) for v in self._endocardial_values
+        ]
+        return solver.solve(sources, tol=tol, max_iter=max_iter, allow_unreached=allow_unreached)
 
     def stimulus(
         self,

@@ -11,7 +11,9 @@ from beat.activation_sequence import (
     EndocardialActivation,
     HeartFrame,
     RootSite,
+    _surface_dofs,
 )
+from beat.units import ureg
 
 cardiac_geometries = pytest.importorskip("cardiac_geometries")
 
@@ -280,3 +282,57 @@ def test_vertex_stimulates_more_cells_at_the_same_times(geo, act):
     assert (t_vertex[both] <= t_facet[both] + 1e-12).all()
     with pytest.raises(ValueError, match="stimulated_cells"):
         EndocardialActivation.from_geometry(geo, mesh_unit="cm", stimulated_cells="edge")
+
+
+ISOTROPIC = [ureg.Quantity(0.6, "mm/ms")] * 3
+
+
+def fibers(mesh):
+    return [dolfinx.fem.Constant(mesh, e) for e in np.eye(3)]
+
+
+def test_volume_times_keep_the_endocardial_times(act):
+    t = act.volume_activation_times(ISOTROPIC, fibers(act.mesh))
+    t_endo = owned(act.activation_times)
+    seeded = np.isfinite(t_endo)
+    np.testing.assert_allclose(owned(t)[seeded], t_endo[seeded], atol=1e-12)
+
+
+def test_volume_times_reach_everything_after_the_first_root(act, geo):
+    t = owned(act.volume_activation_times(ISOTROPIC, fibers(act.mesh)))
+    first = min(r["delay"] for r in act.roots.values())
+    assert np.all(np.isfinite(t))
+    assert t.min() >= first - 1e-12
+    # endocardial vertices above max_height are reached by the volume wave, not seeded
+    endo = _surface_dofs(
+        act.activation_times.function_space,
+        geo.ffun,
+        [geo.markers[k][0] for k in ("LV", "RV")],
+    )
+    unseeded_endo = endo[~np.isfinite(owned(act.activation_times)[endo])]
+    assert MPI.COMM_WORLD.allreduce(len(unseeded_endo), op=MPI.SUM) > 0
+    assert np.all(t[unseeded_endo] > first)
+
+
+def test_volume_times_is_a_pure_query(act):
+    before = (act.activation_times.x.array.copy(), act.cell_activation_times.x.array.copy())
+    slow = act.volume_activation_times(ISOTROPIC, fibers(act.mesh)).x.array.copy()
+    fast = act.volume_activation_times([2 * v for v in ISOTROPIC], fibers(act.mesh))
+    again = act.volume_activation_times(ISOTROPIC, fibers(act.mesh))
+    np.testing.assert_array_equal(act.activation_times.x.array, before[0])
+    np.testing.assert_array_equal(act.cell_activation_times.x.array, before[1])
+    np.testing.assert_allclose(again.x.array, slow, atol=1e-9)
+    assert np.all(fast.x.array <= slow + 1e-9)
+    # doubling the speed must make some vertex strictly earlier (the speed is not ignored)
+    assert MPI.COMM_WORLD.allreduce(
+        int(np.any(owned(fast) < slow[: len(owned(fast))] - 1e-6)),
+        op=MPI.MAX,
+    )
+
+
+def test_volume_times_units(act):
+    """A pint speed and the same speed as a float in the object's mesh_unit (cm/ms) agree."""
+    as_float = [0.06] * 3  # 0.6 mm/ms in cm/ms
+    a = act.volume_activation_times(velocities=ISOTROPIC, fibers=fibers(act.mesh))
+    b = act.volume_activation_times(velocities=as_float, fibers=fibers(act.mesh))
+    np.testing.assert_allclose(a.x.array, b.x.array, atol=1e-9)
