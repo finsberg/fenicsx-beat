@@ -75,6 +75,10 @@ ode = FootCurrentODESolver(cell_solver(v_pde=pde.state), t_a, ExponentialFoot())
 solver = beat.SplittingSolver(pde=pde, ode=ode)
 ```
 
+The activation time `t_a` can also come from the Durrer sequence, through the wall:
+`EndocardialActivation.volume_activation_times(velocities, (f0, s0, n0))` returns a P1 `t_a` for
+`FootCurrentODESolver` (see the [Durrer demo](../demos/durrer_activation.py)).
+
 Reaction-eikonal without diffusion, R-E$^-$ (no PDE; `v_pde` is not used):
 
 ```python
@@ -164,7 +168,7 @@ phi_e = record()["P_E"]
 | `WedgeGeometry` | the Neic 2017 transmural wedge: a `Geometry`, cell tags, stimulus sites, electrode | wraps `Geometry` | the wedge demos, [eikonal](../demos/eikonal.py) |
 | `WedgeBathGeometry` | the wedge inside a bath box: a `Geometry`, tissue/bath cell tags, margins | wraps `Geometry` | [electrograms](../demos/reaction_eikonal_wedge_electrograms.py) |
 | `Stimulus` | a stimulus current with its measure (`define_stimulus` builds one) | `NamedTuple` | most demos |
-| `EndocardialActivation` | a Purkinje-like endocardial activation sequence on a BiV mesh: root sites (Durrer by default) spreading over the endocardium (surface eikonal), and the `Stimulus` that fires each endocardial cell when the wave arrives | uses `EikonalSolver`; returns a `Stimulus` | [Durrer activation](../demos/durrer_activation.py) |
+| `EndocardialActivation` | a Purkinje-like endocardial activation sequence on a BiV mesh: root sites (Durrer by default) spreading over the endocardium (surface eikonal), the `Stimulus` that fires each endocardial cell when the wave arrives, and, through the wall, the volume activation time `t_a` for reaction-eikonal (`volume_activation_times`, a volume eikonal seeded with the endocardial times) | uses `EikonalSolver`; returns a `Stimulus` (`stimulus`) or a P1 `t_a` for `FootCurrentODESolver` (`volume_activation_times`) | [Durrer activation](../demos/durrer_activation.py) |
 | `HeartFrame` | apex, long axis, septal and anterior directions of a BiV mesh; height/angle/radius coordinates | dataclass | [Durrer activation](../demos/durrer_activation.py) |
 | `RootSite` | an early activation site: surface, height, angle (or septal/free wall), delay | dataclass | [Durrer activation](../demos/durrer_activation.py) |
 | `Conductivities` | longitudinal and transverse conductivity (`get_harmonic_mean_conductivity`) | `NamedTuple` | — |

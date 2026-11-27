@@ -382,6 +382,89 @@ if comm.rank == 0:
     fig.tight_layout()
     fig.savefig(results_folder / "activation_fraction.png")
 
+# ## The sequence through the wall, for reaction-eikonal
+#
+# The monodomain run above is the expensive way to get an activation map. For reaction-eikonal EP
+# (`beat.reaction_eikonal.FootCurrentODESolver`) the map itself is the input, and
+# `EndocardialActivation.volume_activation_times` computes it: it solves a volume eikonal with the
+# Durrer endocardial times as the start times of the endocardial vertices, so the wave crosses the
+# wall and reaches the base from below, as in the tissue. The velocities are the calibration's
+# targets, 0.6 mm/ms along the fibres and 0.3 mm/ms across them, along the geometry's fibre, sheet
+# and normal fields `(geo.f0, geo.s0, geo.n0)`; with the same sheet and normal speed, the direction
+# of the second and third does not matter. The pint velocities are converted with the object's
+# `mesh_unit` (cm); plain floats would be taken to be in cm/ms.
+
+t_volume = activation.volume_activation_times(
+    velocities=(
+        ureg.Quantity(0.6, "mm/ms"),
+        ureg.Quantity(0.3, "mm/ms"),
+        ureg.Quantity(0.3, "mm/ms"),
+    ),
+    fibers=(geo.f0, geo.s0, geo.n0),
+)
+signed = t_volume.x.array[:n_owned] - t_tissue[:n_owned]
+valid = np.isfinite(signed)
+total = comm.allreduce(float(np.abs(signed[valid]).sum()), op=MPI.SUM)
+total_signed = comm.allreduce(float(signed[valid].sum()), op=MPI.SUM)
+count = comm.allreduce(int(valid.sum()), op=MPI.SUM)
+largest = comm.allreduce(float(np.abs(signed[valid]).max(initial=0.0)), op=MPI.MAX)
+last_volume = comm.allreduce(float(np.nanmax(t_volume.x.array[:n_owned])), op=MPI.MAX)
+if comm.rank == 0:
+    print(f"|t_volume - t_tissue|: mean {total / count:.2f} ms, max {largest:.2f} ms")
+    print(
+        f"t_volume - t_tissue: mean {total_signed / count:.2f} ms; "
+        f"last activation {last_volume:.1f} ms (tissue {last:.1f} ms)",
+    )
+
+# The share of the mesh vertices that lie in a stimulated cell (a cell with a finite
+# `activation.cell_activation_times`), counted over the cells a rank holds, ghosts included. The
+# DG0 Function holds one dof per cell, and `dofmap.list` maps each cell to it.
+mesh_topology = geo.mesh.topology
+tdim = mesh_topology.dim
+mesh_topology.create_connectivity(tdim, 0)
+c_to_v = mesh_topology.connectivity(tdim, 0)
+W = activation.cell_activation_times.function_space
+cell_times = activation.cell_activation_times.x.array[W.dofmap.list[:, 0]]
+stimulated = np.flatnonzero(np.isfinite(cell_times))
+in_stimulated = np.zeros(mesh_topology.index_map(0).size_local, dtype=bool)
+for cell in stimulated:
+    vertices = c_to_v.links(cell)
+    in_stimulated[vertices[vertices < len(in_stimulated)]] = True
+n_vertices = comm.allreduce(len(in_stimulated), op=MPI.SUM)
+n_in_stimulated = comm.allreduce(int(in_stimulated.sum()), op=MPI.SUM)
+if comm.rank == 0:
+    print(
+        f"{n_in_stimulated} of {n_vertices} vertices "
+        f"({100 * n_in_stimulated / n_vertices:.0f} %) lie in a stimulated cell",
+    )
+
+# On this mesh the two maps differ by 4.24 ms on average and by 16.18 ms at most. The eikonal is
+# the later one, by 3.79 ms on average, and it finishes at 49.5 ms against 35.9 ms. On the
+# endocardium the tissue lags the sequence by a median of 0.40 ms (printed above), so the latency
+# of the upstroke does not explain it. On this mesh the wall is about one element thick, so the
+# stimulated cells (`stimulated_cells="facet"`) reach through it to the epicardium at most
+# vertices (73 % of all vertices lie in one, as printed above), and the monodomain wave crosses
+# the wall much faster than an eikonal that starts on the endocardial surface; a separate check,
+# not computed here, found about 6 ms against 13 ms. At the base, where no stimulus reaches, the
+# monodomain front is also faster than the calibrated velocities (about 1.4 times the target in
+# the same separate check, which did not find the cause), which is why the calibration is a
+# target and not a guarantee on another mesh.
+#
+# The map is what reaction-eikonal EP takes as `t_a`. In both variants the foot current at `t_a`
+# replaces the stimulus, so `EndocardialActivation.stimulus` is not used: R-E$^+$ keeps the
+# monodomain PDE, without a stimulus, and R-E$^-$ has no PDE. We do not run either here. `ode`
+# is the cell solver built above, already stepped to the end of the monodomain run, so a real run
+# builds a fresh one from the initial states (`fresh_ode` below).
+#
+# ```python
+# re_ode = beat.reaction_eikonal.FootCurrentODESolver(
+#     fresh_ode,
+#     t_a=t_volume,
+#     foot=beat.reaction_eikonal.ExponentialFoot(),
+# )
+# solver = beat.SplittingSolver(pde=None, ode=re_ode)  # R-E^-
+# ```
+
 # ## A whole beat: movie and ECG
 #
 # Running a whole beat on a fine mesh takes about half an hour, too long for the documentation
