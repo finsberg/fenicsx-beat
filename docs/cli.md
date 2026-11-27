@@ -57,8 +57,8 @@ the full list, one per row. Without `--template`, it defaults to `slab`, a thin 
 stimulated at one end (the simplest possible geometry, good for checking the CLI wiring itself)
 with `geometry.type = "box_slab"` -- a structured tetrahedral box built directly by `beat` in
 memory on every run (cheap; nothing is written to disk), no `gmsh`/mesh-generation tool of your own
-needed. `beat init --template lv_endocardial`/`biv_endocardial`/`ukb_atlas` instead generate a real
-gmsh mesh (`geometry.type = "slab"`/`"lv_ellipsoid"`/`"biv_ellipsoid"`/`"ukb"`, via
+needed. `beat init --template lv_endocardial`/`ukb_atlas` instead generate a real gmsh mesh
+(as do `geometry.type = "slab"`/`"lv_ellipsoid"`/`"biv_ellipsoid"`/`"ukb"` in general, via
 `cardiac-geometriesx`, and `ukb-atlas` for the last one), which can take from seconds to minutes
 depending on resolution. `beat geometry` (also run implicitly by `beat run` and `beat post`)
 generates such a mesh once and reuses it on every later invocation: it is cached in its own
@@ -419,7 +419,6 @@ summarized here:
 | `pvc` | [pvc.py](../demos/pvc.py) | The demo's per-DOF g_Kr/g_Ks heterogeneity (right half of the cable) has no marker to key `[cell.layers]` off on an `interval` geometry; homogeneous cable instead (no PVC emerges, but pacing/cell model match). |
 | `pace_train` | [pace_train.py](../demos/pace_train.py) | The demo switches its stimulus off at runtime (a parameter schedule, future work); this template uses a fixed PDE pulse train for the whole run instead. |
 | `lv_endocardial` | [lv_endocardial.py](../demos/lv_endocardial.py) | -- |
-| `biv_endocardial` | [biv_endocardial.py](../demos/biv_endocardial.py) | -- |
 | `ukb_atlas` | [ukb_atlas.py](../demos/ukb_atlas.py) | Needs network access on first run (atlas download, cached afterwards with the mesh in `geometry.folder/<hash>/`). |
 | `irksome_model_gotranx` | [irksome_model_gotranx.py](../demos/irksome_model_gotranx.py) | Uses `RadauIIA`/`stages=1` rather than the demo's `BackwardEuler()` (not expressible via `tableau`/`stages`); PDE stimulus box instead of the demo's non-default initial condition; uniform conductivity preset instead of the demo's piecewise-constant one. |
 | `external_operator_gotranx` | [external_operator_gotranx.py](../demos/external_operator_gotranx.py) | Conductivity built from `[ep]` (the `Niederer` preset) rather than the demo's raw scalar `M`. |

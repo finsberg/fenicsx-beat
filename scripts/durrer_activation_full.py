@@ -6,7 +6,7 @@ calibration of the conductivities) on a finer mesh of about 1 mm, with transmura
 ``--static`` (``docs/_static``):
 
 * ``durrer_activation.gif``: v over the beat, on the epicardium and on a long-axis cut;
-* ``durrer_activation_ecg.png``: the 12-lead ECG, at the electrodes of ``demos/biv_endocardial.py``;
+* ``durrer_activation_ecg.png``: the 12-lead ECG, at torso electrodes around the ellipsoid;
 
 and into ``--outdir`` the geometry, the steady states and ``results.npz`` (time, v at every node
 every ``--frame-every`` ms, the electrode potentials and leads every ms). It is not run when the
@@ -41,7 +41,7 @@ from beat.activation_sequence import EndocardialActivation
 ROOT = Path(__file__).resolve().parents[1]
 logger = logging.getLogger("durrer_activation_full")
 
-# The electrodes of demos/biv_endocardial.py, on a torso around the same ellipsoid (cm)
+# Torso electrodes around the ellipsoid (cm)
 ELECTRODES = dict(
     RA=(-15.0, 0.0, -10.0),
     LA=(4.0, -12.0, -7.0),

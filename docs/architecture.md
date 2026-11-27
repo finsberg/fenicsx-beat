@@ -148,12 +148,12 @@ phi_e = record()["P_E"]
 
 | Class | What it is for | Builds on / implements | Demos |
 |---|---|---|---|
-| `ECGRecovery` | pseudo-ECG in an infinite homogeneous medium | — | [slab](../demos/slab.py), [biv_endocardial](../demos/biv_endocardial.py) |
-| `ElectrodePotentials` | `ECGRecovery` at many named electrodes, one solve per call | `ElectrodeRecorder` | [biv_endocardial](../demos/biv_endocardial.py) |
+| `ECGRecovery` | pseudo-ECG in an infinite homogeneous medium | — | [slab](../demos/slab.py) |
+| `ElectrodePotentials` | `ECGRecovery` at many named electrodes, one solve per call | `ElectrodeRecorder` | [durrer_activation](../demos/durrer_activation.py) |
 | `VolumeConductor` | extracellular potential $\phi_e$ in a bounded tissue-and-bath volume (pseudo-bidomain) | — | [electrograms](../demos/reaction_eikonal_wedge_electrograms.py) |
 | `LeadFieldElectrodes` | $\phi_e$ at named electrodes via lead fields (reciprocity), cheap per step | `ElectrodeRecorder` | [electrograms](../demos/reaction_eikonal_wedge_electrograms.py) |
 | `ElectrodeRecorder` | the protocol above | `Protocol` | — |
-| `Lead`, `LeadSystem` | leads as weighted sums of electrode potentials (`twelve_lead()` builds the standard 12) | dataclasses | [biv_endocardial](../demos/biv_endocardial.py) |
+| `Lead`, `LeadSystem` | leads as weighted sums of electrode potentials (`twelve_lead()` builds the standard 12) | dataclasses | [durrer_activation](../demos/durrer_activation.py) |
 | `QTIntervalResult` | return value of `qt_interval` | `NamedTuple` | — |
 
 ### Geometry, stimulation and conductivities

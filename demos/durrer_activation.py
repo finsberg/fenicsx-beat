@@ -27,8 +27,8 @@
 # 4. every cell with a facet on the endocardium below 85 % of the apex–base height receives the
 #    stimulus current for 2 ms from the time the wave reaches it.
 #
-# This demo builds the sequence on the bi-ventricular ellipsoid of the
-# [BiV demo](biv_endocardial.py), looks at it, and uses it to drive a monodomain simulation.
+# This demo builds the sequence on a bi-ventricular ellipsoid, looks at it, and uses it to drive a
+# monodomain simulation.
 
 from pathlib import Path
 
@@ -176,8 +176,7 @@ if comm.rank == 0:
 
 # ## A monodomain simulation driven by the sequence
 #
-# The cell model is the endocardial ToR-ORd model, as in the [BiV demo](biv_endocardial.py), with
-# its own stimulus switched off. To keep the demo short we start from the default initial states
+# The cell model is the endocardial ToR-ORd model, with its own stimulus switched off. To keep the demo short we start from the default initial states
 # instead of pacing to steady state.
 
 model_path = Path("ToRORd_dynCl_endo.py")
@@ -195,8 +194,7 @@ model = ToRORd_dynCl_endo.__dict__
 
 # ### Calibrating the conductivities
 #
-# The tissue uses the Bishop conductivities, as in the [BiV demo](biv_endocardial.py), but not as
-# they are. The elements of this mesh are about 3 mm across, while the upstroke of the action
+# The tissue uses the Bishop conductivities, but not as they are. The elements of this mesh are about 3 mm across, while the upstroke of the action
 # potential is less than 1 mm wide in tissue, and on a mesh that does not resolve the upstroke the
 # wave is too slow: with these conductivities and this cell model, a plane wave does not propagate
 # at all on a 3 mm mesh, and on a 1 mm mesh it travels at 0.26 mm/ms along the fibres and 0.10
@@ -399,10 +397,11 @@ if comm.rank == 0:
 # is a few elements wide, and near the base, where only the tissue activates the heart, it
 # advances in visible jumps from element to element. And for a realistic repolarisation, the
 # wall is split into endocardial, mid-myocardial and epicardial layers (30 %, 40 % and 30 %, with
-# `beat.utils.expand_layer_biv`, as in the [BiV demo](biv_endocardial.py)), each with its own
-# ToR-ORd cell type, and each cell type is paced for 200 beats at 1 Hz to steady state. It
+# `beat.utils.expand_layer_biv`), each with its own ToR-ORd cell type, and each cell type is
+# paced for 200 beats at 1 Hz to steady state. It
 # simulates 500 ms with a time step of 0.05 ms and records the 12-lead ECG every 1 ms, with
-# `beat.ecg.ElectrodePotentials` at the torso electrodes of the [BiV demo](biv_endocardial.py).
+# `beat.ecg.ElectrodePotentials` at torso electrodes around the ellipsoid (defined in
+# `scripts/durrer_activation_full.py`).
 #
 # The movie shows $v$ on the epicardium, seen from the RV side, and on a cut along the long axis
 # through both cavities. The LV septum is activated first and the RV 5 ms later; the wave spreads
