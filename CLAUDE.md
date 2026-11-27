@@ -133,3 +133,7 @@ Version(...)` branch before assuming one API shape.
 - `demos/index.md` is a flat, grouped index of every demo. When adding a demo, add it to both this and
   `_toc.yml`.
 - `odes/` holds third-party CellML/`.ode` cell-model sources (not part of the `beat` package).
+- `plugins/fenicsx-beat/` is a Claude Code plugin (marketplace manifest in `.claude-plugin/`) with the
+  `beat-simulation` skill. When adding/removing a demo, CLI template, public class or CLI config key,
+  update the skill's files; `tests/test_claude_plugin.py` fails on stale names and on a `plugin.json`
+  version that differs from `pyproject.toml` (bump-my-version updates both).

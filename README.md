@@ -35,6 +35,18 @@ Also that to run most of the examples you will need to install additional depend
 python3 -m pip install fenicsx-beat[demos]
 ```
 
+### Claude Code skill
+
+`fenicsx-beat` also ships a [Claude Code](https://claude.com/claude-code) plugin with a skill that helps
+you set up and run simulations: it asks what you want to simulate, suggests alternatives, and writes
+and checks a `beat` config or script for you. In Claude Code, run
+```
+/plugin marketplace add finsberg/fenicsx-beat
+/plugin install fenicsx-beat@fenicsx-beat
+```
+or copy the folder [`plugins/fenicsx-beat/skills/beat-simulation`](https://github.com/finsberg/fenicsx-beat/tree/main/plugins/fenicsx-beat/skills/beat-simulation)
+into `~/.claude/skills/`. See [Using fenicsx-beat with Claude Code](#using-fenicsx-beat-with-claude-code).
+
 
 ## Getting started
 
@@ -215,6 +227,28 @@ vtx.close()
 ![_](https://raw.githubusercontent.com/finsberg/fenicsx-beat/refs/heads/main/joss-paper/paper_figure.png)
 
 See more examples in the [documentation](https://finsberg.github.io/fenicsx-beat)
+
+## Using fenicsx-beat with Claude Code
+
+The `beat-simulation` skill (installed as above) turns Claude Code into a guide for setting up
+`beat` simulations. It
+
+- checks that dolfinx, `beat` and the extras your problem needs are installed, and lists the ways to
+  install what is missing (conda, Docker, Spack, Debian/Ubuntu packages);
+- asks you, one question at a time, about the goal, geometry (including your own mesh, which it
+  checks can be read), cell model, stimulus, outputs and post-processing, and the resources you have;
+- proposes two or three approaches with their trade-offs (e.g. monodomain vs reaction-eikonal, the
+  `beat` CLI vs a Python script, time step and mesh size) and recommends one;
+- writes a CLI config (`beat init`, `beat validate-config`) or a Python script based on the closest
+  demo, and offers a short smoke run that checks the wave actually propagates;
+- never installs anything or starts a long or MPI run without asking.
+
+Just describe what you want to simulate, for example
+
+> I want to simulate a spiral wave in a 2D sheet of ventricular tissue and look at the tip trajectory
+
+and Claude loads the skill on its own; or invoke it explicitly with `/fenicsx-beat:beat-simulation`
+(`/beat-simulation` if you copied the folder). Update it with `/plugin marketplace update fenicsx-beat`.
 
 ## Citation
 If you use this software in your research, please cite the following paper
