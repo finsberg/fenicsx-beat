@@ -1,0 +1,12 @@
+{
+  "name": "fenicsx-beat",
+  "owner": { "name": "Henrik Finsberg" },
+  "description": "Claude Code skills for fenicsx-beat, a cardiac electrophysiology simulator on FEniCSx",
+  "plugins": [
+    {
+      "name": "fenicsx-beat",
+      "source": "./plugins/fenicsx-beat",
+      "description": "Set up, choose and run cardiac electrophysiology simulations with fenicsx-beat"
+    }
+  ]
+}

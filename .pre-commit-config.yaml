@@ -40,7 +40,7 @@ repos:
     rev: v10.4.1
     hooks:
       - id: cspell
-        files: src/|docs|tests|README.md
+        files: src/|docs|tests|^plugins/|README.md
 
   - repo: https://github.com/pre-commit/mirrors-clang-format
     rev: v23.1.5

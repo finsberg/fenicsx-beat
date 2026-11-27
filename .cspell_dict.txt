@@ -34,6 +34,7 @@ capsys
 cardiomyocytes
 carputils
 cbcbeat
+cellml
 cellmodel
 cellname
 celltype
@@ -66,6 +67,7 @@ eigendirection
 eikonal
 Einthoven
 electrograms
+electrotonic
 Elife
 Elsevier
 endo
@@ -102,6 +104,7 @@ getpid
 Gilles
 gmres
 gmsh
+gmshio
 Goldberger
 gotran
 gotranx
@@ -150,6 +153,8 @@ Matteo
 mcpu
 mechanicsproblem
 ment
+meshio
+meshtag
 meshtags
 MICCAI
 midwall
@@ -196,6 +201,7 @@ Paraview
 Passini
 pendo
 petsc
+Physiome
 Piola
 pmatrix
 Potse
@@ -225,6 +231,7 @@ savefig
 SBATCH
 sbatch
 Schaeffer
+scientificcomputing
 scifem
 setrecursionlimit
 Severi
@@ -239,6 +246,7 @@ Silvano
 simcardems
 SLURM
 Sorine
+Spack
 spatio
 srun
 Stefano
@@ -277,6 +285,8 @@ viridis
 viscoelastic
 viscoelasticity
 vmap
+vtkhdf
+VTKHDF
 Waldman
 WRONLY
 XDMF
