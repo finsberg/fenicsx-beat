@@ -6,7 +6,7 @@ calibration of the conductivities) on a finer mesh of about 1 mm, with transmura
 ``--static`` (``docs/_static``):
 
 * ``durrer_activation.gif``: v over the beat, on the epicardium and on a long-axis cut;
-* ``durrer_activation_ecg.png``: the 12-lead ECG, at the electrodes of ``demos/biv_endocardial.py``;
+* ``durrer_activation_ecg.png``: the 12-lead ECG, at torso electrodes around the ellipsoid;
 
 and into ``--outdir`` the geometry, the steady states and ``results.npz`` (time, v at every node
 every ``--frame-every`` ms, the electrode potentials and leads every ms). It is not run when the
@@ -41,7 +41,7 @@ from beat.activation_sequence import EndocardialActivation
 ROOT = Path(__file__).resolve().parents[1]
 logger = logging.getLogger("durrer_activation_full")
 
-# The electrodes of demos/biv_endocardial.py, on a torso around the same ellipsoid (cm)
+# Torso electrodes around the ellipsoid (cm)
 ELECTRODES = dict(
     RA=(-15.0, 0.0, -10.0),
     LA=(4.0, -12.0, -7.0),
@@ -103,11 +103,11 @@ def parse_args(argv=None):
 
 
 def cell_model(outdir: Path):
-    """The generalized Rush-Larsen code of the endocardial ToR-ORd model (all cell types)"""
+    """The `rush_larsen_2` code of the endocardial ToR-ORd model (all cell types)"""
     path = outdir / "ToRORd_dynCl_endo.py"
-    if not path.is_file():
+    if not path.is_file() or "def rush_larsen_2" not in path.read_text():
         ode = gotranx.load_ode(ROOT / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
-        scheme = [gotranx.schemes.Scheme.generalized_rush_larsen]
+        scheme = [gotranx.schemes.Scheme.rush_larsen_2]
         path.write_text(gotranx.cli.gotran2py.get_code(ode, scheme=scheme))
     model: dict = {}
     exec(compile(path.read_text(), str(path), "exec"), model)
@@ -204,7 +204,7 @@ def simulate(args, geo, activation, mesh_unit):
         output_endo_marker=LAYERS["endo"][0],
         output_epi_marker=LAYERS["epi"][0],
     )
-    fun = model["generalized_rush_larsen"]
+    fun = model["rush_larsen_2"]
     v_index = model["state_index"]("v")
     init_states, parameters = {}, {}
     for name, (marker, celltype) in LAYERS.items():
@@ -257,6 +257,8 @@ def simulate(args, geo, activation, mesh_unit):
         parameters=parameters,
         v_index={k: v_index for k in init_states},
     )
+    # Strang splitting (the default) without merged half-steps: we read `v` after every step
+    # (activation times), which merged half-steps would delay by up to half a time step.
     solver = beat.SplittingSolver(pde=pde, ode=ode)
 
     # --- ECG: electrode potentials every ms -----------------------------------------------------

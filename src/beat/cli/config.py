@@ -287,7 +287,11 @@ class RegionConfig(_Base):
 
 class CellConfig(_Base):
     ode_file: Path = Field(description="Path to the gotranx .ode cell model")
-    scheme: str = "generalized_rush_larsen"
+    scheme: str = Field(
+        default="rush_larsen_2",
+        description="gotranx scheme that steps the cell model "
+        "(default rush_larsen_2, second order)",
+    )
     stiff_states: list[str] = Field(
         default_factory=list,
         description="States given the exponential (Rush-Larsen) update; only for the hybrid_* "
@@ -491,15 +495,16 @@ ODEBackendConfig = Annotated[
 class SolverConfig(_Base):
     dt: Time = Field(default_factory=lambda: _q("0.05 ms"))
     splitting: Literal["godunov", "strang"] = Field(
-        default="godunov",
+        default="strang",
         description="Operator splitting: 'godunov' (first order) or 'strang' (second order with "
         "a second-order cell.scheme and solver.pde.theta = 0.5)",
     )
-    merge_half_steps: bool = Field(
-        default=False,
+    merge_half_steps: bool | None = Field(
+        default=None,
         description="Merge consecutive Strang ODE half-steps: still second order at Godunov's cost "
         "per step, with a larger error than plain Strang at the same dt. The state is "
-        "synchronized at every save and checkpoint. Needs splitting = 'strang'",
+        "synchronized at every save and checkpoint. Default: true for splitting = 'strang', "
+        "false for 'godunov'",
     )
     end_time: Time | None = Field(
         default=None,
@@ -533,6 +538,7 @@ class SolverConfig(_Base):
             if isinstance(theta, bool):  # float(True) == 1.0 would silently pick godunov
                 raise TypeError
             data["splitting"] = names[float(theta)]
+            data.setdefault("merge_half_steps", False)  # beat <= 0.12: theta = 0.5 was plain Strang
         except (KeyError, TypeError, ValueError):
             raise ValueError(
                 "solver.theta is deprecated; only 1.0 (godunov) and 0.5 (strang) are supported; "
@@ -555,7 +561,10 @@ class SolverConfig(_Base):
 
     @model_validator(mode="after")
     def _check_merge_half_steps(self) -> "SolverConfig":
-        if self.merge_half_steps and self.splitting != "strang":
+        if self.merge_half_steps is None:
+            # Bypass __setattr__ so the resolved default stays out of model_fields_set.
+            self.__dict__["merge_half_steps"] = self.splitting == "strang"
+        elif self.merge_half_steps and self.splitting != "strang":
             raise ValueError("solver.merge_half_steps = true needs solver.splitting = 'strang'")
         return self
 
@@ -723,7 +732,7 @@ def splitting_order_warnings(conf: Config) -> list[str]:
         messages.append(
             f"solver.splitting = 'strang' with cell.scheme = {scheme!r}: the cell scheme is "
             "first order, so the run is only first order in time. Use a second-order scheme "
-            "such as 'generalized_rush_larsen_2'.",
+            "such as 'rush_larsen_2'.",
         )
     if solver.pde.type == "theta" and not math.isclose(solver.pde.theta, 0.5):
         messages.append(

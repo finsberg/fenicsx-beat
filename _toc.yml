@@ -20,7 +20,6 @@ parts:
     - file: demos/niederer_benchmark.py
     - file: demos/pvc.py
     - file: demos/pace_train.py
-    - file: demos/biv_endocardial.py
     - file: demos/ukb_atlas.py
     - file: demos/durrer_activation.py
     - file: demos/spiral_wave.py

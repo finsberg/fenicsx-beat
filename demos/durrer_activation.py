@@ -27,8 +27,8 @@
 # 4. every cell with a facet on the endocardium below 85 % of the apex–base height receives the
 #    stimulus current for 2 ms from the time the wave reaches it.
 #
-# This demo builds the sequence on the bi-ventricular ellipsoid of the
-# [BiV demo](biv_endocardial.py), looks at it, and uses it to drive a monodomain simulation.
+# This demo builds the sequence on a bi-ventricular ellipsoid, looks at it, and uses it to drive a
+# monodomain simulation.
 
 from pathlib import Path
 
@@ -176,16 +176,15 @@ if comm.rank == 0:
 
 # ## A monodomain simulation driven by the sequence
 #
-# The cell model is the endocardial ToR-ORd model, as in the [BiV demo](biv_endocardial.py), with
-# its own stimulus switched off. To keep the demo short we start from the default initial states
-# instead of pacing to steady state.
+# The cell model is the endocardial ToR-ORd model, with its own stimulus switched off. To keep the
+# demo short we start from the default initial states instead of pacing to steady state.
 
 model_path = Path("ToRORd_dynCl_endo.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     cell_ode = gotranx.load_ode(Path.cwd() / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
@@ -195,13 +194,13 @@ model = ToRORd_dynCl_endo.__dict__
 
 # ### Calibrating the conductivities
 #
-# The tissue uses the Bishop conductivities, as in the [BiV demo](biv_endocardial.py), but not as
-# they are. The elements of this mesh are about 3 mm across, while the upstroke of the action
-# potential is less than 1 mm wide in tissue, and on a mesh that does not resolve the upstroke the
-# wave is too slow: with these conductivities and this cell model, a plane wave does not propagate
-# at all on a 3 mm mesh, and on a 1 mm mesh it travels at 0.26 mm/ms along the fibres and 0.10
-# mm/ms across them, less than half of what is measured in human ventricles. The base, which only
-# the tissue activates (it is above `max_height`), is then reached very late.
+# The tissue uses the Bishop conductivities, but not as they are. The elements of this mesh are
+# about 3 mm across, while the upstroke of the action potential is less than 1 mm wide in tissue,
+# and on a mesh that does not resolve the upstroke the wave is too slow: with these conductivities
+# and this cell model, a plane wave does not propagate at all on a 3 mm mesh, and on a 1 mm mesh it
+# travels at 0.26 mm/ms along the fibres and 0.10 mm/ms across them, less than half of what is
+# measured in human ventricles. The base, which only the tissue activates (it is above
+# `max_height`), is then reached very late.
 #
 # The usual remedy {cite}`costa2013automatic` is to calibrate the conductivities for the mesh:
 # choose them so that a plane wave on a slab, discretised with the mesh size, time step and cell
@@ -238,7 +237,7 @@ calibration = beat.conduction_velocity.calibrate_conductivities(
     ureg.Quantity(0.6, "mm/ms"),
     ureg.Quantity(0.3, "mm/ms"),
     conductivities=beat.conductivities.default_conductivities("Bishop"),
-    fun=model["generalized_rush_larsen"],
+    fun=model["rush_larsen_2"],
     init_states=init_states,
     parameters=parameters,
     v_index=model["state_index"]("v"),
@@ -259,7 +258,10 @@ conductivities = calibration.conductivities
 # calibration against the activation map that the target velocities give in the heart, from the
 # same endocardial times (an eikonal solution with `beat.eikonal.EikonalSolver`): on a 1 mm mesh
 # the calibrated simulation is within 1.6 ms of it at 95 % of the nodes, while with the Bishop
-# conductivities it is 7.6 ms late at half of them. On this 3 mm mesh the base is activated a few
+# conductivities it is 7.6 ms late at half of them. (The 1 mm-mesh numbers in this paragraph and the
+# one above were measured with beat ≤ 0.13's numerics, `generalized_rush_larsen` with Godunov
+# splitting, while the demo code itself now uses `rush_larsen_2` and Strang splitting.) On this
+# 3 mm mesh the base is activated a few
 # milliseconds early. For real simulations, use a mesh of 0.5 mm or finer and calibrate at that
 # mesh size.
 #
@@ -294,12 +296,14 @@ num_points = V_ode.dofmap.index_map.size_local + V_ode.dofmap.index_map.num_ghos
 ode = beat.odesolver.DolfinODESolver(
     v_ode=dolfinx.fem.Function(V_ode),
     v_pde=pde.state,
-    fun=model["generalized_rush_larsen"],
+    fun=model["rush_larsen_2"],
     init_states=np.repeat(init_states[:, None], num_points, axis=1),
     parameters=parameters,
     num_states=len(init_states),
     v_index=model["state_index"]("v"),
 )
+# Strang splitting (the default) without merged half-steps: we read `v` after every step
+# (activation times), which merged half-steps would delay by up to half a time step.
 solver = beat.SplittingSolver(pde=pde, ode=ode)
 
 # We record the activation time of every node with `beat.activation.ActivationTracker` and run
@@ -394,10 +398,11 @@ if comm.rank == 0:
 # is a few elements wide, and near the base, where only the tissue activates the heart, it
 # advances in visible jumps from element to element. And for a realistic repolarisation, the
 # wall is split into endocardial, mid-myocardial and epicardial layers (30 %, 40 % and 30 %, with
-# `beat.utils.expand_layer_biv`, as in the [BiV demo](biv_endocardial.py)), each with its own
-# ToR-ORd cell type, and each cell type is paced for 200 beats at 1 Hz to steady state. It
+# `beat.utils.expand_layer_biv`), each with its own ToR-ORd cell type, and each cell type is
+# paced for 200 beats at 1 Hz to steady state. It
 # simulates 500 ms with a time step of 0.05 ms and records the 12-lead ECG every 1 ms, with
-# `beat.ecg.ElectrodePotentials` at the torso electrodes of the [BiV demo](biv_endocardial.py).
+# `beat.ecg.ElectrodePotentials` at torso electrodes around the ellipsoid (defined in
+# `scripts/durrer_activation_full.py`).
 #
 # The movie shows $v$ on the epicardium, seen from the RV side, and on a cut along the long axis
 # through both cavities. The LV septum is activated first and the RV 5 ms later; the wave spreads

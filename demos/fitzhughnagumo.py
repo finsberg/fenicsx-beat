@@ -239,9 +239,10 @@ ode = beat.odesolver.DolfinODESolver(
 )
 
 # Here, we also need to specify the index of the state variable corresponding to the membrane potential, which in our case is the second state variable, with index 1.
-# We combine the PDE and ODE models into a single solver using a splitting scheme
+# We combine the PDE and ODE models into a single solver using a splitting scheme.
+# We use Strang splitting with merged half-steps: it is second order at the cost of Godunov splitting. Between steps the state lacks its closing half-step, so we call `solver.synchronize()` before every save/frame.
 
-solver = beat.SplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="strang", merge_half_steps=True)
 
 # Let us set up some way to save the solution to a file. We will use the VTXWriter from FEniCSx where you can visualize the solution using ParaView.
 
@@ -295,8 +296,9 @@ T = 50
 t = 0.0
 i = 0
 while t < T:
-    v = solver.v.x.array
     if i % 200 == 0:
+        solver.synchronize()
+        v = solver.v.x.array
         print(f"Solve for {t=:.2f}, {v.max() =}, {v.min() =}")
         vtx.write(t)
         if pyvista:

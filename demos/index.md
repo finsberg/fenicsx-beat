@@ -28,8 +28,6 @@ model and notation used throughout, then work through the
 - [Premature Ventricular Complexes (PVCs)](pvc.py) — reproducing an ectopic beat originating from a
   region of reduced repolarization reserve on a 1D cable {cite}`zhang2021mechanisms`.
 - [Pacing train](pace_train.py) — the same 1D cable as the PVC demo, rapidly paced from one end.
-- [Endocardial stimulation of a Bi-ventricular ellipsoid](biv_endocardial.py) — like the left-ventricle
-  demo, but on a bi-ventricular geometry, including 12-lead ECG recovery.
 - [Purkinje like stimulation of a realistic BiV geometry](ukb_atlas.py) — a realistic bi-ventricular
   geometry from a UK Biobank atlas, stimulated at many random endocardial points to mimic activation
   via the Purkinje network.
@@ -60,7 +58,7 @@ model and notation used throughout, then work through the
 
 - [Verifying Second-Order Temporal Convergence](verification.py) — checks the second-order-in-time
   convergence of Strang splitting combined with a Crank–Nicolson PDE step, using the method of
-  manufactured solutions, then with gotranx's cell schemes (only `generalized_rush_larsen_2`
+  manufactured solutions, then with gotranx's cell schemes (only the second-order `*_rush_larsen_2`
   keeps it second order) and with the ten Tusscher–Panfilov 2006 cell model; a last section compares the cost
   and accuracy of merged Strang half-steps.
 - [Monodomain convergence test](monodomain_convergence.py) — the companion check of the (first-order)

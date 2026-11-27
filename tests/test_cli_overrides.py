@@ -10,6 +10,7 @@ from beat.cli.overrides import (
     dump_config,
     env_overrides,
     file_hash,
+    legacy_defaults_hint,
     load_config,
     parse_petsc_options,
     parse_value,
@@ -274,6 +275,7 @@ def test_env_var_with_a_single_underscore_after_a_section_warns(cfg_file):
 # solver.splitting and cell.stiff_states existed). A checkpoint written by 0.12 must still
 # restart after upgrading, so an equivalent config must hash to exactly these values. If a new
 # config field makes this fail, drop the field from the hash while it has its default value.
+OLD_SCHEME = {"scheme": "generalized_rush_larsen"}  # the beat <= 0.13 default
 LEGACY_PHYSICS_HASH = {
     1.0: "99052ff4f7c6dc60b3348026a218300b95352137add6e02119755abd7cf98aca",
     0.5: "f4562a7fbfa95a2dd9221b57184be240d7e2867f14506a548e3a78d3e27ea410",
@@ -283,21 +285,28 @@ LEGACY_PHYSICS_HASH = {
 @pytest.mark.parametrize(
     ("solver", "theta"),
     [
-        ({}, 1.0),
         ({"splitting": "godunov"}, 1.0),
-        ({"splitting": "strang"}, 0.5),
         ({"splitting": "strang", "merge_half_steps": False}, 0.5),
         ({"theta": 1.0}, 1.0),
         ({"theta": 0.5}, 0.5),
     ],
 )
 def test_physics_hash_matches_beat_0_12(tmp_path, solver, theta):
-    data = minimal_config_dict(tmp_path, solver=solver)
+    data = minimal_config_dict(tmp_path, solver=solver, cell=OLD_SCHEME)
     assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[theta]
 
 
+def test_physics_hash_of_merged_strang_differs_from_legacy(tmp_path):
+    data = minimal_config_dict(tmp_path, solver={"splitting": "strang"}, cell=OLD_SCHEME)
+    assert physics_hash(Config.model_validate(data)) != LEGACY_PHYSICS_HASH[0.5]
+
+
 def test_physics_hash_with_default_stiff_states_matches_beat_0_12(tmp_path):
-    data = minimal_config_dict(tmp_path, cell={"stiff_states": []})
+    data = minimal_config_dict(
+        tmp_path,
+        solver={"splitting": "godunov"},
+        cell={**OLD_SCHEME, "stiff_states": []},
+    )
     assert physics_hash(Config.model_validate(data)) == LEGACY_PHYSICS_HASH[1.0]
 
 
@@ -313,3 +322,87 @@ def test_env_solver_theta_override_maps_to_splitting(tmp_path):
     cfg.write_text(toml.dumps(minimal_config_dict(tmp_path)))
     conf = load_config(cfg, environ={"BEAT_SOLVER__THETA": "0.5"})
     assert conf.solver.splitting == "strang"
+
+
+def _conf(tmp_path, cell=None, solver=None):
+    """A minimal config; ``cell.scheme`` is left to the default unless ``cell`` sets it."""
+    data = minimal_config_dict(tmp_path, cell=cell or {}, solver=solver or {})
+    if "scheme" not in (cell or {}):
+        data["cell"].pop("scheme")
+    return Config.model_validate(data)
+
+
+_OLD = {"scheme": "generalized_rush_larsen"}, {"splitting": "godunov"}
+
+
+def test_legacy_hint_names_both_keys_for_a_default_relying_config(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    hint = legacy_defaults_hint(_conf(tmp_path), physics_hash(old))
+    assert "beat <= 0.13" in hint
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert 'splitting = "godunov" under [solver]' in hint
+
+
+def test_legacy_hint_names_only_the_unset_key(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    new = _conf(tmp_path, solver={"splitting": "godunov"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert "splitting =" not in hint
+
+
+def test_no_legacy_hint_for_a_real_physics_change(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    changed = _conf(tmp_path, solver={"dt": "0.025 ms"})
+    assert legacy_defaults_hint(changed, physics_hash(old)) == ""
+
+
+def test_no_legacy_hint_when_everything_is_explicit(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    new = _conf(tmp_path, cell={"scheme": "rush_larsen_2"}, solver={"splitting": "strang"})
+    assert legacy_defaults_hint(new, physics_hash(old)) == ""
+
+
+_OLD_STRANG = {"splitting": "strang", "merge_half_steps": False}
+
+
+def test_legacy_hint_names_only_merge_half_steps_for_explicit_strang(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
+    new = _conf(tmp_path, cell=_OLD[0], solver={"splitting": "strang"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    assert "merge_half_steps = false under [solver]" in hint
+    assert "[cell]" not in hint
+    assert "splitting =" not in hint
+
+
+def test_legacy_hint_names_scheme_and_merge_half_steps_for_explicit_strang(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
+    new = _conf(tmp_path, solver={"splitting": "strang"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert "merge_half_steps = false under [solver]" in hint
+    assert "splitting =" not in hint
+
+
+def test_legacy_hint_does_not_name_merge_half_steps_for_godunov(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD[1])
+    hint = legacy_defaults_hint(_conf(tmp_path), physics_hash(old))
+    assert "merge_half_steps" not in hint
+
+
+def test_legacy_hint_lines_parse_under_their_tables(tmp_path):
+    old = _conf(tmp_path, cell=_OLD[0], solver=_OLD_STRANG)
+    new = _conf(tmp_path, solver={"splitting": "strang"})
+    hint = legacy_defaults_hint(new, physics_hash(old))
+    data = minimal_config_dict(tmp_path, cell={}, solver={"splitting": "strang"})
+    data["cell"].pop("scheme")
+    # The suggested `key = value` lines, inserted under their [table] in TOML text.
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in hint
+    assert "merge_half_steps = false under [solver]" in hint
+    text = toml.dumps(data)
+    text = text.replace("[cell]\n", '[cell]\nscheme = "generalized_rush_larsen"\n', 1)
+    text = text.replace("[solver]\n", "[solver]\nmerge_half_steps = false\n", 1)
+    path = tmp_path / "legacy.toml"
+    path.write_text(text)
+    conf = load_config(path, environ={})
+    assert physics_hash(conf) == physics_hash(old)

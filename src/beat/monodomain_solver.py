@@ -82,11 +82,11 @@ _SPLITTING_FRACTION: dict[str, float] = {"godunov": 1.0, "strang": 0.5}
 class SplittingSolver:
     """Advance a PDE model and an ODE solver by operator splitting.
 
-    ``splitting="godunov"`` (the default) takes a full ODE step and then a full PDE step: first
-    order in time. ``splitting="strang"`` takes half an ODE step, a full PDE step and another half
+    ``splitting="strang"`` (the default) takes half an ODE step, a full PDE step and another half
     ODE step: second order in time, provided both sub-steps are second order themselves (PDE
     ``params["theta"] = 0.5`` and a second-order cell scheme such as gotranx's
-    ``generalized_rush_larsen_2``). ``theta`` is the deprecated way of choosing the splitting (the
+    ``rush_larsen_2``). ``splitting="godunov"`` takes a full ODE step and then a full PDE step:
+    first order in time. ``theta`` is the deprecated way of choosing the splitting (the
     fraction of the step the first ODE sub-step covers: 1.0 Godunov, 0.5 Strang); after
     construction it always holds that fraction.
 
@@ -134,7 +134,7 @@ class SplittingSolver:
 
     def _resolve_splitting(self) -> None:
         if self.theta is None:
-            splitting = "godunov" if self.splitting is None else self.splitting
+            splitting = "strang" if self.splitting is None else self.splitting
             if splitting not in _SPLITTING_FRACTION:
                 raise ValueError(f"splitting must be 'godunov' or 'strang', got {splitting!r}")
             self.splitting = splitting  # type: ignore[assignment]

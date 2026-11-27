@@ -30,7 +30,8 @@ def minimal_config_dict(tmp_path, **overrides: Any) -> dict[str, Any]:
     ode.write_text(MITCHELL_SCHAEFFER_ODE)
     data: dict[str, Any] = {
         "geometry": {"type": "rectangle", "lx": 1.0, "ly": 1.0, "dx": 0.25, "unit": "mm"},
-        "cell": {"ode_file": str(ode), "v_name": "v"},
+        # explicit: rush_larsen_2 (the default) steps v explicitly and blows up at this dt/stimulus
+        "cell": {"ode_file": str(ode), "v_name": "v", "scheme": "generalized_rush_larsen"},
         "stimulus": [
             {
                 "type": "box",

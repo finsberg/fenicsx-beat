@@ -12,7 +12,7 @@ Monodomain model (reaction-diffusion PDE + cell-model ODEs) via operator splitti
 ## Commands
 
 ```bash
-pip install -e ".[test]"                                    # editable install + test deps
+pip install -e ".[test]"                                    # editable install + test deps (incl. pyvista, so the screenshot tests run)
 pytest -v                                                    # full suite
 pytest tests/test_monodomain.py::test_name -v                # single test
 pytest --cov=beat --cov-report=html --cov-report=term -v     # with coverage (as CI does)
@@ -50,10 +50,10 @@ Operator-split PDE/ODE solve per timestep:
   `BaseDolfinODESolver`) or `_get_region_state`/`_set_region_state` (`BaseDolfinMultiODESolver`); the
   base classes do all state movement.
 - **Coupling** (`monodomain_solver.py`): `SplittingSolver(pde, ode)` (`MonodomainSplittingSolver` is a
-  deprecated alias that warns) drives Godunov/Strang splitting (`splitting="godunov"|"strang"`;
+  deprecated alias that warns) drives Strang (default) or Godunov splitting (`splitting="strang"|"godunov"`;
   `theta=` is a deprecated alias): ODE step → project to PDE → PDE step → project back → second ODE
   half-step for Strang. Strang is only second order with PDE `theta=0.5` and a second-order gotranx
-  scheme (`*_rush_larsen_2`). With `merge_half_steps=True` (Strang only) consecutive ODE half-steps
+  scheme (`*_rush_larsen_2`). With `merge_half_steps=True` (Strang only; default `False` in Python, resolved to true for Strang in the CLI) consecutive ODE half-steps
   are merged (Godunov's cost, still second order); the state is then only valid after
   `synchronize()`, which `solve`, `restart_functions` and the CLI runner (before saves/checkpoints)
   call.
@@ -73,7 +73,7 @@ Operator-split PDE/ODE solve per timestep:
 - **C backend** (`c_backend.py`, `c_backend_driver.c`): `compile_scheme`/`from_ode` compile
   gotranx-generated per-cell C plus a point-loop driver (rank 0 compiles into a hash-keyed cache,
   `$BEAT_C_CACHE` or `~/.cache/beat/c_backend`, all ranks load via ctypes) into a drop-in
-  `fun(states, t, parameters, dt)` for `DolfinODESolver`; optional OpenMP. Needs a C compiler at
+  `fun(states, t, parameters, dt)` for `DolfinODESolver` (default scheme `rush_larsen_2`); optional OpenMP. Needs a C compiler at
   runtime (dolfinx already requires one). Demo: `demos/c_backend.py`.
 - **Eikonal / reaction-eikonal** (`eikonal.py`, `eikonal_kernel.c`, `reaction_eikonal.py`,
   `activation.py`): `solve_eikonal`/`EikonalSolver` (Fast Iterative Method, C kernel built via
@@ -133,3 +133,7 @@ Version(...)` branch before assuming one API shape.
 - `demos/index.md` is a flat, grouped index of every demo. When adding a demo, add it to both this and
   `_toc.yml`.
 - `odes/` holds third-party CellML/`.ode` cell-model sources (not part of the `beat` package).
+- `plugins/fenicsx-beat/` is a Claude Code plugin (marketplace manifest in `.claude-plugin/`) with the
+  `beat-simulation` skill. When adding/removing a demo, CLI template, public class or CLI config key,
+  update the skill's files; `tests/test_claude_plugin.py` fails on stale names and on a `plugin.json`
+  version that differs from `pyproject.toml` (bump-my-version updates both).

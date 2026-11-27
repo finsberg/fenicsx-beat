@@ -77,7 +77,7 @@ T = 20.0
 here = Path.cwd()
 
 model_path = Path("tentusscher_panfilov_2006_epi_cell.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     here = Path.cwd()
     cell_ode = gotranx.load_ode(
         here
@@ -88,13 +88,13 @@ if not model_path.is_file():
     )
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
 import tentusscher_panfilov_2006_epi_cell as model
 
-fun = model.generalized_rush_larsen
+fun = model.rush_larsen_2
 init_states = setup_initial_conditions()
 parameters = model.init_parameter_values(stim_amplitude=0.0)
 
@@ -213,7 +213,8 @@ ode = beat.odesolver.DolfinODESolver(
     monitor=monitor,
 )
 
-# Combine the PDE and ODE solver, using the default `splitting="godunov"` (Godunov splitting).
+# Combine the PDE and ODE solver. We use Strang splitting (the default) without merged half-steps: we read `v` after every step
+# (activation times), which merged half-steps would delay by up to half a time step.
 
 # +
 solver = beat.SplittingSolver(pde=pde, ode=ode, monitor=monitor)

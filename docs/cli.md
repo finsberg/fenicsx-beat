@@ -57,8 +57,8 @@ the full list, one per row. Without `--template`, it defaults to `slab`, a thin 
 stimulated at one end (the simplest possible geometry, good for checking the CLI wiring itself)
 with `geometry.type = "box_slab"` -- a structured tetrahedral box built directly by `beat` in
 memory on every run (cheap; nothing is written to disk), no `gmsh`/mesh-generation tool of your own
-needed. `beat init --template lv_endocardial`/`biv_endocardial`/`ukb_atlas` instead generate a real
-gmsh mesh (`geometry.type = "slab"`/`"lv_ellipsoid"`/`"biv_ellipsoid"`/`"ukb"`, via
+needed. `beat init --template lv_endocardial`/`ukb_atlas` instead generate a real gmsh mesh
+(as do `geometry.type = "slab"`/`"lv_ellipsoid"`/`"biv_ellipsoid"`/`"ukb"` in general, via
 `cardiac-geometriesx`, and `ukb-atlas` for the last one), which can take from seconds to minutes
 depending on resolution. `beat geometry` (also run implicitly by `beat run` and `beat post`)
 generates such a mesh once and reuses it on every later invocation: it is cached in its own
@@ -149,28 +149,45 @@ regenerating it inside the timed job.
 
 `cell.scheme` names the gotranx scheme that steps the cell model (`beat` lists the valid names if
 you give a wrong one). `rush_larsen_2`, `generalized_rush_larsen_2` and `hybrid_rush_larsen_2`
-are second order in time; the others, such as `explicit_euler`, `rush_larsen`, `generalized_rush_larsen`
-(the default) and `hybrid_rush_larsen`, are first order. The `hybrid_*` schemes apply the
+are second order in time (the default is `rush_larsen_2`); the others, such as `explicit_euler`, `rush_larsen`, `generalized_rush_larsen`
+and `hybrid_rush_larsen`, are first order. The `hybrid_*` schemes apply the
 exponential update only to the states listed in `cell.stiff_states`; setting `cell.stiff_states`
 with any other scheme is an error, as is naming a state the model does not have or naming one
 twice. The order does not matter (`beat` sorts the list). A `hybrid_*` scheme with no
 `cell.stiff_states` steps every state explicitly; `beat validate-config` and `beat run` warn about
 it.
 
-`solver.splitting` chooses the operator splitting: `"godunov"` (default, first order) or
-`"strang"` (second order). Strang splitting is only second order when both sub-steps are: a
+`rush_larsen_2` steps `v` explicitly, so it can need a smaller `solver.dt` than
+`generalized_rush_larsen`; if a run produces non-finite values, reduce `solver.dt` or set
+`cell.scheme = "generalized_rush_larsen"`.
+
+`solver.splitting` chooses the operator splitting: `"strang"` (default, second order) or
+`"godunov"` (first order). Strang splitting is only second order when both sub-steps are: a
 second-order `cell.scheme` and `solver.pde.theta = 0.5` (the default). `beat validate-config` and
 `beat run` warn when `splitting = "strang"` is combined with a first-order sub-step (the Irksome
 backends are not checked: their order depends on the tableau). `solver.theta` is the deprecated
 name: `1.0` means `"godunov"`, `0.5` means `"strang"`.
 
-With `splitting = "strang"`, `solver.merge_half_steps = true` merges each step's closing ODE half-step
+With `splitting = "strang"`, `solver.merge_half_steps` (default `true` for Strang, `false` for
+Godunov; `true` with Godunov is an error) merges each step's closing ODE half-step
 with the next step's opening one: still second order, at Godunov's cost of one ODE step per time step,
 but with a larger error than plain Strang splitting at the same `solver.dt` (and a smaller one at the
 same cost). `beat run` synchronizes the state before every save and checkpoint, so saving every
 step gives plain Strang splitting, and with merging the results depend (at truncation-error level)
 on `output.save_every` and `output.checkpoint_every`. Changing `merge_half_steps` between a run and
 its restart is refused.
+
+```{admonition} Changed in 0.14
+:class: warning
+The defaults changed in beat 0.14: `cell.scheme = "rush_larsen_2"`, `solver.splitting = "strang"`
+and `solver.merge_half_steps = true` (for Strang). A run started with beat <= 0.13 that relied on
+the old defaults cannot be restarted, or post-processed with `beat post`, using a config that
+relies on the new ones; beat refuses and names the keys to add to the config to keep the old
+behavior: `scheme = "generalized_rush_larsen"` under `[cell]` and `splitting = "godunov"` under
+`[solver]` (or `--set cell.scheme="generalized_rush_larsen"` and `--set solver.splitting="godunov"`),
+and, for a 0.13 run that set `splitting = "strang"` explicitly, `merge_half_steps = false` under
+`[solver]`.
+```
 
 (overrides)=
 ## Overrides
@@ -396,13 +413,12 @@ summarized here:
 | Template | Demo | Known deviation |
 |---|---|---|
 | `slab` | [slab.py](../demos/slab.py) | Cable partitioned into endo/mid/epi celltypes by raw x-position isn't expressible via `[cell.layers]` yet; homogeneous ToR-ORd region instead. |
-| `niederer_benchmark` | [niederer_benchmark.py](../demos/niederer_benchmark.py) | Strang splitting with `generalized_rush_larsen_2` (second order in time) instead of the demo's Godunov splitting with `generalized_rush_larsen`. |
+| `niederer_benchmark` | [niederer_benchmark.py](../demos/niederer_benchmark.py) | Strang splitting with merged half-steps (the CLI default) and `rush_larsen_2` (second order in time); the demo uses plain Strang because it reads the activation times after every step. |
 | `fitzhughnagumo` | [fitzhughnagumo.py](../demos/fitzhughnagumo.py) | Rescaled from a dimensionless unit square to 100x100 mm; conductivity from the `Niederer` preset rather than the demo's arbitrary scalar `M`. |
 | `diffusion` | [diffusion.py](../demos/diffusion.py) | The demo has no ODE/cell model at all (pure diffusion); the CLI always couples an ODE step, so this template ships a trivial `passive.ode` (`dv/dt = 0`) instead. |
 | `pvc` | [pvc.py](../demos/pvc.py) | The demo's per-DOF g_Kr/g_Ks heterogeneity (right half of the cable) has no marker to key `[cell.layers]` off on an `interval` geometry; homogeneous cable instead (no PVC emerges, but pacing/cell model match). |
 | `pace_train` | [pace_train.py](../demos/pace_train.py) | The demo switches its stimulus off at runtime (a parameter schedule, future work); this template uses a fixed PDE pulse train for the whole run instead. |
 | `lv_endocardial` | [lv_endocardial.py](../demos/lv_endocardial.py) | -- |
-| `biv_endocardial` | [biv_endocardial.py](../demos/biv_endocardial.py) | -- |
 | `ukb_atlas` | [ukb_atlas.py](../demos/ukb_atlas.py) | Needs network access on first run (atlas download, cached afterwards with the mesh in `geometry.folder/<hash>/`). |
 | `irksome_model_gotranx` | [irksome_model_gotranx.py](../demos/irksome_model_gotranx.py) | Uses `RadauIIA`/`stages=1` rather than the demo's `BackwardEuler()` (not expressible via `tableau`/`stages`); PDE stimulus box instead of the demo's non-default initial condition; uniform conductivity preset instead of the demo's piecewise-constant one. |
 | `external_operator_gotranx` | [external_operator_gotranx.py](../demos/external_operator_gotranx.py) | Conductivity built from `[ep]` (the `Niederer` preset) rather than the demo's raw scalar `M`. |

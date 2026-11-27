@@ -3,9 +3,8 @@
 # We will also stimulate it using a random activation pattern on the endocardial layer of the left and right ventricle.
 #
 # This is the most realistic geometry demo in this repository, and it replaces the single, localized
-# stimulus current $I_{stim}$ used in the [left](lv_endocardial.py)/[bi-ventricular](biv_endocardial.py)
-# ellipsoid demos with many small, randomly timed and positioned stimuli spread across the endocardial
-# surface. This mimics the effect of the Purkinje fibre network, which activates the endocardium at
+# stimulus current $I_{stim}$ used in the [left ventricle](lv_endocardial.py) ellipsoid demo
+# with many small, randomly timed and positioned stimuli spread across the endocardial surface. This mimics the effect of the Purkinje fibre network, which activates the endocardium at
 # many points nearly simultaneously rather than through slow cell-to-cell propagation from a single
 # site. See the [mathematical background](../docs/math_background.md) page for the monodomain model
 # and notation ($v$, $M$, $\chi$, $C_m$, $I_{ion}$, $I_{stim}$, $\theta$) used below.
@@ -106,20 +105,20 @@ with dolfinx.io.XDMFFile(comm, results_folder / "endo_epi.xdmf", "w") as xdmf:
 
 
 # Now we will run the the single cell simulations to obtain the steady states solutions which will be used as initial states for the full 3D simulation.
-# We will use the package [`gotranx`](https://finsberg.github.io/gotranx) to generate the generalized Rush Larsen scheme. Please see [the following example](https://finsberg.github.io/gotranx/docs/cli.html) if you want to learn how to generate the code from a cell model obtained from CellML.
+# We will use the package [`gotranx`](https://finsberg.github.io/gotranx) to generate the second-order Rush–Larsen scheme `rush_larsen_2`. Please see [the following example](https://finsberg.github.io/gotranx/docs/cli.html) if you want to learn how to generate the code from a cell model obtained from CellML.
 
 # The code for the ODE will be generated only if it does not exist.
 
 print("Running model")
 # Load the model
 model_path = Path("ToRORd_dynCl_endo.py")
-if not model_path.is_file():
+if not model_path.is_file() or "def rush_larsen_2" not in model_path.read_text():
     print("Generate code for cell model")
     here = Path.cwd()
     cell_ode = gotranx.load_ode(here / ".." / "odes" / "torord" / "ToRORd_dynCl_endo.ode")
     code = gotranx.cli.gotran2py.get_code(
         cell_ode,
-        scheme=[gotranx.schemes.Scheme.generalized_rush_larsen],
+        scheme=[gotranx.schemes.Scheme.rush_larsen_2],
     )
     model_path.write_text(code)
 
@@ -148,7 +147,7 @@ celltype_epi = 1
 print("Get steady states")
 init_states = {
     mid_marker: beat.single_cell.get_steady_state(
-        fun=model["generalized_rush_larsen"],
+        fun=model["rush_larsen_2"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=celltype_mid),
         outdir=results_folder / "mid",
@@ -158,7 +157,7 @@ init_states = {
         dt=dt,
     ),
     endo_marker: beat.single_cell.get_steady_state(
-        fun=model["generalized_rush_larsen"],
+        fun=model["rush_larsen_2"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=celltype_endo),
         outdir=results_folder / "endo",
@@ -168,7 +167,7 @@ init_states = {
         dt=dt,
     ),
     epi_marker: beat.single_cell.get_steady_state(
-        fun=model["generalized_rush_larsen"],
+        fun=model["rush_larsen_2"],
         init_states=model["init_state_values"](),
         parameters=model["init_parameter_values"](celltype=celltype_epi),
         outdir=results_folder / "epi",
@@ -203,8 +202,8 @@ parameters = {
 
 # import numba
 
-# f = numba.jit(model["generalized_rush_larsen"], nopython=True)
-f = model["generalized_rush_larsen"]
+# f = numba.jit(model["rush_larsen_2"], nopython=True)
+f = model["rush_larsen_2"]
 fun = {
     mid_marker: f,
     endo_marker: f,
@@ -369,11 +368,12 @@ ode = beat.odesolver.DolfinMultiODESolver(
     v_index=v_index,
 )
 
-# We will solve the ODE and PDE using a Godunov splitting scheme (the default `splitting="godunov"` in
-# `beat.SplittingSolver`). This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+# We will solve the ODE and PDE with `beat.SplittingSolver`. This will solve the ODE for a time step and then the PDE for a time step. This will be repeated until the end time is reached.
+#
+# We use Strang splitting with merged half-steps: it is second order at the cost of Godunov splitting. Between steps the state lacks its closing half-step, so we call `solver.synchronize()` before every save/frame.
 
 
-solver = beat.SplittingSolver(pde=pde, ode=ode)
+solver = beat.SplittingSolver(pde=pde, ode=ode, splitting="strang", merge_half_steps=True)
 
 # We will also save the results with VTX for visiualization in Paraview and the checkpoint file for retrieving the results later. Here we use the [`io4dolfinx`](https://scientificcomputing.github.io/io4dolfinx) package.
 
@@ -455,6 +455,7 @@ while t < end_time + 1e-12:
     # Make sure to save at the same time steps that is used by Ambit
 
     if i % save_freq == 0:
+        solver.synchronize()
         save(t)
 
     # We also make sure to update the stimulus at the correct time

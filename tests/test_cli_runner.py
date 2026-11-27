@@ -79,12 +79,18 @@ def _final_v(conf):
     return v
 
 
+PLAIN = {
+    "godunov": {"splitting": "godunov"},
+    "strang": {"splitting": "strang", "merge_half_steps": False},
+}
+
+
 @pytest.mark.parametrize("splitting", ["godunov", "strang"])
 def test_restart_matches_continuous_run(tmp_path, splitting):
     full = load_config(
         write_cfg(
             tmp_path / "a",
-            solver={"dt": "0.1 ms", "end_time": "0.6 ms", "splitting": splitting},
+            solver={"dt": "0.1 ms", "end_time": "0.6 ms", **PLAIN[splitting]},
         ),
         environ={},
     )
@@ -92,7 +98,7 @@ def test_restart_matches_continuous_run(tmp_path, splitting):
     part = load_config(
         write_cfg(
             tmp_path / "b",
-            solver={"dt": "0.1 ms", "end_time": "0.3 ms", "splitting": splitting},
+            solver={"dt": "0.1 ms", "end_time": "0.3 ms", **PLAIN[splitting]},
         ),
         environ={},
     )
@@ -407,7 +413,7 @@ def test_run_warns_on_strang_with_first_order_scheme(tmp_path, caplog):
         environ={},
     )
     run(conf)
-    assert "generalized_rush_larsen_2" in caplog.text
+    assert "'rush_larsen_2'" in caplog.text
 
 
 MERGED = {"splitting": "strang", "merge_half_steps": True}
@@ -445,7 +451,7 @@ def test_merged_restart_matches_continuous_run(tmp_path):
     plain = load_config(
         write_cfg(
             tmp_path / "c",
-            solver={"dt": "0.1 ms", "end_time": "0.6 ms", "splitting": "strang"},
+            solver={"dt": "0.1 ms", "end_time": "0.6 ms", **PLAIN["strang"]},
             output=output,
         ),
         environ={},
@@ -457,7 +463,7 @@ def test_merged_restart_matches_continuous_run(tmp_path):
 
 def test_merged_run_saving_every_step_is_plain_strang(tmp_path):
     # synchronizing at every save makes every step a plain Strang step
-    solver = {"dt": "0.1 ms", "end_time": "0.3 ms", "splitting": "strang"}
+    solver = {"dt": "0.1 ms", "end_time": "0.3 ms", **PLAIN["strang"]}
     merged = load_config(
         write_cfg(
             tmp_path / "m",
@@ -476,8 +482,26 @@ def test_merged_run_saving_every_step_is_plain_strang(tmp_path):
 
 
 def test_restart_rejects_changed_merge_half_steps(tmp_path):
-    cfg = write_cfg(tmp_path, solver={"dt": "0.1 ms", "end_time": "0.3 ms", "splitting": "strang"})
+    cfg = write_cfg(tmp_path, solver={"dt": "0.1 ms", "end_time": "0.3 ms", **PLAIN["strang"]})
     run(load_config(cfg, environ={}))
     changed = load_config(cfg, environ={}, sets=["solver.merge_half_steps=true"])
     with pytest.raises(ConfigError, match="physics"):
         run(changed, restart=True)
+
+
+def test_restart_of_a_beat_0_13_run_names_the_keys_to_add(tmp_path):
+    old = {
+        "cell": {"scheme": "generalized_rush_larsen"},
+        "solver": {"splitting": "godunov"},
+    }
+    cfg = write_cfg(tmp_path, **old)
+    run(load_config(cfg, environ={}))
+    data = minimal_config_dict(tmp_path, **old)
+    del data["cell"]["scheme"], data["solver"]["splitting"]
+    if MPI.COMM_WORLD.rank == 0:
+        cfg.write_text(toml.dumps(data))
+    MPI.COMM_WORLD.barrier()
+    with pytest.raises(ConfigError, match="physics") as e:
+        run(load_config(cfg, environ={}), restart=True)
+    assert 'scheme = "generalized_rush_larsen" under [cell]' in str(e.value)
+    assert 'splitting = "godunov" under [solver]' in str(e.value)

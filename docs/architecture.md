@@ -124,7 +124,7 @@ phi_e = record()["P_E"]
 
 | Class | What it is for | Builds on / implements | Demos |
 |---|---|---|---|
-| `SplittingSolver` | Godunov/Strang splitting (`splitting="godunov"` or `"strang"`), optionally with merged Strang half-steps (`merge_half_steps`, `synchronize`) of a `PDEModel` and an `ODESolver`, or the ODE solver alone (`pde=None`); restart; `solve` steps with `beat.utils.time_steps` | uses `PDEModel`, `ODESolver` | almost every demo |
+| `SplittingSolver` | Strang (default) or Godunov splitting (`splitting="strang"` or `"godunov"`), optionally with merged Strang half-steps (`merge_half_steps`, `synchronize`) of a `PDEModel` and an `ODESolver`, or the ODE solver alone (`pde=None`); restart; `solve` steps with `beat.utils.time_steps` | uses `PDEModel`, `ODESolver` | almost every demo |
 | `MonodomainSplittingSolver` | deprecated name of `SplittingSolver`; warns | `SplittingSolver` | — |
 | `PDEModel`, `ODESolver` | the protocols above | `Protocol` | — |
 
@@ -148,12 +148,12 @@ phi_e = record()["P_E"]
 
 | Class | What it is for | Builds on / implements | Demos |
 |---|---|---|---|
-| `ECGRecovery` | pseudo-ECG in an infinite homogeneous medium | — | [slab](../demos/slab.py), [biv_endocardial](../demos/biv_endocardial.py) |
-| `ElectrodePotentials` | `ECGRecovery` at many named electrodes, one solve per call | `ElectrodeRecorder` | [biv_endocardial](../demos/biv_endocardial.py) |
+| `ECGRecovery` | pseudo-ECG in an infinite homogeneous medium | — | [slab](../demos/slab.py) |
+| `ElectrodePotentials` | `ECGRecovery` at many named electrodes, one solve per call | `ElectrodeRecorder` | [durrer_activation](../demos/durrer_activation.py), [durrer_activation_full](https://github.com/finsberg/fenicsx-beat/blob/main/scripts/durrer_activation_full.py) |
 | `VolumeConductor` | extracellular potential $\phi_e$ in a bounded tissue-and-bath volume (pseudo-bidomain) | — | [electrograms](../demos/reaction_eikonal_wedge_electrograms.py) |
 | `LeadFieldElectrodes` | $\phi_e$ at named electrodes via lead fields (reciprocity), cheap per step | `ElectrodeRecorder` | [electrograms](../demos/reaction_eikonal_wedge_electrograms.py) |
 | `ElectrodeRecorder` | the protocol above | `Protocol` | — |
-| `Lead`, `LeadSystem` | leads as weighted sums of electrode potentials (`twelve_lead()` builds the standard 12) | dataclasses | [biv_endocardial](../demos/biv_endocardial.py) |
+| `Lead`, `LeadSystem` | leads as weighted sums of electrode potentials (`twelve_lead()` builds the standard 12) | dataclasses | [durrer_activation](../demos/durrer_activation.py), [durrer_activation_full](https://github.com/finsberg/fenicsx-beat/blob/main/scripts/durrer_activation_full.py) |
 | `QTIntervalResult` | return value of `qt_interval` | `NamedTuple` | — |
 
 ### Geometry, stimulation and conductivities

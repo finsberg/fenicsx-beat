@@ -39,7 +39,6 @@ SHRINK = {
     "pvc": ["geometry.dx=0.5"],
     "pace_train": ["geometry.dx=0.5"],
     "lv_endocardial": ["geometry.psize_ref=10.0"],
-    "biv_endocardial": ["geometry.char_length=2.0"],
     "ukb_atlas": [
         # 15.0 (the brief's suggested value) makes gmsh fail on this atlas/gmsh version with
         # "PLC Error: A segment and a facet intersect at point" (verified); 8.0 meshes reliably
@@ -55,13 +54,12 @@ NEEDS = {
     # "slab" is deliberately absent: geometry.type = "box_slab" wraps beat.geometry's own
     # get_3D_slab_mesh/get_3D_slab_microstructure directly (no gmsh/cardiac-geometriesx).
     "lv_endocardial": ("cardiac_geometries",),
-    # cardiac-geometriesx generates BiV/UKB fibers with fenicsx-ldrb (the `demos` extra).
-    "biv_endocardial": ("cardiac_geometries", "ldrb"),
+    # cardiac-geometriesx generates UKB fibers with fenicsx-ldrb (the `demos` extra).
     "ukb_atlas": ("ukb", "ldrb"),
     "irksome_model_gotranx": ("irksome",),
     "external_operator_gotranx": ("dolfinx_external_operator",),
 }
-SERIAL_ONLY = {"lv_endocardial", "biv_endocardial", "ukb_atlas"}  # gmsh meshing
+SERIAL_ONLY = {"lv_endocardial", "ukb_atlas"}  # gmsh meshing
 
 
 def test_all_demo_templates_exist():
