@@ -107,6 +107,8 @@ command that failed, and the full error. In the meantime offer a conversion rout
   file.
 - **The Durrer-like sequence** (`beat.activation_sequence.EndocardialActivation.from_geometry`)
   needs facet markers `LV`, `RV` and `EPI` (and base markers) in the geometry's `markers`.
+  For reaction-eikonal, `volume_activation_times(velocities, (f0, s0, n0))` on it returns a P1
+  activation time through the wall, to pass as `t_a` to `FootCurrentODESolver`.
 - **Resolution**: compare the edge length with [numerics.md](numerics.md) (mesh size); a coarse
   clinical mesh may need refinement, calibrated conductivities or reaction-eikonal.
 

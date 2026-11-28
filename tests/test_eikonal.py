@@ -267,3 +267,126 @@ def test_invalid_tol_raises(tol):
     mesh = box(MPI.COMM_WORLD, 2.0)
     with pytest.raises(ValueError, match="tol"):
         solve_eikonal(mesh, speeds(mesh), fibers(mesh), [Source(lambda x: x[0] < 1e-9)], tol=tol)
+
+
+def _y_ramp_source(mesh, k):
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    t0 = dolfinx.fem.Function(V)
+    t0.interpolate(lambda x: k * x[1])
+    return Source(lambda x: x[0] < 1e-9, t0=t0)
+
+
+def _tilted_front_error(h, c=0.5, k=0.8):
+    """Max error against t = k*y + x*sqrt(1/c**2 - k**2) where that is the solution"""
+    mesh = box(MPI.COMM_WORLD, h)
+    directions = [dolfinx.fem.Constant(mesh, e) for e in np.eye(3)]
+    t = solve_eikonal(mesh, [c] * 3, directions, [_y_ramp_source(mesh, k)])
+    # The planar front is the solution only where the characteristic through a vertex starts on
+    # the face: it starts at y - x*k*c/sqrt(1 - (k*c)**2), which is below y = 0 near that edge,
+    # where the nearest source is the edge itself. Compare away from that region, with a margin
+    # of a few elements for the discrete update there.
+    shift = k * c / np.sqrt(1 - (k * c) ** 2)
+    xs = t.function_space.tabulate_dof_coordinates()[: t.function_space.dofmap.index_map.size_local]
+    inside = xs[:, 1] - shift * xs[:, 0] >= 1.5
+    exact = k * xs[:, 1] + xs[:, 0] * np.sqrt(1 / c**2 - k**2)
+    err = np.abs(owned(t) - exact)[inside].max(initial=0.0)
+    assert mesh.comm.allreduce(int(inside.sum()), op=MPI.SUM) > 100
+    return mesh.comm.allreduce(err, op=MPI.MAX)
+
+
+def test_function_source_gives_a_tilted_planar_front():
+    """t0 = k*y on the face x = 0, isotropic speed c: t = k*y + x*sqrt(1/c**2 - k**2).
+
+    Unlike the axis-aligned front of test_planar_front_is_exact, this one is oblique to the
+    mesh, so the first-order update is not exact: the error is a discretization error (measured
+    2.9e-2, 7.6e-3 and 1.1e-3 at h = 1, 0.5 and 0.25), so test that it is small and falls fast.
+    """
+    coarse, fine = _tilted_front_error(0.5), _tilted_front_error(0.25)
+    assert coarse < 2e-2
+    assert fine < coarse / 4
+
+
+@pytest.mark.parametrize("value", [np.inf, np.nan])
+def test_non_finite_function_values_are_not_sources(value):
+    """A Function that is finite at one vertex only equals a float source at that vertex.
+
+    ``nan`` is what ``ActivationTracker.t_a`` holds where a node never activated. Unlike ``inf``,
+    which ``np.minimum`` with the solver's far value would drop by itself, it must be filtered.
+    """
+    mesh = box(MPI.COMM_WORLD, 1.0)
+
+    def corner(x):
+        return (x[0] < 1e-9) & (x[1] < 1e-9) & (x[2] < 1e-9)
+
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    t0 = dolfinx.fem.Function(V)
+    t0.interpolate(lambda x: np.where(corner(x), 1.5, value))
+    # All vertices of the face x = 0 are marked, only the corner is finite
+    got = solve_eikonal(
+        mesh,
+        speeds(mesh),
+        fibers(mesh, 30.0),
+        [Source(lambda x: x[0] < 1e-9, t0=t0)],
+    )
+    ref = solve_eikonal(mesh, speeds(mesh), fibers(mesh, 30.0), [Source(corner, t0=1.5)])
+    np.testing.assert_allclose(got.x.array, ref.x.array, atol=1e-12)
+
+
+def test_function_source_all_non_finite_raises():
+    mesh = box(MPI.COMM_WORLD, 1.0)
+    V = dolfinx.fem.functionspace(mesh, ("P", 1))
+    t0 = dolfinx.fem.Function(V)
+    t0.x.array[:] = np.nan
+    with pytest.raises(ValueError, match="No source vertices found"):
+        solve_eikonal(mesh, speeds(mesh), fibers(mesh), [Source(lambda x: x[0] < 1e-9, t0=t0)])
+
+
+@pytest.mark.parametrize(
+    "space, message",
+    [
+        ("P2", "not the solver's scalar P1 space"),
+        ("vector", "not the solver's scalar P1 space"),
+        ("other mesh", "on another mesh; interpolate it onto the solver's mesh"),
+    ],
+)
+def test_function_source_on_another_space_raises(space, message):
+    mesh = box(MPI.COMM_WORLD, 1.0)
+    if space == "P2":
+        W = dolfinx.fem.functionspace(mesh, ("P", 2))
+    elif space == "vector":
+        W = dolfinx.fem.functionspace(mesh, ("P", 1, (3,)))
+    else:
+        W = dolfinx.fem.functionspace(box(MPI.COMM_WORLD, 1.0), ("P", 1))
+    t0 = dolfinx.fem.Function(W)
+    with pytest.raises(ValueError, match=message):
+        solve_eikonal(mesh, speeds(mesh), fibers(mesh), [Source(lambda x: x[0] < 1e-9, t0=t0)])
+
+
+def test_function_source_partition_independence():
+    """t0 = k*x on the face y = 0, which the partition cuts, so some source vertices are ghosts.
+
+    Their ghost values are made stale and earlier than their owners' before the solve: the
+    solver must update them from the owners, or the result is off by about 100 ms.
+    """
+    k = 0.3
+
+    def face(x):
+        return x[1] < 1e-9
+
+    results = []
+    for comm in (MPI.COMM_WORLD, MPI.COMM_SELF):
+        mesh = box(comm, 0.5)
+        V = dolfinx.fem.functionspace(mesh, ("P", 1))
+        t0 = dolfinx.fem.Function(V)
+        t0.interpolate(lambda x: k * x[0])
+        n_owned = V.dofmap.index_map.size_local
+        if comm.size > 1:
+            ghosts = int((dolfinx.fem.locate_dofs_geometrical(V, face) >= n_owned).sum())
+            assert comm.allreduce(ghosts, op=MPI.SUM) > 0
+        t0.x.array[n_owned:] = -100.0
+        t = solve_eikonal(mesh, speeds(mesh), fibers(mesh, 30.0), [Source(face, t0=t0)])
+        results.append(gather_sorted(t))
+    (xw, yw), (xs, ys) = results
+    np.testing.assert_allclose(xw, xs, atol=1e-12)
+    # Different partitions visit vertices in a different order; values agree to ~tol
+    np.testing.assert_allclose(yw, ys, atol=1e-5)
