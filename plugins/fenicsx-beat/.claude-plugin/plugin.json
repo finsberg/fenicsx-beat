@@ -1,6 +1,6 @@
 {
   "name": "fenicsx-beat",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Set up, choose and run cardiac electrophysiology simulations with fenicsx-beat: it asks what you want to simulate, proposes alternatives, and builds and checks a beat CLI config or Python script",
   "author": { "name": "Henrik Finsberg" },
   "homepage": "https://finsberg.github.io/fenicsx-beat",
